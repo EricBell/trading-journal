@@ -1,22 +1,13 @@
-<<<<<<< HEAD
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
 # Virtual environments
 .venv
-=======
 # Byte-compiled / optimized / DLL files
-__pycache__/
 *.py[codz]
 *$py.class
 
 # C extensions
 *.so
+
+__pycache__/
 
 # Distribution / packaging
 .Python
@@ -217,4 +208,3 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
->>>>>>> refs/remotes/origin/master
