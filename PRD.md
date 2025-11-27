@@ -111,6 +111,16 @@ The primary input is **NDJSON files** created by the existing Schwab CSV convert
 - [ ] **F.5.3** Support multiple account/portfolio separation (future-ready architecture).
 - [ ] **F.5.4** Maintain comprehensive audit trail with file processing history.
 
+#### F.6 Trading Pattern Analysis & Notes
+
+- [ ] **F.6.1** Support optional **setup pattern annotation** for each completed trade (MVP: free text field).
+- [ ] **F.6.2** Allow post-trade annotation of setup patterns for completed round-trip trades via CLI interface.
+- [ ] **F.6.3** Generate **setup pattern performance reports** showing P&L by pattern type across completed trades.
+- [ ] **F.6.4** **Production Version**: Implement managed dropdown with predefined setup patterns.
+- [ ] **F.6.5** Support optional **trade notes** field for capturing thoughts, emotions, and trade analysis on completed trades.
+- [ ] **F.6.6** Allow post-trade note entry and editing for completed trades via CLI interface.
+- [ ] **F.6.7** Include trade notes in detailed trade reports and export capabilities.
+
 ### 3.2 Non-Functional Requirements
 
 #### N.1 Performance
@@ -216,9 +226,34 @@ The input is NDJSON from the existing Schwab converter. Each line represents a t
 }
 ```
 
-### 4.2 Output Database Schema (PostgreSQL)
+### 4.2 Trade Hierarchy & Terminology
 
-#### `trades` Table (Core Execution Data)
+#### Definitions
+
+**EXECUTION (trades table)**: Individual broker order fills/executions
+- Single order execution event from the broker
+- Includes partial fills, cancellations, amendments
+- Examples: "BUY 100 AAPL at $150.25", "SELL 50 AAPL at $151.00"
+- Source: Direct from NDJSON converter output
+
+**TRADE (completed_trades table)**: Complete round-trip business transactions
+- Conceptual trading unit with entry and exit
+- Composed of one or more executions
+- Examples: "AAPL swing trade (net +100 shares, entry avg $150.50, exit avg $155.25)"
+- Contains: Setup patterns, notes, strategy analysis
+
+**POSITION (positions table)**: Current holdings aggregate
+- Running totals across all trades for a symbol
+- Real-time position tracking with average cost basis
+- Examples: "Currently long 500 AAPL shares at $148.75 average cost"
+
+#### Relationships
+- Multiple **executions** → One **completed trade**
+- Multiple **completed trades** → One **position** (for a symbol)
+
+### 4.3 Output Database Schema (PostgreSQL)
+
+#### `trades` Table (Individual Executions/Fills)
 
 | Field Name | Data Type | Description | Notes |
 |:---|:---|:---|:---|
@@ -259,7 +294,43 @@ The input is NDJSON from the existing Schwab converter. Each line represents a t
 | `processing_timestamp` | `TIMESTAMP WITH TIME ZONE` | When record was processed | Default NOW() |
 | | | | |
 | **P&L Tracking** | | | |
-| `realized_pnl` | `NUMERIC(18, 8)` | Calculated on position close | **New field** |
+| `realized_pnl` | `NUMERIC(18, 8)` | Calculated on execution close | **New field** |
+| | | | |
+| **Trade Relationship** | | | |
+| `completed_trade_id` | `BIGINT` | FK to completed_trades | **New field** - Links executions to complete trades |
+
+#### `completed_trades` Table (Complete Round-Trip Trades - New)
+
+| Field Name | Data Type | Description | Notes |
+|:---|:---|:---|:---|
+| `completed_trade_id` | `BIGSERIAL` | Primary Key | |
+| `symbol` | `VARCHAR(50)` | Stock/Option base symbol | |
+| `instrument_type` | `VARCHAR(10)` | EQUITY or OPTION | |
+| `option_details` | `JSONB` | Option-specific data | NULL for equities |
+| | | | |
+| **Trade Summary** | | | |
+| `total_qty` | `INTEGER` | Net quantity traded | |
+| `entry_avg_price` | `NUMERIC(18, 8)` | Average entry price | Calculated from executions |
+| `exit_avg_price` | `NUMERIC(18, 8)` | Average exit price | Calculated from executions |
+| `gross_proceeds` | `NUMERIC(18, 8)` | Total proceeds from exits | |
+| `gross_cost` | `NUMERIC(18, 8)` | Total cost of entries | |
+| `net_pnl` | `NUMERIC(18, 8)` | Realized P&L for complete trade | |
+| | | | |
+| **Trade Timeline** | | | |
+| `opened_at` | `TIMESTAMP WITH TIME ZONE` | First execution timestamp | |
+| `closed_at` | `TIMESTAMP WITH TIME ZONE` | Last execution timestamp | |
+| `hold_duration` | `INTERVAL` | Time between open and close | |
+| | | | |
+| **Trading Analysis** | | | |
+| `setup_pattern` | `TEXT` | Trading setup/pattern annotation | **MVP: free text, Production: managed dropdown** |
+| `trade_notes` | `TEXT` | Optional trade notes/thoughts | **Supports short phrases to multi-paragraph entries** |
+| `strategy_category` | `VARCHAR(30)` | Strategy type | e.g., "Scalp", "Swing", "Day Trade" |
+| | | | |
+| **Trade Classification** | | | |
+| `is_winning_trade` | `BOOLEAN` | Whether trade was profitable | Calculated from net_pnl |
+| `trade_type` | `VARCHAR(20)` | LONG or SHORT | Based on entry direction |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | Record creation time | Default NOW() |
+| `updated_at` | `TIMESTAMP WITH TIME ZONE` | Last update time | Default NOW() |
 
 #### `positions` Table (Position Tracking - New)
 
@@ -295,6 +366,18 @@ The input is NDJSON from the existing Schwab converter. Each line represents a t
 | `records_failed` | `INTEGER` | Failed records | Default 0 |
 | `status` | `VARCHAR(20)` | processing, completed, failed | |
 | `error_message` | `TEXT` | Failure details | NULL if successful |
+
+#### `setup_patterns` Table (Production Version - Web UI)
+
+| Field Name | Data Type | Description | Notes |
+|:---|:---|:---|:---|
+| `pattern_id` | `BIGSERIAL` | Primary Key | |
+| `pattern_name` | `VARCHAR(50)` | Setup pattern name | e.g., "MACD Scalp", "5min ORB" |
+| `pattern_description` | `TEXT` | Detailed description | Optional |
+| `pattern_category` | `VARCHAR(30)` | Pattern category | e.g., "Scalp", "Swing", "Breakout" |
+| `is_active` | `BOOLEAN` | Pattern availability | Default TRUE |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | Creation timestamp | Default NOW() |
+| `updated_at` | `TIMESTAMP WITH TIME ZONE` | Last update | Default NOW() |
 
 #### `ohlcv_price_series` Table (Future Ready)
 
@@ -412,10 +495,13 @@ The primary dashboard must be the default view, summarizing performance over a u
 - [ ] **Average Losing Trade Value:** Average P&L of losing trades
 - [ ] **Max Drawdown:** Largest peak-to-trough decline in cumulative P&L
 - [ ] **Account Equity Curve:** Line chart showing cumulative P&L over time
+- [ ] **Top Setup Patterns:** Best and worst performing setup patterns by P&L
+- [ ] **Pattern Distribution:** Breakdown of trades by setup pattern type
 
 ### 6.2 Detailed Trade Reports
 
-- [ ] **Daily Trade Log:** Sortable, searchable table listing all executions for selected date range with columns: `symbol`, `exec_timestamp`, `side`, `qty`, `price`, `realized_pnl`
+- [ ] **Daily Trade Log:** Sortable, searchable table listing all completed trades for selected date range with columns: `symbol`, `opened_at`, `closed_at`, `total_qty`, `entry_avg_price`, `exit_avg_price`, `setup_pattern`, `trade_notes`, `net_pnl`
+- [ ] **Execution Detail View:** Drill-down view showing individual executions that comprise each completed trade
 - [ ] **Open Positions:** Current holdings with current quantity, average cost basis, and estimated unrealized P&L (when price data available)
 - [ ] **Closed Positions:** Historical positions with realized P&L, hold time, and return percentages
 
@@ -425,6 +511,8 @@ The primary dashboard must be the default view, summarizing performance over a u
 - [ ] **Instrument Filter:** Toggle/Dropdown for **Equity**, **Option**, or **All**
 - [ ] **Platform Filter:** Toggle/Dropdown for **TOS** (future: multiple platforms)
 - [ ] **Symbol Filter:** Text input for specific symbol analysis
+- [ ] **Notes Search:** Text search within trade notes for finding specific thoughts or keywords
+- [ ] **Setup Pattern Filter:** Filter by specific setup patterns
 
 -----
 
@@ -455,11 +543,62 @@ trading-journal report dashboard --date-range "2025-01-01,2025-01-31"
 # Trade log
 trading-journal report trades --symbol AAPL --format json
 
+# Trade log with notes search
+trading-journal report trades --notes-search "FOMO" --date-range "2025-01-01,2025-01-31"
+
 # Open positions
 trading-journal report positions --open-only
 
 # P&L summary
 trading-journal report pnl --monthly
+
+# Setup pattern analysis
+trading-journal report patterns --date-range "2025-01-01,2025-01-31"
+```
+
+#### Pattern Management Commands
+```bash
+# Annotate completed trades with setup patterns
+trading-journal pattern annotate --completed-trade-id 12345 --pattern "MACD Scalp"
+
+# Bulk pattern annotation by symbol/date for completed trades
+trading-journal pattern annotate --symbol AAPL --date "2025-01-15" --pattern "5min ORB"
+
+# List all unique patterns used
+trading-journal pattern list
+
+# Setup pattern performance report
+trading-journal pattern performance --pattern "MACD Scalp"
+```
+
+#### Notes Management Commands
+```bash
+# Add notes to a specific completed trade
+trading-journal notes add --completed-trade-id 12345 --text "Felt FOMO, should have waited for better entry"
+
+# Add notes to completed trades by criteria
+trading-journal notes add --symbol AAPL --date "2025-01-15" --text "Good execution on pullback strategy"
+
+# View trade notes
+trading-journal notes show --completed-trade-id 12345
+
+# Edit existing notes
+trading-journal notes edit --completed-trade-id 12345
+
+# Bulk notes via file import
+trading-journal notes import --file notes.txt --format csv
+```
+
+#### Completed Trade Management Commands
+```bash
+# List completed trades
+trading-journal trades list --date-range "2025-01-01,2025-01-31"
+
+# Show trade details with all executions
+trading-journal trades show --completed-trade-id 12345
+
+# Mark executions as part of a completed trade
+trading-journal trades create --execution-ids "123,124,125" --pattern "MACD Scalp" --notes "Great entry timing"
 ```
 
 #### Database Management
@@ -614,6 +753,7 @@ APPLICATION_CONFIG = {
 - **Database**: PostgreSQL 14+ (JSONB support, excellent performance)
 - **Language**: Python 3.11+ (matches existing converter)
 - **CLI Framework**: Click (consistent with converter)
+- **Web Framework**: Flask (production version for browser-based interface)
 - **Database ORM**: SQLAlchemy 2.0 (type safety, async support)
 - **Migration Tool**: Alembic (integrated with SQLAlchemy)
 
@@ -636,10 +776,27 @@ APPLICATION_CONFIG = {
 
 ### 13.1 Phase 2 Features (Post-MVP)
 
+#### Web User Interface (Flask-based)
+1. **Browser-based Dashboard**: Replace CLI reports with interactive web dashboard
+2. **Setup Pattern Management**: Web interface for managing predefined setup patterns with dropdown selection
+3. **Interactive Charts**: Charting component integration for trade visualization
+4. **Responsive Design**: Mobile-friendly interface for portfolio monitoring
+
 #### Advanced P&L Methods
 1. **FIFO/LIFO Calculation Options**: Allow users to choose tax-optimized P&L methods
 2. **Specific Lot Identification**: Manual lot selection for advanced users
 3. **Tax Loss Harvesting**: Automated identification of tax optimization opportunities
+
+#### Enhanced Pattern Analysis
+1. **Pattern Performance Analytics**: Deep-dive analysis by setup pattern with win/loss ratios
+2. **Pattern Correlation Analysis**: Identify which patterns work best in different market conditions
+3. **Setup Optimization**: Recommend best-performing patterns based on historical data
+
+#### Trading Psychology & Notes Analysis
+1. **Emotional Pattern Recognition**: Analyze trade notes to identify emotional patterns affecting performance
+2. **Keyword Analytics**: Track performance correlation with specific emotions/thoughts in notes (FOMO, confidence, etc.)
+3. **Trading Journal Insights**: Generate insights from notes to improve decision-making
+4. **Notes Export**: Export annotated trades for external analysis or sharing with mentors
 
 #### Multiple Platform Support
 1. **NinjaTrader Integration**: Extend ingestion to support futures trading data
@@ -647,9 +804,9 @@ APPLICATION_CONFIG = {
 3. **Manual Trade Entry**: Web interface for manual trade input
 
 #### Advanced Analytics
-1. **Strategy Performance Tracking**: P&L analysis by trading strategy tags
-2. **Risk Metrics**: Sharpe ratio, maximum drawdown, volatility analysis
-3. **Calendar Analysis**: Performance by day of week, time of day patterns
+1. **Risk Metrics**: Sharpe ratio, maximum drawdown, volatility analysis
+2. **Calendar Analysis**: Performance by day of week, time of day patterns
+3. **Market Condition Analysis**: Performance correlation with market volatility/trends
 
 ### 13.2 Phase 3 Features (Advanced)
 
