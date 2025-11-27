@@ -32,23 +32,24 @@ This file tracks the implementation progress of all requirements from PRD.md.
 - [x] Configure logging system
 
 ### Basic NDJSON Ingestion (F.1 - F.2)
-- [ ] **F.1.1** Implement NDJSON file reading functionality
-- [ ] **F.1.2** Create schema validation for NDJSON records against expected input
-- [ ] **F.1.3** Implement UPSERT logic with unique trade identifier for duplicate prevention
-- [ ] **F.1.4** Add source file tracking and audit trail support
-- [ ] **F.2.1** Build ORM models for all database tables using SQLAlchemy
-- [ ] **F.2.2** Handle pre-converted ISO-8601 timestamps from converter
-- [ ] **F.2.3** Implement instrument type persistence (EQUITY/OPTION) from asset_type field
-- [ ] **F.2.4** Store all event types (fill/cancel/amend) for complete lifecycle tracking
-- [ ] **F.2.5** Preserve source metadata (source_file, source_file_index, raw data)
+- [x] **F.1.1** Implement NDJSON file reading functionality
+- [x] **F.1.2** Create schema validation for NDJSON records against expected input
+- [x] **F.1.3** Implement UPSERT logic with unique trade identifier for duplicate prevention
+- [x] **F.1.4** Add source file tracking and audit trail support
+- [x] **F.2.1** Build ORM models for all database tables using SQLAlchemy
+- [x] **F.2.2** Handle pre-converted ISO-8601 timestamps from converter
+- [x] **F.2.3** Implement instrument type persistence (EQUITY/OPTION) from asset_type field (STOCK→EQUITY, ETF→EQUITY, OPTION→OPTION)
+- [x] **F.2.4** Store all event types (fill/cancel/amend) for complete lifecycle tracking
+- [x] **F.2.5** Preserve source metadata (source_file, source_file_index, raw data)
 
 ### Testing Infrastructure
-- [ ] Set up pytest configuration and test structure
-- [ ] Create test database setup/teardown utilities
-- [ ] Write unit tests for NDJSON schema validation
-- [ ] Write unit tests for UPSERT logic and duplicate detection
-- [ ] Write integration tests for database operations
-- [ ] Create test data fixtures from examples/output.ndjson
+- [x] Set up pytest configuration and test structure
+- [x] Create test database setup/teardown utilities
+- [x] Write unit tests for NDJSON schema validation
+- [x] Write unit tests for UPSERT logic and duplicate detection
+- [x] Write integration tests for database operations
+- [x] Create test data fixtures from examples/output.ndjson
+- [x] **ETF Support** - Add ETF as valid asset_type (maps to EQUITY instrument_type)
 
 ## Phase 2: P&L Engine (Weeks 3-4)
 
@@ -77,25 +78,27 @@ This file tracks the implementation progress of all requirements from PRD.md.
 - [x] Test partial position close scenarios
 - [x] Test multi-execution trade scenarios
 - [x] Validate P&L calculations against known trade sequences
-- [ ] Performance testing for P&L calculation speed
+- [x] Performance testing for P&L calculation speed
+- [x] ETF position tracking tests (verify ETF→EQUITY mapping works)
 
 ## Phase 3: MVP Reporting (Week 5)
 
 ### CLI Interface Development
-- [ ] Implement Click-based CLI framework
-- [ ] Create database management commands:
-  - [ ] `trading-journal db migrate`
-  - [ ] `trading-journal db status`
-  - [ ] `trading-journal db reset --confirm`
-- [ ] Build ingestion commands:
-  - [ ] `trading-journal ingest data.ndjson`
-  - [ ] `trading-journal ingest --batch *.ndjson --output-summary`
-  - [ ] `trading-journal ingest --dry-run`
-- [ ] Implement reporting commands:
-  - [ ] `trading-journal report dashboard`
-  - [ ] `trading-journal report trades`
-  - [ ] `trading-journal report positions`
-  - [ ] `trading-journal report pnl`
+- [x] Implement Click-based CLI framework
+- [x] Create database management commands:
+  - [x] `trading-journal db migrate`
+  - [x] `trading-journal db status`
+  - [x] `trading-journal db reset --confirm`
+  - [x] `trading-journal db process-trades` (NEW - matches buys/sells to create completed_trades)
+- [x] Build ingestion commands:
+  - [x] `trading-journal ingest file data.ndjson`
+  - [x] `trading-journal ingest batch *.ndjson --output-summary`
+  - [x] `trading-journal ingest file --dry-run`
+- [x] Implement reporting commands (partial):
+  - [ ] `trading-journal report dashboard` (NOT IMPLEMENTED)
+  - [x] `trading-journal report trades`
+  - [x] `trading-journal report positions`
+  - [ ] `trading-journal report pnl` (NOT IMPLEMENTED)
 
 ### Trading Pattern Analysis & Notes (F.6)
 - [ ] **F.6.1** Support setup pattern annotation for completed trades (MVP: free text)
@@ -235,7 +238,13 @@ This file tracks the implementation progress of all requirements from PRD.md.
 
 ## Completion Status
 
-- **Phase 1**: ✅ **COMPLETED** - Core Data Model
+- **Phase 1**: ✅ **COMPLETED** - Core Data Model (includes ETF support)
 - **Phase 2**: ✅ **COMPLETED** - P&L Engine
-- **Phase 3**: ⏳ Ready to Start - MVP Reporting
+- **Phase 3**: 🔄 **IN PROGRESS (60%)** - MVP Reporting
+  - ✅ CLI framework complete
+  - ✅ Database commands complete
+  - ✅ Ingestion commands complete
+  - ✅ Basic reports (trades, positions) complete
+  - ❌ Dashboard metrics not implemented
+  - ❌ Pattern/notes management not implemented
 - **Phase 4**: ⏳ Not Started - Production Features

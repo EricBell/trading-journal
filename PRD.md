@@ -85,7 +85,7 @@ The primary input is **NDJSON files** created by the existing Schwab CSV convert
 
 - [ ] **F.2.1** Trades must be stored relationally in PostgreSQL, with a schema optimized for both Equities and Options.
 - [ ] **F.2.2** Must handle pre-converted ISO-8601 timestamps from the converter without additional processing.
-- [ ] **F.2.3** Must automatically persist the instrument type for each record (**EQUITY**, **OPTION**) based on the `asset_type` field from converter.
+- [ ] **F.2.3** Must automatically persist the instrument type for each record (**EQUITY**, **OPTION**) based on the `asset_type` field from converter. STOCK and ETF both map to EQUITY instrument_type.
 - [ ] **F.2.4** Must store all event types: **fill**, **cancel**, **amend** for complete trade lifecycle tracking.
 - [ ] **F.2.5** Must preserve all source metadata including `source_file`, `source_file_index`, and complete `raw` data for audit trail.
 
@@ -189,7 +189,7 @@ The input is NDJSON from the existing Schwab converter. Each line represents a t
   "price_improvement": 0.3,
   "order_type": "MKT",
   "event_type": "fill",
-  "asset_type": "STOCK",
+  "asset_type": "STOCK",  // Valid values: STOCK, OPTION, ETF
   "option": null,
   "source_file": "2025-11-04-TradeActivity.csv",
   "source_file_index": 0,
@@ -225,6 +225,36 @@ The input is NDJSON from the existing Schwab converter. Each line represents a t
   "issues": []
 }
 ```
+
+**ETF Example:**
+```json
+{
+  "section": "Filled Orders",
+  "row_index": 12,
+  "exec_time": "2025-11-25T10:08:24",
+  "side": "BUY",
+  "qty": 100,
+  "pos_effect": "TO OPEN",
+  "symbol": "SPY",
+  "exp": null,
+  "strike": null,
+  "type": "STOCK",
+  "spread": "STOCK",
+  "price": 450.00,
+  "net_price": 450.00,
+  "price_improvement": 0.0,
+  "order_type": "MKT",
+  "event_type": "fill",
+  "asset_type": "ETF",
+  "option": null,
+  "source_file": "2025-11-25-TradeActivity.csv",
+  "source_file_index": 0,
+  "raw": "original CSV row data",
+  "issues": []
+}
+```
+
+**Note**: ETF asset_type maps to EQUITY instrument_type in the database, treated identically to STOCK for P&L calculations.
 
 ### 4.2 Trade Hierarchy & Terminology
 
@@ -520,19 +550,36 @@ The primary dashboard must be the default view, summarizing performance over a u
 
 ### 7.1 Core Commands
 
+#### Typical Workflow
+
+The application uses a **two-step workflow** for processing trades:
+
+```bash
+# Step 1: Ingest NDJSON file (stores executions in trades table)
+trading-journal ingest file data.ndjson
+
+# Step 2: Process completed trades (matches buys with sells, creates completed_trades records)
+trading-journal db process-trades
+
+# Step 3: View reports (completed trades now visible)
+trading-journal report trades
+```
+
+**Important**: Reports show data from the `completed_trades` table. You must run both ingestion and trade processing to see trades in reports.
+
 #### Ingestion Commands
 ```bash
 # Single file ingestion
-trading-journal ingest data.ndjson
+trading-journal ingest file data.ndjson
 
 # Batch processing
-trading-journal ingest --batch *.ndjson --output-summary
+trading-journal ingest batch *.ndjson --output-summary
 
 # Dry run (validation only)
-trading-journal ingest data.ndjson --dry-run
+trading-journal ingest file data.ndjson --dry-run
 
 # Verbose processing
-trading-journal ingest data.ndjson --verbose
+trading-journal ingest file data.ndjson --verbose
 ```
 
 #### Reporting Commands
@@ -611,6 +658,12 @@ trading-journal db status
 
 # Reset (with confirmation)
 trading-journal db reset --confirm
+
+# Process completed trades from executions (match buys with sells)
+trading-journal db process-trades
+
+# Process trades for specific symbol only
+trading-journal db process-trades --symbol AAPL
 ```
 
 ### 7.2 Configuration Options

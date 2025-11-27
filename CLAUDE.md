@@ -29,27 +29,80 @@ uv install
 python main.py
 ```
 
-### Future Development Commands (from PRD)
+### Development Commands
+
+#### Typical Workflow (Two-Step Process)
+
+**IMPORTANT**: The application requires a two-step process to see trades in reports:
+
 ```bash
-# Database operations (when implemented)
-trading-journal db migrate
-trading-journal db status
-trading-journal db reset --confirm
+# Step 1: Ingest NDJSON file (stores executions in trades table)
+uv run python main.py ingest file ../schwab-csv-to-json/output.ndjson
 
-# Data ingestion (when implemented)
-trading-journal ingest data.ndjson
-trading-journal ingest --batch *.ndjson --dry-run
+# Step 2: Process completed trades (matches buys with sells)
+uv run python main.py db process-trades
 
-# Reporting (when implemented)
-trading-journal report dashboard --date-range "2025-01-01,2025-01-31"
-trading-journal report trades --symbol AAPL
-trading-journal pattern annotate --completed-trade-id 123 --pattern "MACD Scalp"
-trading-journal notes add --completed-trade-id 123 --text "Great entry timing"
+# Step 3: View reports
+uv run python main.py report trades
+uv run python main.py report positions
+```
+
+#### Database Operations
+```bash
+# Run migrations
+uv run python main.py db migrate
+
+# Check database status
+uv run python main.py db status
+
+# Reset database (with confirmation)
+uv run python main.py db reset --confirm
+
+# Process completed trades (required after ingestion)
+uv run python main.py db process-trades
+uv run python main.py db process-trades --symbol AAPL
+```
+
+#### Data Ingestion
+```bash
+# Single file ingestion
+uv run python main.py ingest file data.ndjson
+
+# Batch processing
+uv run python main.py ingest batch *.ndjson --output-summary
+
+# Dry run (validation only)
+uv run python main.py ingest file data.ndjson --dry-run
+
+# Verbose processing
+uv run python main.py ingest file data.ndjson --verbose
+```
+
+#### Reporting (Implemented)
+```bash
+# View completed trades
+uv run python main.py report trades
+uv run python main.py report trades --symbol AAPL
+uv run python main.py report trades --format json
+
+# View positions
+uv run python main.py report positions
+uv run python main.py report positions --open-only
+uv run python main.py report positions --symbol AAPL
+```
+
+#### Pattern & Notes Management (Planned - Not Yet Implemented)
+```bash
+# Pattern annotation (coming soon)
+uv run python main.py pattern annotate --completed-trade-id 123 --pattern "MACD Scalp"
+
+# Trade notes (coming soon)
+uv run python main.py notes add --completed-trade-id 123 --text "Great entry timing"
 ```
 
 ## Technical Stack
 
-- **Language**: Python 3.11+ (requires >= 3.14 per pyproject.toml)
+- **Language**: Python 3.11+ (per pyproject.toml)
 - **Database**: PostgreSQL 14+ with JSONB support
 - **ORM**: SQLAlchemy 2.0 with Alembic migrations
 - **CLI**: Click framework
@@ -67,10 +120,16 @@ The application consumes NDJSON files from an existing **Schwab CSV to JSON Conv
   "exec_time": "2025-11-04T10:17:00",
   "side": "BUY", "qty": 300, "pos_effect": "TO OPEN",
   "symbol": "RANI", "net_price": 2.489,
-  "event_type": "fill", "asset_type": "STOCK",
+  "event_type": "fill",
+  "asset_type": "STOCK",  // Valid values: STOCK, OPTION, ETF
   "source_file": "2025-11-04-TradeActivity.csv"
 }
 ```
+
+**Asset Type Mapping:**
+- `STOCK` → `EQUITY` instrument_type
+- `ETF` → `EQUITY` instrument_type (treated identically to STOCK)
+- `OPTION` → `OPTION` instrument_type
 
 ## Database Schema Considerations
 
