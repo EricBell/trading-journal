@@ -4,7 +4,7 @@ import logging
 from contextlib import contextmanager
 from typing import Generator
 
-from sqlalchemy import create_engine, Engine
+from sqlalchemy import create_engine, Engine, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from .config import db_config
@@ -59,7 +59,7 @@ class DatabaseManager:
         """Test database connection."""
         try:
             with self._engine.connect() as conn:
-                conn.execute("SELECT 1")
+                conn.execute(text("SELECT 1"))
             logger.info("Database connection successful")
             return True
         except Exception as e:
