@@ -92,6 +92,11 @@ class Trade(Base):
     # Relationship
     completed_trade = relationship("CompletedTrade", back_populates="executions")
 
+    @property
+    def is_fill(self) -> bool:
+        """Check if this is a fill execution."""
+        return self.event_type == 'fill' and self.exec_timestamp is not None
+
 
 class CompletedTrade(Base):
     """Complete round-trip trades table."""

@@ -4,8 +4,8 @@
 
 This document tracks the current implementation status of the Trading Journal project as defined in PRD.md.
 
-**Current Phase**: ✅ **Phase 1 Completed** - Core Data Model
-**Next Phase**: 🚧 **Phase 2** - P&L Engine
+**Current Phase**: ✅ **Phase 2 Completed** - P&L Engine
+**Next Phase**: 🚧 **Phase 3** - MVP Reporting
 
 ---
 
@@ -51,15 +51,17 @@ This document tracks the current implementation status of the Trading Journal pr
 
 ---
 
-## 🚧 Phase 2: P&L Engine (NEXT)
+## ✅ Phase 2: P&L Engine (COMPLETED)
 
-### Pending Implementation
-- [ ] **NDJSON Ingestion** - File parsing and validation
-- [ ] **Schema Validation** - Input data validation against PRD schema
-- [ ] **UPSERT Logic** - Duplicate detection and handling
-- [ ] **Position Tracking** - Real-time position balance calculations
-- [ ] **Average Cost P&L** - Profit/loss calculation engine
-- [ ] **Trade Completion** - Grouping executions into completed trades
+### ✅ Implemented Features
+- [x] **NDJSON Ingestion** - Complete file parsing and validation with Pydantic schemas
+- [x] **Schema Validation** - Input data validation against PRD schema
+- [x] **UPSERT Logic** - PostgreSQL-based duplicate detection and handling
+- [x] **Position Tracking** - Real-time position balance calculations with average cost basis
+- [x] **Average Cost P&L** - Complete profit/loss calculation engine
+- [x] **Trade Completion** - Algorithm to group executions into completed trades
+- [x] **CLI Integration** - Full command-line interface for all P&L operations
+- [x] **Comprehensive Testing** - 10 test cases covering all P&L scenarios
 
 ---
 
@@ -68,21 +70,35 @@ This document tracks the current implementation status of the Trading Journal pr
 ### ✅ Working Features
 1. **Database Management**:
    ```bash
-   .venv/bin/python main.py db migrate  # Create/update schema
-   .venv/bin/python main.py db status   # Check connection
+   .venv/bin/python main.py db migrate        # Create/update schema
+   .venv/bin/python main.py db status         # Check connection
+   .venv/bin/python main.py db process-trades # Create completed trades
    ```
 
-2. **CLI Structure**: All command groups defined with help text
+2. **Data Ingestion**:
+   ```bash
+   .venv/bin/python main.py ingest file data.ndjson          # Ingest single file
+   .venv/bin/python main.py ingest file data.ndjson --dry-run # Validate only
+   .venv/bin/python main.py ingest batch "*.ndjson"          # Batch processing
+   ```
 
-3. **Configuration**: Environment-based configuration ready for PostgreSQL
+3. **Position & P&L Reporting**:
+   ```bash
+   .venv/bin/python main.py report positions        # Show all positions
+   .venv/bin/python main.py report positions --open-only  # Open positions only
+   .venv/bin/python main.py report trades          # Completed trades with P&L
+   .venv/bin/python main.py report trades --symbol AAPL   # Filter by symbol
+   ```
+
+4. **P&L Engine**: Fully functional average cost basis calculations with automatic position tracking
 
 ### ⚠️ Requires Setup
 1. **PostgreSQL Database**: User must install and configure PostgreSQL 14+
 2. **Environment Variables**: Copy `.env.example` to `.env` and configure database connection
 3. **Database Creation**: Create database named `trading_journal`
 
-### 🔮 Placeholder Commands
-All ingestion, reporting, and annotation commands return "not yet implemented" messages but have proper CLI structure.
+### 📋 MVP Workflow Ready
+Complete workflow from NDJSON ingestion to P&L reporting is now functional!
 
 ---
 

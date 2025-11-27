@@ -90,6 +90,25 @@ def reset(confirm: bool) -> None:
         raise click.Abort()
 
 
+@db.command()
+@click.option('--symbol', help='Process only specific symbol')
+def process_trades(symbol: str) -> None:
+    """Process completed trades from executions."""
+    try:
+        from .trade_completion import TradeCompletionEngine
+
+        engine = TradeCompletionEngine()
+        result = engine.process_completed_trades(symbol)
+
+        click.echo(f"🔄 Trade Processing Results:")
+        click.echo(f"✅ Completed trades created: {result['completed_trades']}")
+        click.echo(f"📝 {result['message']}")
+
+    except Exception as e:
+        click.echo(f"❌ Trade processing failed: {e}")
+        raise click.Abort()
+
+
 @main.group()
 def ingest() -> None:
     """Data ingestion commands."""
@@ -102,18 +121,35 @@ def ingest() -> None:
 @click.option('--verbose', is_flag=True, help='Enable verbose output')
 def ingest_file(file_path: Path, dry_run: bool, verbose: bool) -> None:
     """Ingest a single NDJSON file."""
-    if verbose:
-        click.echo(f"Processing file: {file_path}")
+    from .ingestion import NdjsonIngester, IngestionError
 
     if dry_run:
         click.echo("🔍 DRY RUN MODE - No database changes will be made")
 
     try:
-        # TODO: Implement NDJSON ingestion logic
-        click.echo("⚠️  NDJSON ingestion not yet implemented")
+        ingester = NdjsonIngester()
+        result = ingester.process_file(file_path, dry_run=dry_run, verbose=verbose)
 
-    except Exception as e:
+        # Display results
+        click.echo(f"📁 File: {result['file_path']}")
+        click.echo(f"✅ Records processed: {result['records_processed']}")
+        click.echo(f"❌ Records failed: {result['records_failed']}")
+
+        if result['validation_errors']:
+            click.echo(f"⚠️  Validation errors:")
+            for error in result['validation_errors']:
+                click.echo(f"   {error}")
+
+        if result['success']:
+            click.echo("🎉 Ingestion completed successfully")
+        else:
+            click.echo("⚠️  Ingestion completed with errors")
+
+    except IngestionError as e:
         click.echo(f"❌ Ingestion failed: {e}")
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Unexpected error: {e}")
         raise click.Abort()
 
 
@@ -123,23 +159,40 @@ def ingest_file(file_path: Path, dry_run: bool, verbose: bool) -> None:
 @click.option('--dry-run', is_flag=True, help='Validate without database changes')
 def ingest_batch(pattern: str, output_summary: bool, dry_run: bool) -> None:
     """Ingest multiple NDJSON files matching pattern."""
+    from .ingestion import NdjsonIngester, IngestionError
+
+    if dry_run:
+        click.echo("🔍 DRY RUN MODE - No database changes will be made")
+
     try:
-        files = list(Path.cwd().glob(pattern))
+        ingester = NdjsonIngester()
+        result = ingester.process_batch(pattern, dry_run=dry_run, verbose=output_summary)
 
-        if not files:
-            click.echo(f"No files found matching pattern: {pattern}")
-            return
+        # Display batch summary
+        click.echo(f"\n📊 Batch Processing Summary")
+        click.echo(f"📁 Files processed: {result['files_processed']}")
+        click.echo(f"❌ Files failed: {result['files_failed']}")
+        click.echo(f"✅ Total records processed: {result['total_records_processed']}")
+        click.echo(f"❌ Total records failed: {result['total_records_failed']}")
 
-        click.echo(f"Found {len(files)} files to process")
+        if output_summary:
+            click.echo(f"\n📋 File Details:")
+            for file_result in result['results']:
+                if 'error' in file_result:
+                    click.echo(f"   ❌ {file_result['file_path']}: {file_result['error']}")
+                else:
+                    click.echo(f"   ✅ {file_result['file_path']}: {file_result['records_processed']} records")
 
-        if dry_run:
-            click.echo("🔍 DRY RUN MODE - No database changes will be made")
+        if result['files_failed'] == 0:
+            click.echo("🎉 Batch processing completed successfully")
+        else:
+            click.echo("⚠️  Batch processing completed with errors")
 
-        # TODO: Implement batch processing
-        click.echo("⚠️  Batch ingestion not yet implemented")
-
-    except Exception as e:
+    except IngestionError as e:
         click.echo(f"❌ Batch ingestion failed: {e}")
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Unexpected error: {e}")
         raise click.Abort()
 
 
@@ -170,13 +223,45 @@ def dashboard(date_range: str) -> None:
 def trades(symbol: str, date_range: str, output_format: str) -> None:
     """List completed trades."""
     try:
-        # TODO: Implement trade listing
-        click.echo("📋 Trade Log")
+        from .trade_completion import TradeCompletionEngine
+
+        engine = TradeCompletionEngine()
+        summary = engine.get_completed_trades_summary(symbol)
+
+        if "message" in summary:
+            click.echo(summary["message"])
+            return
+
+        click.echo("📋 Completed Trades Report")
         if symbol:
             click.echo(f"Symbol: {symbol}")
-        if date_range:
-            click.echo(f"Date Range: {date_range}")
-        click.echo("⚠️  Trade listing not yet implemented")
+
+        click.echo(f"\n📊 Summary:")
+        click.echo(f"   Total Trades: {summary['total_trades']}")
+        click.echo(f"   Winning Trades: {summary['winning_trades']}")
+        click.echo(f"   Losing Trades: {summary['losing_trades']}")
+        click.echo(f"   Win Rate: {summary['win_rate']:.1f}%")
+        click.echo(f"   Total P&L: ${summary['total_pnl']:.2f}")
+        click.echo(f"   Average Win: ${summary['average_win']:.2f}")
+        click.echo(f"   Average Loss: ${summary['average_loss']:.2f}")
+
+        if output_format == 'json':
+            import json
+            click.echo(json.dumps(summary, indent=2, default=str))
+        else:
+            # Table format
+            click.echo(f"\n📋 Trade Details:")
+            for trade in summary['trades']:
+                status = "🟢 WIN" if trade['pnl'] > 0 else "🔴 LOSS"
+                click.echo(f"   {status} {trade['symbol']} {trade['type']}")
+                click.echo(f"      Qty: {trade['qty']}")
+                click.echo(f"      Entry: ${trade['entry_price']:.4f}")
+                click.echo(f"      Exit: ${trade['exit_price']:.4f}")
+                click.echo(f"      P&L: ${trade['pnl']:.2f}")
+                if trade['setup_pattern']:
+                    click.echo(f"      Pattern: {trade['setup_pattern']}")
+                if trade['notes']:
+                    click.echo(f"      Notes: {trade['notes']}")
 
     except Exception as e:
         click.echo(f"❌ Trade listing failed: {e}")
@@ -185,14 +270,39 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
 
 @report.command()
 @click.option('--open-only', is_flag=True, help='Show only open positions')
-def positions(open_only: bool) -> None:
+@click.option('--symbol', help='Filter by symbol')
+def positions(open_only: bool, symbol: str) -> None:
     """Show position report."""
     try:
-        # TODO: Implement position reporting
+        from .positions import PositionTracker
+
+        tracker = PositionTracker()
+        summary = tracker.get_position_summary(symbol)
+
         click.echo("💼 Positions Report")
-        if open_only:
-            click.echo("Showing open positions only")
-        click.echo("⚠️  Position reporting not yet implemented")
+        if symbol:
+            click.echo(f"Symbol: {symbol}")
+
+        click.echo(f"📊 Summary:")
+        click.echo(f"   Open Positions: {summary['open_positions']}")
+        click.echo(f"   Closed Positions: {summary['closed_positions']}")
+        click.echo(f"   Total Realized P&L: ${summary['total_realized_pnl']:.2f}")
+        click.echo(f"   Total Open Value: ${summary['total_open_value']:.2f}")
+
+        if summary['positions']:
+            click.echo(f"\n📋 Position Details:")
+            for pos in summary['positions']:
+                if open_only and not pos['is_open']:
+                    continue
+
+                status = "🟢 OPEN" if pos['is_open'] else "🔴 CLOSED"
+                click.echo(f"   {status} {pos['symbol']} ({pos['instrument_type']})")
+                click.echo(f"      Qty: {pos['current_qty']}")
+                click.echo(f"      Avg Cost: ${pos['avg_cost_basis']:.4f}")
+                click.echo(f"      Market Value: ${pos['market_value']:.2f}")
+                click.echo(f"      Realized P&L: ${pos['realized_pnl']:.2f}")
+        else:
+            click.echo("No positions found")
 
     except Exception as e:
         click.echo(f"❌ Position reporting failed: {e}")
