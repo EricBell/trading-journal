@@ -46,6 +46,7 @@ class PositionTracker:
 
         position = session.query(Position).filter(
             and_(
+                Position.user_id == trade.user_id,
                 Position.symbol == trade.symbol,
                 Position.instrument_type == trade.instrument_type,
                 Position.option_details == option_details
@@ -54,6 +55,7 @@ class PositionTracker:
 
         if not position:
             position = Position(
+                user_id=trade.user_id,
                 symbol=trade.symbol,
                 instrument_type=trade.instrument_type,
                 option_details=option_details,
@@ -70,6 +72,7 @@ class PositionTracker:
         """Save position using UPSERT to handle conflicts."""
         # Prepare position data
         position_data = {
+            'user_id': position.user_id,
             'symbol': position.symbol,
             'instrument_type': position.instrument_type,
             'option_details': position.option_details,
@@ -84,7 +87,7 @@ class PositionTracker:
         # Use PostgreSQL UPSERT
         stmt = insert(Position).values(**position_data)
         stmt = stmt.on_conflict_do_update(
-            index_elements=['symbol', 'instrument_type', 'option_details'],
+            index_elements=['user_id', 'symbol', 'instrument_type', 'option_details'],
             set_=dict(
                 current_qty=stmt.excluded.current_qty,
                 avg_cost_basis=stmt.excluded.avg_cost_basis,

@@ -14,6 +14,8 @@ from .database import db_manager
 from .models import Trade, ProcessingLog
 from .schemas import NdjsonRecord
 from .positions import PositionTracker
+import json
+from .authorization import AuthContext
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +41,11 @@ class NdjsonIngester:
         """Process a single NDJSON file."""
 
         logger.info(f"Processing file: {file_path}")
+        user_id = AuthContext.require_user().user_id
 
         # Start processing log
         processing_log = ProcessingLog(
+            user_id=user_id,
             file_path=str(file_path),
             processing_started_at=datetime.now(),
             status="processing"
@@ -87,7 +91,7 @@ class NdjsonIngester:
 
             # Process records to database
             if not dry_run and successful_records:
-                inserted_trades = self._insert_records(successful_records, str(file_path))
+                inserted_trades = self._insert_records(user_id, successful_records, str(file_path))
 
                 # Update positions for fill trades (within the same session context)
                 with self.db_manager.get_session() as session:
@@ -156,18 +160,19 @@ class NdjsonIngester:
 
         return records
 
-    def _insert_records(self, records: List[NdjsonRecord], source_file_path: str) -> List[int]:
+    def _insert_records(self, user_id: int, records: List[NdjsonRecord], source_file_path: str) -> List[int]:
         """Insert validated records into database using UPSERT."""
         inserted_trade_ids = []
 
         with self.db_manager.get_session() as session:
             for record in records:
                 trade_data = self._convert_to_trade_data(record, source_file_path)
+                trade_data['user_id'] = user_id
 
                 # Use PostgreSQL UPSERT (INSERT ... ON CONFLICT)
                 stmt = insert(Trade).values(**trade_data)
                 stmt = stmt.on_conflict_do_update(
-                    index_elements=['unique_key'],
+                    index_elements=['user_id', 'unique_key'],
                     set_=dict(
                         # Update key fields if record already exists
                         exec_timestamp=stmt.excluded.exec_timestamp,
@@ -222,7 +227,7 @@ class NdjsonIngester:
                 "strike_price": record.option.strike,
                 "option_type": record.option.right,
                 "spread_type": record.spread,
-                "option_data": record.option.dict() if record.option else None
+                "option_data": json.dumps(record.option.dict(), default=str) if record.option else None
             })
 
         return trade_data
@@ -230,7 +235,7 @@ class NdjsonIngester:
     def _save_processing_log(self, processing_log: ProcessingLog) -> None:
         """Save processing log to database."""
         with self.db_manager.get_session() as session:
-            session.merge(processing_log)  # Use merge for upsert behavior
+            session.add(processing_log)
 
     def process_batch(
         self,

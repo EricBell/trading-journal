@@ -37,9 +37,15 @@ class DatabaseManager:
         logger.info("Database tables created successfully")
 
     def drop_tables(self) -> None:
-        """Drop all database tables."""
+        """Drop all database tables, including the Alembic version table."""
         logger.warning("Dropping all database tables...")
         Base.metadata.drop_all(self._engine)
+        
+        # Also drop the alembic_version table, which is not part of Base.metadata
+        with self._engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+            conn.commit()
+            
         logger.warning("Database tables dropped")
 
     @contextmanager

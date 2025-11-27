@@ -10,6 +10,7 @@ from sqlalchemy import and_, func
 
 from .database import db_manager
 from .models import Trade, CompletedTrade
+from .authorization import AuthContext
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +23,13 @@ class TradeCompletionEngine:
 
     def process_completed_trades(self, symbol: Optional[str] = None) -> Dict[str, Any]:
         """Identify and process completed trades from unlinked executions."""
+        user_id = AuthContext.require_user().user_id
 
         with self.db_manager.get_session() as session:
             # Get fill trades that aren't linked to completed trades yet
             query = session.query(Trade).filter(
                 and_(
+                    Trade.user_id == user_id,
                     Trade.event_type == 'fill',
                     Trade.completed_trade_id.is_(None),
                     Trade.symbol.isnot(None),
@@ -68,99 +71,87 @@ class TradeCompletionEngine:
             }
 
     def _process_trade_group(self, session: Session, trades: List[Trade]) -> int:
-        """Process a group of trades for the same instrument."""
+        """Process a group of trades for the same instrument to find completed cycles."""
         if not trades:
             return 0
 
-        # Sort by execution time
         trades.sort(key=lambda t: t.exec_timestamp or datetime.min)
 
-        position_qty = 0
-        completed_trades = 0
-        current_opens = []  # Track opening trades
+        completed_cycles = 0
+        current_position = 0
+        cycle_executions: List[Trade] = []
 
         for trade in trades:
-            if trade.pos_effect == "TO OPEN":
-                position_qty += trade.qty
-                current_opens.append(trade)
+            # Skip trades that are already part of a completed trade
+            if trade.completed_trade_id is not None:
+                continue
 
-            elif trade.pos_effect == "TO CLOSE":
-                close_qty = abs(trade.qty)
+            if not cycle_executions:
+                # Start of a new potential cycle
+                if trade.pos_effect == 'TO CLOSE':
+                    logger.warning(f"Skipping a 'TO CLOSE' trade that appears before any 'TO OPEN': {trade.trade_id}")
+                    continue
+            
+            cycle_executions.append(trade)
+            
+            # The qty is already signed, so just add it to the current position
+            current_position += trade.qty
 
-                # Match closes with opens to create completed trades
-                while close_qty > 0 and current_opens:
-                    open_trade = current_opens[0]
-                    open_qty = abs(open_trade.qty)
+            if current_position == 0:
+                # Position is closed, a cycle is complete.
+                self._create_completed_trade_from_cycle(session, cycle_executions)
+                completed_cycles += 1
+                cycle_executions = [] # Reset for the next cycle
 
-                    if open_qty <= close_qty:
-                        # Full close of this open
-                        completed_trade = self._create_completed_trade(
-                            session, [open_trade], trade, open_qty
-                        )
-                        if completed_trade:
-                            completed_trades += 1
+        return completed_cycles
 
-                        close_qty -= open_qty
-                        current_opens.pop(0)
-                    else:
-                        # Partial close
-                        completed_trade = self._create_completed_trade(
-                            session, [open_trade], trade, close_qty
-                        )
-                        if completed_trade:
-                            completed_trades += 1
+    def _create_completed_trade_from_cycle(self, session: Session, cycle_trades: List[Trade]):
+        """Create a single CompletedTrade from a list of executions that form a full cycle."""
+        if not cycle_trades:
+            return
 
-                        # Reduce the open trade quantity (conceptually)
-                        # In practice, we create a new "remaining" open
-                        remaining_qty = open_qty - close_qty
-                        # For simplicity, we'll process the rest later
-                        close_qty = 0
+        opens = [t for t in cycle_trades if t.pos_effect == 'TO OPEN']
+        closes = [t for t in cycle_trades if t.pos_effect == 'TO CLOSE']
 
-        return completed_trades
+        if not opens or not closes:
+            logger.warning(f"Trade cycle for {cycle_trades[0].symbol} is incomplete, skipping.")
+            return
 
-    def _create_completed_trade(
-        self,
-        session: Session,
-        open_trades: List[Trade],
-        close_trade: Trade,
-        qty_traded: int
-    ) -> Optional[CompletedTrade]:
-        """Create a completed trade record from open and close executions."""
+        # Calculate weighted average entry price from all "TO OPEN" trades
+        total_open_cost = sum(Decimal(str(t.net_price)) * abs(t.qty) for t in opens)
+        total_open_qty = sum(abs(t.qty) for t in opens)
+        entry_avg_price = total_open_cost / total_open_qty if total_open_qty else Decimal(0)
 
-        if not open_trades or not close_trade:
-            return None
+        # Calculate weighted average exit price from all "TO CLOSE" trades
+        total_close_proceeds = sum(Decimal(str(t.net_price)) * abs(t.qty) for t in closes)
+        total_close_qty = sum(abs(t.qty) for t in closes)
+        exit_avg_price = total_close_proceeds / total_close_qty if total_close_qty else Decimal(0)
+        
+        # Gross cost and proceeds
+        gross_cost = total_open_cost
+        gross_proceeds = total_close_proceeds
 
-        # Calculate weighted average entry price
-        total_cost = sum(t.net_price * abs(t.qty) for t in open_trades)
-        total_qty = sum(abs(t.qty) for t in open_trades)
-        entry_avg_price = Decimal(str(total_cost / total_qty)) if total_qty > 0 else Decimal('0')
-
-        # Exit price from close trade
-        exit_avg_price = Decimal(str(close_trade.net_price))
-
-        # Calculate P&L
-        if open_trades[0].side == "BUY":  # Long trade
-            gross_cost = entry_avg_price * qty_traded
-            gross_proceeds = exit_avg_price * qty_traded
+        # Determine trade type (LONG/SHORT) from the first opening trade
+        first_open = opens[0]
+        if first_open.side == "BUY":
             net_pnl = gross_proceeds - gross_cost
             trade_type = "LONG"
-        else:  # Short trade
-            gross_proceeds = entry_avg_price * qty_traded
-            gross_cost = exit_avg_price * qty_traded
-            net_pnl = gross_proceeds - gross_cost
+        else:
+            net_pnl = gross_cost - gross_proceeds # For shorts, P&L is cost - proceeds
             trade_type = "SHORT"
-
-        # Calculate hold duration
-        opened_at = min(t.exec_timestamp for t in open_trades if t.exec_timestamp)
-        closed_at = close_trade.exec_timestamp
+            
+        # Timestamps and duration
+        opened_at = min(t.exec_timestamp for t in opens if t.exec_timestamp)
+        closed_at = max(t.exec_timestamp for t in closes if t.exec_timestamp)
         hold_duration = closed_at - opened_at if opened_at and closed_at else None
 
-        # Create completed trade
+        # Create the single CompletedTrade object
         completed_trade = CompletedTrade(
-            symbol=close_trade.symbol,
-            instrument_type=close_trade.instrument_type,
-            option_details=close_trade.option_data,
-            total_qty=qty_traded,
+            user_id=first_open.user_id,
+            symbol=first_open.symbol,
+            instrument_type=first_open.instrument_type,
+            option_details=first_open.option_data,
+            total_qty=total_open_qty,
             entry_avg_price=float(entry_avg_price),
             exit_avg_price=float(exit_avg_price),
             gross_proceeds=float(gross_proceeds),
@@ -170,24 +161,21 @@ class TradeCompletionEngine:
             closed_at=closed_at,
             hold_duration=hold_duration,
             is_winning_trade=net_pnl > 0,
-            trade_type=trade_type
+            trade_type=trade_type,
         )
-
+        
         session.add(completed_trade)
-        session.flush()  # Get the ID
+        session.flush() # To get the new completed_trade_id
 
-        # Link the executions to the completed trade
-        for open_trade in open_trades:
-            open_trade.completed_trade_id = completed_trade.completed_trade_id
-
-        close_trade.completed_trade_id = completed_trade.completed_trade_id
+        # Link all executions in the cycle to this new CompletedTrade
+        for trade in cycle_trades:
+            trade.completed_trade_id = completed_trade.completed_trade_id
 
         logger.info(
             f"Created completed trade: {completed_trade.symbol} "
-            f"{trade_type} {qty_traded} @ {entry_avg_price} -> {exit_avg_price} "
-            f"P&L: ${net_pnl}"
+            f"{trade_type} {completed_trade.total_qty} @ {entry_avg_price:.4f} -> {exit_avg_price:.4f} "
+            f"P&L: ${net_pnl:.2f}"
         )
-
         return completed_trade
 
     def get_completed_trades_summary(self, symbol: Optional[str] = None) -> Dict[str, Any]:
