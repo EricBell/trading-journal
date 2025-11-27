@@ -97,6 +97,13 @@ Uses **Average Cost (Weighted Average)** method for position tracking and P&L ca
 - Phase 3: MVP Reporting (Week 5)
 - Phase 4: Production Features (Week 6)
 
+## Task Management
+
+This project uses a **tasks.md** file to enumerate all tasks required to implement the PRD. During implementation:
+1. Create `tasks.md` with all implementation tasks broken down by phase
+2. Mark tasks as complete using checkboxes as work progresses
+3. Use this file to track progress and ensure comprehensive PRD implementation
+
 ## Key Development Guidelines
 
 - **Test-Driven Development (TDD)**: All implementation must follow TDD methodology
