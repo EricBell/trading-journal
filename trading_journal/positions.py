@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, List
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
+from sqlalchemy.dialects.postgresql import insert
 
 from .database import db_manager
 from .models import Trade, Position, CompletedTrade
@@ -33,7 +34,7 @@ class PositionTracker:
             elif trade.pos_effect == "TO CLOSE":
                 self._handle_position_close(position, trade)
 
-            session.add(position)
+            self._save_position(session, position, trade)
             logger.info(f"Updated position for {trade.symbol}: {position.current_qty} @ {position.avg_cost_basis}")
 
     def _get_or_create_position(self, session: Session, trade: Trade) -> Position:
@@ -64,6 +65,38 @@ class PositionTracker:
             )
 
         return position
+
+    def _save_position(self, session: Session, position: Position, trade: Trade) -> None:
+        """Save position using UPSERT to handle conflicts."""
+        # Prepare position data
+        position_data = {
+            'symbol': position.symbol,
+            'instrument_type': position.instrument_type,
+            'option_details': position.option_details,
+            'current_qty': position.current_qty,
+            'avg_cost_basis': position.avg_cost_basis,
+            'total_cost': position.total_cost,
+            'opened_at': position.opened_at,
+            'closed_at': position.closed_at,
+            'realized_pnl': position.realized_pnl
+        }
+
+        # Use PostgreSQL UPSERT
+        stmt = insert(Position).values(**position_data)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['symbol', 'instrument_type', 'option_details'],
+            set_=dict(
+                current_qty=stmt.excluded.current_qty,
+                avg_cost_basis=stmt.excluded.avg_cost_basis,
+                total_cost=stmt.excluded.total_cost,
+                updated_at=stmt.excluded.updated_at,
+                closed_at=stmt.excluded.closed_at,
+                realized_pnl=stmt.excluded.realized_pnl
+            )
+        )
+
+        session.execute(stmt)
+        session.commit()
 
     def _handle_position_open(self, position: Position, trade: Trade) -> None:
         """Handle position opening with average cost basis calculation."""

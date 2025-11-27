@@ -89,10 +89,12 @@ class NdjsonIngester:
             if not dry_run and successful_records:
                 inserted_trades = self._insert_records(successful_records, str(file_path))
 
-                # Update positions for fill trades
-                for trade in inserted_trades:
-                    if trade.is_fill:
-                        self.position_tracker.update_positions_from_trade(trade)
+                # Update positions for fill trades (within the same session context)
+                with self.db_manager.get_session() as session:
+                    for trade_id in inserted_trades:
+                        trade = session.get(Trade, trade_id)
+                        if trade and trade.is_fill:
+                            self.position_tracker.update_positions_from_trade(trade)
 
             # Update processing log
             processing_log.processing_completed_at = datetime.now()
@@ -154,9 +156,9 @@ class NdjsonIngester:
 
         return records
 
-    def _insert_records(self, records: List[NdjsonRecord], source_file_path: str) -> List[Trade]:
+    def _insert_records(self, records: List[NdjsonRecord], source_file_path: str) -> List[int]:
         """Insert validated records into database using UPSERT."""
-        inserted_trades = []
+        inserted_trade_ids = []
 
         with self.db_manager.get_session() as session:
             for record in records:
@@ -173,17 +175,17 @@ class NdjsonIngester:
                         realized_pnl=stmt.excluded.realized_pnl,
                         processing_timestamp=stmt.excluded.processing_timestamp
                     )
-                ).returning(Trade)
+                ).returning(Trade.trade_id)
 
                 result = session.execute(stmt)
-                trade = result.fetchone()
-                if trade:
-                    # Convert row to Trade object
-                    trade_obj = session.get(Trade, trade[0])  # Get by trade_id
-                    if trade_obj:
-                        inserted_trades.append(trade_obj)
+                trade_id = result.scalar()
+                if trade_id:
+                    inserted_trade_ids.append(trade_id)
 
-        return inserted_trades
+            # Commit the transaction
+            session.commit()
+
+        return inserted_trade_ids
 
     def _convert_to_trade_data(self, record: NdjsonRecord, source_file_path: str) -> Dict[str, Any]:
         """Convert NdjsonRecord to Trade table data."""
