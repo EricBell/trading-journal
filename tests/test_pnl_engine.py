@@ -162,6 +162,62 @@ def test_short_position():
     assert position.avg_cost_basis == Decimal('150.00')
 
 
+def test_etf_position_tracking():
+    """Test ETF position tracking (ETF maps to EQUITY instrument_type)."""
+    # Create ETF buy trade
+    etf_buy_trade = Trade(
+        trade_id=5,
+        unique_key="test_etf_buy_1",
+        exec_timestamp=datetime(2025, 1, 20, 10, 0),
+        event_type="fill",
+        symbol="SPY",
+        instrument_type="EQUITY",  # ETF maps to EQUITY
+        side="BUY",
+        qty=50,
+        pos_effect="TO OPEN",
+        net_price=450.00,
+        raw_data="test etf buy"
+    )
+
+    position = Position(
+        symbol="SPY",
+        instrument_type="EQUITY",
+        current_qty=0,
+        avg_cost_basis=Decimal('0'),
+        total_cost=Decimal('0'),
+        realized_pnl=Decimal('0')
+    )
+
+    tracker = PositionTracker()
+    tracker._handle_position_open(position, etf_buy_trade)
+
+    # Verify position tracking works identically to stocks
+    assert position.current_qty == 50
+    assert position.avg_cost_basis == Decimal('450.00')
+    assert position.total_cost == Decimal('22500.00')
+
+    # Test ETF sell
+    etf_sell_trade = Trade(
+        trade_id=6,
+        unique_key="test_etf_sell_1",
+        exec_timestamp=datetime(2025, 1, 20, 14, 0),
+        event_type="fill",
+        symbol="SPY",
+        instrument_type="EQUITY",
+        side="SELL",
+        qty=50,
+        pos_effect="TO CLOSE",
+        net_price=455.00,
+        raw_data="test etf sell"
+    )
+
+    tracker._handle_position_close(position, etf_sell_trade)
+
+    # Verify P&L calculation works correctly
+    assert position.current_qty == 0
+    assert position.realized_pnl == Decimal('250.00')  # (455 - 450) * 50
+
+
 def test_ndjson_record_validation():
     """Test NDJSON record schema validation."""
     # Valid equity record
@@ -188,6 +244,34 @@ def test_ndjson_record_validation():
     assert record.is_option is False
     assert record.symbol == "AAPL"
     assert record.unique_key.startswith("test.ndjson:10:")
+
+
+def test_etf_record_validation():
+    """Test ETF NDJSON record validation."""
+    etf_record = {
+        "section": "Filled Orders",
+        "row_index": 12,
+        "raw": "test etf data",
+        "issues": [],
+        "exec_time": "2025-01-15T10:00:00",
+        "side": "BUY",
+        "qty": 50,
+        "pos_effect": "TO OPEN",
+        "symbol": "SPY",
+        "type": "STOCK",
+        "net_price": 450.00,
+        "event_type": "fill",
+        "asset_type": "ETF",  # Key: ETF asset type
+        "source_file": "test.ndjson"
+    }
+
+    record = NdjsonRecord(**etf_record)
+    assert record.is_fill is True
+    assert record.is_equity is True  # ETF should be equity
+    assert record.is_option is False
+    assert record.symbol == "SPY"
+    assert record.asset_type == "ETF"
+    assert record.unique_key.startswith("test.ndjson:12:")
 
 
 def test_option_record_validation():
@@ -237,6 +321,49 @@ def test_validation_errors():
 
     with pytest.raises(ValueError):
         NdjsonRecord(**invalid_record)
+
+    # Test invalid asset_type
+    invalid_asset_type_record = {
+        "section": "Filled Orders",
+        "row_index": 13,
+        "raw": "test data",
+        "issues": [],
+        "exec_time": "2025-01-15T10:00:00",
+        "side": "BUY",
+        "qty": 100,
+        "pos_effect": "TO OPEN",
+        "symbol": "TEST",
+        "net_price": 100.00,
+        "event_type": "fill",
+        "asset_type": "INVALID_ASSET",  # Invalid asset type
+        "source_file": "test.ndjson"
+    }
+
+    with pytest.raises(ValueError, match="asset_type must be STOCK, OPTION, or ETF"):
+        NdjsonRecord(**invalid_asset_type_record)
+
+    # Verify that ETF asset_type is valid (should not raise error)
+    valid_etf_record = {
+        "section": "Filled Orders",
+        "row_index": 14,
+        "raw": "test etf data",
+        "issues": [],
+        "exec_time": "2025-01-15T10:00:00",
+        "side": "BUY",
+        "qty": 100,
+        "pos_effect": "TO OPEN",
+        "symbol": "SPY",
+        "type": "STOCK",
+        "net_price": 450.00,
+        "event_type": "fill",
+        "asset_type": "ETF",  # ETF should be valid
+        "source_file": "test.ndjson"
+    }
+
+    # Should not raise an error
+    etf_record = NdjsonRecord(**valid_etf_record)
+    assert etf_record.asset_type == "ETF"
+    assert etf_record.is_equity is True
 
 
 def test_position_summary_calculation():

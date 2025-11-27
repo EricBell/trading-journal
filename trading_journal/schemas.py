@@ -54,7 +54,7 @@ class NdjsonRecord(BaseModel):
 
     # Converter-added fields
     event_type: Optional[str] = None  # fill, cancel, amend
-    asset_type: Optional[str] = None  # STOCK, OPTION
+    asset_type: Optional[str] = None  # STOCK, OPTION, ETF
     option: Optional[OptionDetails] = None
 
     # Source tracking
@@ -84,8 +84,8 @@ class NdjsonRecord(BaseModel):
 
     @validator('asset_type')
     def validate_asset_type(cls, v):
-        if v is not None and v not in ['STOCK', 'OPTION']:
-            raise ValueError('asset_type must be STOCK or OPTION')
+        if v is not None and v not in ['STOCK', 'OPTION', 'ETF']:
+            raise ValueError('asset_type must be STOCK, OPTION, or ETF')
         return v
 
     @property
@@ -96,7 +96,7 @@ class NdjsonRecord(BaseModel):
     @property
     def is_equity(self) -> bool:
         """Check if this is an equity trade."""
-        return self.asset_type == 'STOCK' or self.type == 'STOCK'
+        return self.asset_type in ('STOCK', 'ETF') or self.type == 'STOCK'
 
     @property
     def is_option(self) -> bool:
