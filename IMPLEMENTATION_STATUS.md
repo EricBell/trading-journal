@@ -4,8 +4,8 @@
 
 This document tracks the current implementation status of the Trading Journal project as defined in PRD.md.
 
-**Current Phase**: ✅ **Phase 2 Completed** - P&L Engine
-**Next Phase**: 🚧 **Phase 3** - MVP Reporting
+**Current Phase**: 🔄 **Phase 3 (~85% Complete)** - MVP Reporting
+**Next Phase**: ⏳ **Phase 4** - Production Features
 
 ---
 
@@ -65,6 +65,28 @@ This document tracks the current implementation status of the Trading Journal pr
 
 ---
 
+## 🔄 Phase 3: MVP Reporting (~85% COMPLETED)
+
+### ✅ Implemented Features
+- [x] **CLI Framework** - Complete Click-based command structure
+- [x] **Database Commands** - migrate, status, reset, process-trades
+- [x] **Ingestion Commands** - file, batch with dry-run support
+- [x] **Trade Reports** - Completed trades with P&L summary and filtering
+- [x] **Position Reports** - Open/closed positions with realized P&L
+- [x] **Pattern Management** - annotate, list, performance commands
+- [x] **Notes Management** - add, show, edit commands for trade notes
+- [x] **Trade Management** - show command for detailed trade view
+- [x] **Multi-User Support** - User table with authentication system
+- [x] **API Key Authentication** - Secure API key-based access
+- [x] **Admin Mode** - Development/testing admin access
+
+### ❌ Not Yet Implemented
+- [ ] **Dashboard Metrics** - Core dashboard with summary statistics (last major feature)
+- [ ] **Advanced Filtering** - Date range filters for reports
+- [ ] **Export Formats** - CSV/JSON export for reports (partial JSON support exists)
+
+---
+
 ## 📊 Current Capabilities
 
 ### ✅ Working Features
@@ -100,6 +122,13 @@ This document tracks the current implementation status of the Trading Journal pr
 ### 📋 MVP Workflow Ready
 Complete workflow from NDJSON ingestion to P&L reporting is now functional!
 
+### 🎯 Multi-User Support (BONUS Feature)
+- [x] **User Management** - User table with authentication
+- [x] **API Key Authentication** - Secure API key-based access control
+- [x] **Admin Mode** - Development admin access via environment variables
+- [x] **User Context** - All data scoped to authenticated user
+- [x] **CLI Authentication** - Decorator-based auth for all protected commands
+
 ---
 
 ## 🚀 Quick Start (For Development)
@@ -116,38 +145,42 @@ Complete workflow from NDJSON ingestion to P&L reporting is now functional!
    ```
 4. **Install Dependencies**:
    ```bash
-   uv sync --all-extras
+   uv sync
    ```
 5. **Run Migrations**:
    ```bash
-   .venv/bin/python main.py db migrate
+   uv run python main.py db migrate
    ```
-6. **Verify Setup**:
+6. **Create First User**:
    ```bash
-   .venv/bin/python main.py db status
+   # Enable admin mode for initial setup
+   export ADMIN_MODE_ENABLED=true
+   export ADMIN_MODE_USER_ID=1
+
+   # Create user and get API key
+   uv run python create_user.py
+   ```
+7. **Set API Key & Verify**:
+   ```bash
+   export TRADING_JOURNAL_API_KEY=your_api_key_here
+   uv run python main.py db status
    ```
 
 ---
 
 ## 📋 Implementation Roadmap
 
-### Phase 2 (Next - P&L Engine)
-- NDJSON file ingestion from Schwab converter
-- Position tracking with average cost basis
-- Trade completion algorithm
-- Basic P&L calculations
+### Phase 3 (Current - MVP Reporting) - 85% Complete
+**Remaining Work:**
+- Dashboard metrics implementation (primary remaining feature)
+- Advanced date range filtering
+- Enhanced export capabilities
 
-### Phase 3 (MVP Reporting)
-- Dashboard metrics implementation
-- Trade log reporting
-- Pattern and notes functionality
-- CLI reporting commands
-
-### Phase 4 (Production Features)
-- Error handling and recovery
-- Performance optimization
-- Batch processing
-- Data validation and monitoring
+### Phase 4 (Next - Production Features)
+- Advanced error handling and recovery
+- Performance optimization and benchmarking
+- Comprehensive data validation
+- Production monitoring and observability
 
 ---
 

@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Trading Journal** application designed to ingest and analyze trading data from brokerage platforms. The project is currently in **Phase 1 (TDD)** and follows a comprehensive PRD located in `PRD.md`.
+This is a **Trading Journal** application designed to ingest and analyze trading data from brokerage platforms. The project is currently in **Phase 3 (~85% Complete)** and follows a comprehensive PRD located in `PRD.md`.
+
+**Bonus Features Implemented:**
+- Multi-user support with user authentication
+- API key authentication system
+- Admin mode for development/testing
 
 ### Architecture Philosophy
 
@@ -23,10 +28,18 @@ This is a **Trading Journal** application designed to ingest and analyze trading
 ### Project Setup
 ```bash
 # Install dependencies with uv
-uv install
+uv sync
 
-# Run the minimal application
-python main.py
+# Run migrations
+uv run python main.py db migrate
+
+# Create first user (requires admin mode)
+export ADMIN_MODE_ENABLED=true
+export ADMIN_MODE_USER_ID=1
+uv run python create_user.py
+
+# Set API key for subsequent commands
+export TRADING_JOURNAL_API_KEY=your_api_key_here
 ```
 
 ### Development Commands

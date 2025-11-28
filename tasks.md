@@ -101,27 +101,27 @@ This file tracks the implementation progress of all requirements from PRD.md.
   - [ ] `trading-journal report pnl` (NOT IMPLEMENTED)
 
 ### Trading Pattern Analysis & Notes (F.6)
-- [ ] **F.6.1** Support setup pattern annotation for completed trades (MVP: free text)
-- [ ] **F.6.2** Implement pattern annotation via CLI interface
-- [ ] **F.6.3** Generate setup pattern performance reports showing P&L by pattern type
+- [x] **F.6.1** Support setup pattern annotation for completed trades (MVP: free text)
+- [x] **F.6.2** Implement pattern annotation via CLI interface
+- [x] **F.6.3** Generate setup pattern performance reports showing P&L by pattern type
 - [ ] **F.6.4** Design managed dropdown architecture for production version
-- [ ] **F.6.5** Support trade notes field for thoughts/emotions/analysis
-- [ ] **F.6.6** Allow post-trade note entry and editing via CLI
-- [ ] **F.6.7** Include trade notes in detailed reports and export capabilities
+- [x] **F.6.5** Support trade notes field for thoughts/emotions/analysis
+- [x] **F.6.6** Allow post-trade note entry and editing via CLI
+- [x] **F.6.7** Include trade notes in detailed reports and export capabilities
 
 ### Pattern & Notes Management Commands
-- [ ] Pattern commands:
-  - [ ] `trading-journal pattern annotate --completed-trade-id --pattern`
-  - [ ] `trading-journal pattern list`
-  - [ ] `trading-journal pattern performance --pattern`
-- [ ] Notes commands:
-  - [ ] `trading-journal notes add --completed-trade-id --text`
-  - [ ] `trading-journal notes show --completed-trade-id`
-  - [ ] `trading-journal notes edit --completed-trade-id`
-- [ ] Trade management:
-  - [ ] `trading-journal trades list --date-range`
-  - [ ] `trading-journal trades show --completed-trade-id`
-  - [ ] `trading-journal trades create --execution-ids`
+- [x] Pattern commands:
+  - [x] `trading-journal pattern annotate --completed-trade-id --pattern`
+  - [x] `trading-journal pattern list`
+  - [x] `trading-journal pattern performance --pattern`
+- [x] Notes commands:
+  - [x] `trading-journal notes add --completed-trade-id --text`
+  - [x] `trading-journal notes show --completed-trade-id`
+  - [x] `trading-journal notes edit --completed-trade-id`
+- [x] Trade management:
+  - [ ] `trading-journal trades list --date-range` (partial - no date filtering yet)
+  - [x] `trading-journal trades show --completed-trade-id`
+  - [ ] `trading-journal trades create --execution-ids` (not implemented)
 
 ### MVP Reporting Features (F.4)
 - [ ] **F.4.1** Implement Core Dashboard metrics:
@@ -240,11 +240,15 @@ This file tracks the implementation progress of all requirements from PRD.md.
 
 - **Phase 1**: ✅ **COMPLETED** - Core Data Model (includes ETF support)
 - **Phase 2**: ✅ **COMPLETED** - P&L Engine
-- **Phase 3**: 🔄 **IN PROGRESS (60%)** - MVP Reporting
+- **Phase 3**: 🔄 **IN PROGRESS (~85%)** - MVP Reporting
   - ✅ CLI framework complete
-  - ✅ Database commands complete
-  - ✅ Ingestion commands complete
+  - ✅ Database commands complete (including process-trades)
+  - ✅ Ingestion commands complete (file, batch, dry-run)
   - ✅ Basic reports (trades, positions) complete
-  - ❌ Dashboard metrics not implemented
-  - ❌ Pattern/notes management not implemented
+  - ✅ Pattern management complete (annotate, list, performance)
+  - ✅ Notes management complete (add, show, edit)
+  - ✅ Trade management complete (show command)
+  - ✅ **BONUS:** Multi-user authentication system
+  - ❌ Dashboard metrics not implemented (main remaining feature)
+  - ⚠️  Advanced filtering partially implemented
 - **Phase 4**: ⏳ Not Started - Production Features
