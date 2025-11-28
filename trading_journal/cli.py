@@ -226,14 +226,145 @@ def show_trade(completed_trade_id: int) -> None:
 
 @report.command()
 @click.option('--date-range', help='Date range in format YYYY-MM-DD,YYYY-MM-DD')
-def dashboard(date_range: str) -> None:
+@click.option('--symbol', help='Filter by symbol')
+@click.option('--format', 'output_format', default='summary', type=click.Choice(['summary', 'detailed', 'json']))
+@require_authentication
+def dashboard(date_range: str, symbol: str, output_format: str) -> None:
     """Generate dashboard metrics."""
     try:
-        click.echo("📊 Dashboard Report")
-        click.echo("⚠️  Dashboard reporting not yet implemented")
+        from .dashboard import DashboardEngine
+        import json
+
+        engine = DashboardEngine()
+
+        # Parse date range
+        start_date, end_date = None, None
+        if date_range:
+            try:
+                start_date, end_date = engine.parse_date_range(date_range)
+            except ValueError as e:
+                click.echo(f"❌ Invalid date range: {e}", err=True)
+                raise click.Abort()
+
+        # Generate dashboard
+        dashboard_data = engine.generate_dashboard(
+            start_date=start_date,
+            end_date=end_date,
+            symbol=symbol
+        )
+
+        # Check if no trades found
+        if "message" in dashboard_data:
+            click.echo(f"ℹ️  {dashboard_data['message']}")
+            return
+
+        # Output format
+        if output_format == 'json':
+            click.echo(json.dumps(dashboard_data, indent=2, default=str))
+            return
+
+        # Summary or detailed format
+        _display_dashboard_summary(dashboard_data, detailed=(output_format == 'detailed'))
+
     except Exception as e:
-        click.echo(f"❌ Dashboard generation failed: {e}")
+        click.echo(f"❌ Dashboard generation failed: {e}", err=True)
+        logger.exception("Dashboard generation error")
         raise click.Abort()
+
+
+def _display_dashboard_summary(data: dict, detailed: bool = False) -> None:
+    """Display dashboard in formatted text output."""
+    click.echo("\n" + "="*70)
+    click.echo("📊 TRADING DASHBOARD")
+    click.echo("="*70)
+
+    # Period info
+    period = data.get("period", {})
+    click.echo(f"\n📅 Period:")
+    if period.get("start_date") and period.get("end_date"):
+        click.echo(f"   {period['start_date']} to {period['end_date']}")
+    elif period.get("first_trade") and period.get("last_trade"):
+        click.echo(f"   {period['first_trade'][:10]} to {period['last_trade'][:10]}")
+    else:
+        click.echo(f"   All time")
+    if period.get("symbol"):
+        click.echo(f"   Symbol: {period['symbol']}")
+
+    # Core metrics
+    core = data.get("core_metrics", {})
+    if core:
+        click.echo(f"\n💰 Performance Summary:")
+        click.echo(f"   Total Trades: {core['total_trades']}")
+        click.echo(f"   Winning Trades: {core['winning_trades']} ({core['win_rate_pct']:.1f}%)")
+        click.echo(f"   Losing Trades: {core['losing_trades']}")
+        click.echo(f"\n   Total P&L: ${core['total_pnl']:,.2f}")
+
+        # Color code P&L
+        pnl_color = "🟢" if core['total_pnl'] > 0 else "🔴"
+        click.echo(f"   {pnl_color} Net Result: ${core['total_pnl']:,.2f}")
+
+        click.echo(f"\n   Average Win: ${core['average_win']:,.2f}")
+        click.echo(f"   Average Loss: ${core['average_loss']:,.2f}")
+        click.echo(f"   Average Trade: ${core['average_trade']:,.2f}")
+
+        if core.get('profit_factor'):
+            click.echo(f"   Profit Factor: {core['profit_factor']:.2f}")
+
+        click.echo(f"\n   Largest Win: ${core['largest_win']:,.2f}")
+        click.echo(f"   Largest Loss: ${core['largest_loss']:,.2f}")
+
+        click.echo(f"\n   Max Win Streak: {core['max_win_streak']}")
+        click.echo(f"   Max Loss Streak: {core['max_loss_streak']}")
+
+    # Max drawdown
+    dd = data.get("max_drawdown", {})
+    if dd and dd.get("max_drawdown") != 0:
+        click.echo(f"\n📉 Risk Metrics:")
+        click.echo(f"   Max Drawdown: ${dd['max_drawdown']:,.2f} ({dd['max_drawdown_pct']:.2f}%)")
+        if dd.get('peak_date'):
+            click.echo(f"   Peak: ${dd['peak_value']:,.2f} on {dd['peak_date'][:10]}")
+            click.echo(f"   Trough: ${dd['trough_value']:,.2f} on {dd['trough_date'][:10]}")
+
+    # Pattern analysis
+    patterns = data.get("pattern_analysis", {})
+    if patterns and patterns.get("by_pattern"):
+        click.echo(f"\n🎯 Pattern Analysis:")
+
+        top_pattern = patterns.get("top_pattern")
+        worst_pattern = patterns.get("worst_pattern")
+
+        if top_pattern:
+            click.echo(f"   🥇 Best Pattern: {top_pattern['pattern']}")
+            click.echo(f"      Trades: {top_pattern['total_trades']}, P&L: ${top_pattern['total_pnl']:,.2f}, Win Rate: {top_pattern['win_rate_pct']:.1f}%")
+
+        if worst_pattern and worst_pattern != top_pattern:
+            click.echo(f"   🥉 Worst Pattern: {worst_pattern['pattern']}")
+            click.echo(f"      Trades: {worst_pattern['total_trades']}, P&L: ${worst_pattern['total_pnl']:,.2f}, Win Rate: {worst_pattern['win_rate_pct']:.1f}%")
+
+        if detailed:
+            click.echo(f"\n   All Patterns:")
+            for pattern in patterns["by_pattern"]:
+                click.echo(f"   • {pattern['pattern']}: {pattern['total_trades']} trades, ${pattern['total_pnl']:,.2f} P&L, {pattern['win_rate_pct']:.1f}% win rate")
+
+    # Position summary
+    positions = data.get("positions", {})
+    if positions:
+        click.echo(f"\n💼 Position Summary:")
+        click.echo(f"   Open Positions: {positions['open_positions']}")
+        click.echo(f"   Closed Positions: {positions['closed_positions']}")
+        click.echo(f"   Total Open Value: ${positions['total_open_value']:,.2f}")
+        click.echo(f"   Total Realized P&L: ${positions['total_realized_pnl']:,.2f}")
+
+    # Equity curve (detailed only)
+    if detailed:
+        curve = data.get("equity_curve", [])
+        if curve:
+            click.echo(f"\n📈 Recent Equity Curve (last 10 trades):")
+            for point in curve[-10:]:
+                trade_result = "🟢" if point['trade_pnl'] > 0 else "🔴"
+                click.echo(f"   {point['timestamp'][:10]} | {point['symbol']:6} | {trade_result} ${point['trade_pnl']:8,.2f} | Cumulative: ${point['cumulative_pnl']:,.2f}")
+
+    click.echo("\n" + "="*70 + "\n")
 
 
 @report.command()

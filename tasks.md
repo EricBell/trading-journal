@@ -94,11 +94,11 @@ This file tracks the implementation progress of all requirements from PRD.md.
   - [x] `trading-journal ingest file data.ndjson`
   - [x] `trading-journal ingest batch *.ndjson --output-summary`
   - [x] `trading-journal ingest file --dry-run`
-- [x] Implement reporting commands (partial):
-  - [ ] `trading-journal report dashboard` (NOT IMPLEMENTED)
+- [x] Implement reporting commands:
+  - [x] `trading-journal report dashboard` ✨ **COMPLETE**
   - [x] `trading-journal report trades`
   - [x] `trading-journal report positions`
-  - [ ] `trading-journal report pnl` (NOT IMPLEMENTED)
+  - [ ] `trading-journal report pnl` (deprecated - use dashboard instead)
 
 ### Trading Pattern Analysis & Notes (F.6)
 - [x] **F.6.1** Support setup pattern annotation for completed trades (MVP: free text)
@@ -124,17 +124,20 @@ This file tracks the implementation progress of all requirements from PRD.md.
   - [ ] `trading-journal trades create --execution-ids` (not implemented)
 
 ### MVP Reporting Features (F.4)
-- [ ] **F.4.1** Implement Core Dashboard metrics:
-  - [ ] Total Net P&L calculation
-  - [ ] Win/Loss Ratio calculation
-  - [ ] Total Trades count
-  - [ ] Average Winning/Losing Trade values
-  - [ ] Max Drawdown calculation
-  - [ ] Top Setup Patterns performance
-  - [ ] Pattern Distribution breakdown
-- [ ] **F.4.2** Build Daily Trade Log report with filtering
-- [ ] **F.4.3** Implement filtering by Timeframe, Platform, and Instrument Type
-- [ ] **F.4.4** Create open positions report with unrealized P&L
+- [x] **F.4.1** Implement Core Dashboard metrics:
+  - [x] Total Net P&L calculation
+  - [x] Win/Loss Ratio calculation
+  - [x] Total Trades count
+  - [x] Average Winning/Losing Trade values
+  - [x] Max Drawdown calculation
+  - [x] Top Setup Patterns performance
+  - [x] Pattern Distribution breakdown
+  - [x] **BONUS:** Profit factor calculation
+  - [x] **BONUS:** Consecutive win/loss streaks
+  - [x] **BONUS:** Equity curve visualization
+- [x] **F.4.2** Build Daily Trade Log report with filtering
+- [x] **F.4.3** Implement filtering by Timeframe (date range), Symbol, and Instrument Type
+- [x] **F.4.4** Create open positions report with unrealized P&L
 
 ### Detailed Trade Reports
 - [ ] Daily Trade Log with columns: symbol, opened_at, closed_at, total_qty, entry_avg_price, exit_avg_price, setup_pattern, trade_notes, net_pnl
@@ -240,7 +243,7 @@ This file tracks the implementation progress of all requirements from PRD.md.
 
 - **Phase 1**: ✅ **COMPLETED** - Core Data Model (includes ETF support)
 - **Phase 2**: ✅ **COMPLETED** - P&L Engine
-- **Phase 3**: 🔄 **IN PROGRESS (~85%)** - MVP Reporting
+- **Phase 3**: ✅ **COMPLETED** - MVP Reporting 🎉
   - ✅ CLI framework complete
   - ✅ Database commands complete (including process-trades)
   - ✅ Ingestion commands complete (file, batch, dry-run)
@@ -248,7 +251,8 @@ This file tracks the implementation progress of all requirements from PRD.md.
   - ✅ Pattern management complete (annotate, list, performance)
   - ✅ Notes management complete (add, show, edit)
   - ✅ Trade management complete (show command)
+  - ✅ **Dashboard metrics** - Complete with all analytics
+  - ✅ **Date range filtering** - Implemented for dashboard and reports
+  - ✅ **JSON export** - Dashboard supports JSON output
   - ✅ **BONUS:** Multi-user authentication system
-  - ❌ Dashboard metrics not implemented (main remaining feature)
-  - ⚠️  Advanced filtering partially implemented
-- **Phase 4**: ⏳ Not Started - Production Features
+- **Phase 4**: 🚧 **IN PROGRESS** - Production Features

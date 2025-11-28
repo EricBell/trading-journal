@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Trading Journal** application designed to ingest and analyze trading data from brokerage platforms. The project is currently in **Phase 3 (~85% Complete)** and follows a comprehensive PRD located in `PRD.md`.
+This is a **Trading Journal** application designed to ingest and analyze trading data from brokerage platforms. The project has **completed Phase 3 (MVP)** and is now in **Phase 4 (Production Features)**. See `PRD.md` for complete specifications.
 
 **Bonus Features Implemented:**
 - Multi-user support with user authentication
 - API key authentication system
 - Admin mode for development/testing
+- Comprehensive dashboard analytics
 
 ### Architecture Philosophy
 
@@ -93,6 +94,13 @@ uv run python main.py ingest file data.ndjson --verbose
 
 #### Reporting (Implemented)
 ```bash
+# Dashboard analytics (comprehensive metrics)
+uv run python main.py report dashboard
+uv run python main.py report dashboard --date-range 2025-01-01,2025-01-31
+uv run python main.py report dashboard --symbol AAPL
+uv run python main.py report dashboard --format detailed  # Includes equity curve
+uv run python main.py report dashboard --format json      # JSON export
+
 # View completed trades
 uv run python main.py report trades
 uv run python main.py report trades --symbol AAPL
