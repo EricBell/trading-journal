@@ -459,6 +459,10 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
     """List completed trades."""
     try:
         from .trade_completion import TradeCompletionEngine
+        import json
+        import csv
+        import sys
+
         engine = TradeCompletionEngine()
         summary = engine.get_completed_trades_summary(symbol)
         if "message" in summary:
@@ -476,21 +480,63 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
         click.echo(f"   Average Win: ${summary['average_win']:.2f}")
         click.echo(f"   Average Loss: ${summary['average_loss']:.2f}")
         if output_format == 'json':
-            import json
             click.echo(json.dumps(summary, indent=2, default=str))
+        elif output_format == 'csv':
+            fieldnames = [
+                'id',
+                'symbol',
+                'type',
+                'qty',
+                'entry_price',
+                'exit_price',
+                'pnl',
+                'opened_at',
+                'closed_at',
+                'setup_pattern',
+                'notes',
+            ]
+            writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
+            writer.writeheader()
+            for trade in summary['trades']:
+                writer.writerow({
+                    'id': trade['id'],
+                    'symbol': trade['symbol'],
+                    'type': trade['type'],
+                    'qty': trade['qty'],
+                    'entry_price': trade['entry_price'],
+                    'exit_price': trade['exit_price'],
+                    'pnl': trade['pnl'],
+                    'opened_at': trade['opened_at'],
+                    'closed_at': trade['closed_at'],
+                    'setup_pattern': trade['setup_pattern'] or '',
+                    'notes': trade['notes'] or '',
+                })
         else:
             click.echo(f"\n📋 Trade Details:")
+            # Table header
+            click.echo(
+                f"{'ID':<6} | {'Symbol':<8} | {'Type':<6} | {'Qty':>6} | "
+                f"{'Entry':>10} | {'Exit':>10} | {'P&L':>12} | {'Result':<8} | {'Pattern':<20}"
+            )
+            click.echo("-" * 100)
+
+            # Table rows
             for trade in summary['trades']:
-                status = "🟢 WIN" if trade['pnl'] > 0 else "🔴 LOSS"
-                click.echo(f"   Trade ID: {trade['id']} - {status} {trade['symbol']} {trade['type']}")
-                click.echo(f"      Qty: {trade['qty']}")
-                click.echo(f"      Entry: ${trade['entry_price']:.4f}")
-                click.echo(f"      Exit: ${trade['exit_price']:.4f}")
-                click.echo(f"      P&L: ${trade['pnl']:.2f}")
-                if trade['setup_pattern']:
-                    click.echo(f"      Pattern: {trade['setup_pattern']}")
-                if trade['notes']:
-                    click.echo(f"      Notes: {trade['notes']}")
+                status_emoji = "🟢" if trade['pnl'] > 0 else "🔴"
+                result_label = "WIN" if trade['pnl'] > 0 else "LOSS"
+                pattern = (trade['setup_pattern'] or "")[:20]
+
+                click.echo(
+                    f"{trade['id']:<6} | "
+                    f"{trade['symbol']:<8} | "
+                    f"{trade['type']:<6} | "
+                    f"{trade['qty']:>6} | "
+                    f"{trade['entry_price']:>10.4f} | "
+                    f"{trade['exit_price']:>10.4f} | "
+                    f"{trade['pnl']:>12.2f} | "
+                    f"{status_emoji} {result_label:<4} | "
+                    f"{pattern:<20}"
+                )
     except Exception as e:
         click.echo(f"❌ Trade listing failed: {e}")
         raise click.Abort()
