@@ -462,6 +462,7 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
         import json
         import csv
         import sys
+        from datetime import datetime
 
         engine = TradeCompletionEngine()
         summary = engine.get_completed_trades_summary(symbol)
@@ -516,9 +517,20 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
             # Table header
             click.echo(
                 f"{'ID':<6} | {'Symbol':<8} | {'Type':<6} | {'Qty':>6} | "
-                f"{'Entry':>10} | {'Exit':>10} | {'P&L':>12} | {'Result':<8} | {'Pattern':<20}"
+                f"{'Date':>6} | {'EnTm':>4} | {'Entry':>10} | "
+                f"{'ExTm':>4} | {'Exit':>10} | {'P&L':>12} | {'Result':<8} | {'Pattern':<20}"
             )
-            click.echo("-" * 100)
+            click.echo("-" * 126)
+
+            # Helper to format timestamps
+            def _format_ts(ts: str):
+                if not ts:
+                    return "", ""
+                try:
+                    dt = datetime.fromisoformat(ts)
+                except Exception:
+                    return "", ""
+                return dt.strftime("%y%m%d"), dt.strftime("%H%M")
 
             # Table rows
             for trade in summary['trades']:
@@ -526,12 +538,21 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
                 result_label = "WIN" if trade['pnl'] > 0 else "LOSS"
                 pattern = (trade['setup_pattern'] or "")[:20]
 
+                open_date, open_time = _format_ts(trade.get('opened_at'))
+                close_date, close_time = _format_ts(trade.get('closed_at'))
+                date_str = open_date or close_date
+                entry_time = open_time
+                exit_time = close_time
+
                 click.echo(
                     f"{trade['id']:<6} | "
                     f"{trade['symbol']:<8} | "
                     f"{trade['type']:<6} | "
                     f"{trade['qty']:>6} | "
+                    f"{date_str:>6} | "
+                    f"{entry_time:>4} | "
                     f"{trade['entry_price']:>10.4f} | "
+                    f"{exit_time:>4} | "
                     f"{trade['exit_price']:>10.4f} | "
                     f"{trade['pnl']:>12.2f} | "
                     f"{status_emoji} {result_label:<4} | "
