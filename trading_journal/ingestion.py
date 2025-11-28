@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
+import click
 from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -14,8 +15,8 @@ from .database import db_manager
 from .models import Trade, ProcessingLog
 from .schemas import NdjsonRecord
 from .positions import PositionTracker
-import json
 from .authorization import AuthContext
+from .duplicate_detector import DuplicateDetector
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,11 @@ class NdjsonIngester:
         self,
         file_path: Path,
         dry_run: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+        skip_duplicate_check: bool = False,
+        force: bool = False
     ) -> Dict[str, Any]:
-        """Process a single NDJSON file."""
+        """Process a single NDJSON file with duplicate detection."""
 
         logger.info(f"Processing file: {file_path}")
         user_id = AuthContext.require_user().user_id
@@ -89,16 +92,52 @@ class NdjsonIngester:
                     validation_errors.append(error_msg)
                     logger.warning(f"Validation error: {error_msg}")
 
-            # Process records to database
-            if not dry_run and successful_records:
-                inserted_trades = self._insert_records(user_id, successful_records, str(file_path))
+            # Duplicate detection (before processing)
+            if not skip_duplicate_check and successful_records:
+                detector = DuplicateDetector()
 
-                # Update positions for fill trades (within the same session context)
-                with self.db_manager.get_session() as session:
-                    for trade_id in inserted_trades:
-                        trade = session.get(Trade, trade_id)
-                        if trade and trade.is_fill:
-                            self.position_tracker.update_positions_from_trade(trade)
+                # Check for cross-user duplicates
+                cross_user_dupes = detector.check_duplicates_cross_user(
+                    successful_records,
+                    user_id
+                )
+
+                if cross_user_dupes.has_duplicates:
+                    report = detector.format_duplicate_report(cross_user_dupes, user_id)
+
+                    if not dry_run:
+                        click.echo(report)
+                        click.echo("These records already exist in the database.")
+                        click.echo("UPSERT will UPDATE existing records for your data.")
+                        click.echo("Other users' data will NOT be affected.\n")
+
+                        if not force:
+                            if not click.confirm("Do you want to continue?"):
+                                return {
+                                    "file_path": str(file_path),
+                                    "records_processed": 0,
+                                    "records_failed": 0,
+                                    "validation_errors": ["User cancelled due to duplicates"],
+                                    "success": False,
+                                    "dry_run": False,
+                                    "duplicates_found": cross_user_dupes.duplicate_count,
+                                    "inserts": 0,
+                                    "updates": 0
+                                }
+                    else:
+                        logger.info(f"DRY RUN: {report}")
+
+            # Process records to database with insert/update tracking
+            insert_count = 0
+            update_count = 0
+
+            if not dry_run and successful_records:
+                insert_count, update_count = self._insert_records_with_tracking(
+                    user_id,
+                    successful_records,
+                    str(file_path)
+                )
+                # Position tracking handled within _insert_records_with_tracking
 
             # Update processing log
             processing_log.processing_completed_at = datetime.now()
@@ -113,6 +152,8 @@ class NdjsonIngester:
                 "file_path": str(file_path),
                 "records_processed": records_processed,
                 "records_failed": records_failed,
+                "inserts": insert_count,
+                "updates": update_count,
                 "validation_errors": validation_errors,
                 "success": records_failed == 0,
                 "dry_run": dry_run
@@ -191,6 +232,68 @@ class NdjsonIngester:
             session.commit()
 
         return inserted_trade_ids
+
+    def _insert_records_with_tracking(
+        self,
+        user_id: int,
+        records: List[NdjsonRecord],
+        source_file_path: str
+    ) -> Tuple[int, int]:
+        """
+        Insert validated records into database using UPSERT, tracking inserts vs updates.
+
+        Returns:
+            Tuple of (insert_count, update_count)
+        """
+        insert_count = 0
+        update_count = 0
+        inserted_trade_ids = []
+
+        with self.db_manager.get_session() as session:
+            for record in records:
+                trade_data = self._convert_to_trade_data(record, source_file_path)
+                trade_data['user_id'] = user_id
+
+                # Check if exists first (for tracking)
+                existing = session.query(Trade).filter_by(
+                    user_id=user_id,
+                    unique_key=trade_data['unique_key']
+                ).first()
+
+                is_update = existing is not None
+
+                # Use PostgreSQL UPSERT
+                stmt = insert(Trade).values(**trade_data)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['user_id', 'unique_key'],
+                    set_=dict(
+                        exec_timestamp=stmt.excluded.exec_timestamp,
+                        net_price=stmt.excluded.net_price,
+                        realized_pnl=stmt.excluded.realized_pnl,
+                        processing_timestamp=stmt.excluded.processing_timestamp
+                    )
+                ).returning(Trade.trade_id)
+
+                result = session.execute(stmt)
+                trade_id = result.scalar()
+
+                if trade_id:
+                    inserted_trade_ids.append(trade_id)
+                    if is_update:
+                        update_count += 1
+                    else:
+                        insert_count += 1
+
+            # Commit the transaction
+            session.commit()
+
+            # Update positions for fill trades
+            for trade_id in inserted_trade_ids:
+                trade = session.get(Trade, trade_id)
+                if trade and trade.is_fill:
+                    self.position_tracker.update_positions_from_trade(trade)
+
+        return insert_count, update_count
 
     def _convert_to_trade_data(self, record: NdjsonRecord, source_file_path: str) -> Dict[str, Any]:
         """Convert NdjsonRecord to Trade table data."""

@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .models import User, CompletedTrade
+from .models import User, CompletedTrade, Trade, Position, SetupPattern, ProcessingLog
 from .auth.utils import generate_api_key, hash_api_key
 from .authorization.context import AuthContext
 
@@ -293,6 +293,88 @@ class UserManager:
 
         # Delete user
         self.session.delete(user)
+
+    def purge_user_data(self, user_id: int, dry_run: bool = False) -> Dict[str, int]:
+        """
+        Purge all data for a specific user, preserving the user account.
+
+        Deletes data in correct order to respect foreign key constraints:
+        1. trades (references completed_trades)
+        2. completed_trades
+        3. positions
+        4. setup_patterns
+        5. processing_log
+
+        Args:
+            user_id: ID of the user whose data should be purged.
+            dry_run: If True, only count records without deleting. Default False.
+
+        Returns:
+            Dictionary with counts per table and total:
+            {
+                'trades': count,
+                'completed_trades': count,
+                'positions': count,
+                'setup_patterns': count,
+                'processing_log': count,
+                'total': sum
+            }
+
+        Raises:
+            ValueError: If user not found or trying to purge own data.
+        """
+        # Prevent self-purge
+        current_user_id = AuthContext.get_user_id()
+        if current_user_id == user_id:
+            raise ValueError("You cannot purge your own data.")
+
+        # Verify user exists
+        user = self.get_user_or_raise(user_id)
+
+        # Count records in each table
+        counts = {
+            'trades': self.session.query(func.count(Trade.trade_id)).filter(
+                Trade.user_id == user_id
+            ).scalar() or 0,
+            'completed_trades': self.session.query(func.count(CompletedTrade.completed_trade_id)).filter(
+                CompletedTrade.user_id == user_id
+            ).scalar() or 0,
+            'positions': self.session.query(func.count(Position.position_id)).filter(
+                Position.user_id == user_id
+            ).scalar() or 0,
+            'setup_patterns': self.session.query(func.count(SetupPattern.pattern_id)).filter(
+                SetupPattern.user_id == user_id
+            ).scalar() or 0,
+            'processing_log': self.session.query(func.count(ProcessingLog.log_id)).filter(
+                ProcessingLog.user_id == user_id
+            ).scalar() or 0
+        }
+
+        counts['total'] = sum(counts.values())
+
+        # If dry-run, return counts without deleting
+        if dry_run:
+            return counts
+
+        # Delete in order (respecting foreign key constraints)
+        # 1. Trades first (they reference completed_trades)
+        self.session.query(Trade).filter(Trade.user_id == user_id).delete(synchronize_session=False)
+
+        # 2. Completed trades
+        self.session.query(CompletedTrade).filter(CompletedTrade.user_id == user_id).delete(synchronize_session=False)
+
+        # 3. Positions
+        self.session.query(Position).filter(Position.user_id == user_id).delete(synchronize_session=False)
+
+        # 4. Setup patterns
+        self.session.query(SetupPattern).filter(SetupPattern.user_id == user_id).delete(synchronize_session=False)
+
+        # 5. Processing log
+        self.session.query(ProcessingLog).filter(ProcessingLog.user_id == user_id).delete(synchronize_session=False)
+
+        # Note: User account is preserved, only data is deleted
+
+        return counts
 
     def regenerate_api_key(self, user_id: int) -> Tuple[User, str]:
         """

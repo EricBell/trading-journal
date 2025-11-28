@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import text
 
 from .database import db_manager
 from .config import logging_config
@@ -84,6 +85,67 @@ def reset(confirm: bool) -> None:
         raise click.Abort()
 
 
+@db.command("verify-schema")
+def verify_schema() -> None:
+    """Verify database schema constraints for multi-user support."""
+    try:
+        with db_manager.engine.connect() as conn:
+            # Check trades table constraints
+            result = conn.execute(text("""
+                SELECT constraint_name, constraint_type
+                FROM information_schema.table_constraints
+                WHERE table_name = 'trades'
+                AND constraint_name IN ('unique_trade_per_user', 'trades_unique_key_key')
+            """))
+            constraints = result.fetchall()
+
+            click.echo("\n" + "=" * 80)
+            click.echo("DATABASE SCHEMA VERIFICATION")
+            click.echo("=" * 80 + "\n")
+
+            click.echo("Trades Table Constraints:")
+            if not constraints:
+                click.echo("  ⚠️  No relevant constraints found")
+            else:
+                for constraint in constraints:
+                    status = "✅" if constraint[0] == 'unique_trade_per_user' else "❌ OLD"
+                    click.echo(f"  {status} {constraint[0]} ({constraint[1]})")
+
+            # Check for old global constraint
+            has_old = any(c[0] == 'trades_unique_key_key' for c in constraints)
+            has_new = any(c[0] == 'unique_trade_per_user' for c in constraints)
+
+            click.echo("\n" + "-" * 80 + "\n")
+
+            if has_old and not has_new:
+                click.echo("STATUS: ❌ OLD SCHEMA DETECTED")
+                click.echo("\nProblem: Using global unique_key constraint (not per-user)")
+                click.echo("This prevents different users from ingesting the same source files.")
+                click.echo("\nFix: Run database migrations to update to per-user constraints:")
+                click.echo("  uv run python main.py db migrate")
+            elif has_old and has_new:
+                click.echo("STATUS: ⚠️  MIXED CONSTRAINTS")
+                click.echo("\nProblem: Both old and new constraints exist")
+                click.echo("\nFix: Drop old constraint or re-run migrations:")
+                click.echo("  uv run alembic downgrade -1")
+                click.echo("  uv run alembic upgrade head")
+            elif has_new:
+                click.echo("STATUS: ✅ SCHEMA IS CURRENT")
+                click.echo("\nPer-user unique constraints are properly configured.")
+                click.echo("Each user can independently ingest the same source files.")
+            else:
+                click.echo("STATUS: ⚠️  NO UNIQUE CONSTRAINT FOUND")
+                click.echo("\nProblem: Missing unique constraint on trades table")
+                click.echo("\nFix: Run database migrations:")
+                click.echo("  uv run python main.py db migrate")
+
+            click.echo("\n" + "=" * 80 + "\n")
+
+    except Exception as e:
+        click.echo(f"❌ Schema verification failed: {e}", err=True)
+        raise click.Abort()
+
+
 @db.command()
 @click.option('--symbol', help='Process only specific symbol')
 @require_authentication
@@ -111,22 +173,43 @@ def ingest() -> None:
 @click.argument('file_path', type=click.Path(exists=True, path_type=Path))
 @click.option('--dry-run', is_flag=True, help='Validate without database changes')
 @click.option('--verbose', is_flag=True, help='Enable verbose output')
+@click.option('--skip-duplicate-check', is_flag=True, help='Skip pre-flight duplicate detection (faster)')
+@click.option('--force', is_flag=True, help='Bypass duplicate confirmation prompts')
 @require_authentication
-def ingest_file(file_path: Path, dry_run: bool, verbose: bool) -> None:
-    """Ingest a single NDJSON file."""
+def ingest_file(
+    file_path: Path,
+    dry_run: bool,
+    verbose: bool,
+    skip_duplicate_check: bool,
+    force: bool
+) -> None:
+    """Ingest a single NDJSON file with duplicate detection and warnings."""
     from .ingestion import NdjsonIngester, IngestionError
     if dry_run:
         click.echo("🔍 DRY RUN MODE - No database changes will be made")
     try:
         ingester = NdjsonIngester()
-        result = ingester.process_file(file_path, dry_run=dry_run, verbose=verbose)
-        click.echo(f"📁 File: {result['file_path']}")
+        result = ingester.process_file(
+            file_path,
+            dry_run=dry_run,
+            verbose=verbose,
+            skip_duplicate_check=skip_duplicate_check,
+            force=force
+        )
+        click.echo(f"\n📁 File: {result['file_path']}")
         click.echo(f"✅ Records processed: {result['records_processed']}")
         click.echo(f"❌ Records failed: {result['records_failed']}")
+
+        # Show insert/update breakdown if available
+        if not dry_run and 'inserts' in result:
+            click.echo(f"➕ New records inserted: {result['inserts']}")
+            click.echo(f"🔄 Existing records updated: {result['updates']}")
+
         if result['validation_errors']:
-            click.echo(f"⚠️  Validation errors:")
+            click.echo(f"\n⚠️  Validation errors:")
             for error in result['validation_errors']:
                 click.echo(f"   {error}")
+
         if result['success']:
             click.echo("🎉 Ingestion completed successfully")
         else:
@@ -1018,6 +1101,105 @@ def regenerate_key(user_id: int) -> None:
         raise click.Abort()
     except Exception as e:
         click.echo(f"❌ API key regeneration failed: {e}", err=True)
+        raise click.Abort()
+
+
+@users.command("purge-data")
+@click.option('--user-id', type=int, required=True, help='User ID whose data should be purged')
+@click.option('--force', is_flag=True, help='Skip confirmation prompts (dangerous!)')
+@click.option('--dry-run', is_flag=True, help='Preview deletion counts without actually deleting')
+@require_authentication
+def purge_data(user_id: int, force: bool, dry_run: bool) -> None:
+    """
+    Purge all data for a specific user (ADMIN ONLY).
+
+    This command deletes all trades, positions, completed trades, setup patterns,
+    and processing logs for the specified user. The user account itself is preserved.
+
+    ⚠️  WARNING: This operation is IRREVERSIBLE!
+    """
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+
+            # Get user info for display
+            user = manager.get_user_or_raise(user_id)
+
+            # Get counts (dry-run mode to preview)
+            counts = manager.purge_user_data(user_id, dry_run=True)
+
+            # Display preview
+            click.echo("\n" + "=" * 70)
+            click.echo(f"Data Purge Preview for User: {user.username} (ID: {user_id})")
+            click.echo("=" * 70)
+            click.echo(f"  Trades (executions):        {counts['trades']:>6}")
+            click.echo(f"  Completed Trades:           {counts['completed_trades']:>6}")
+            click.echo(f"  Positions:                  {counts['positions']:>6}")
+            click.echo(f"  Setup Patterns:             {counts['setup_patterns']:>6}")
+            click.echo(f"  Processing Logs:            {counts['processing_log']:>6}")
+            click.echo("-" * 70)
+            click.echo(f"  TOTAL RECORDS:              {counts['total']:>6}")
+            click.echo("=" * 70)
+
+            # Dry-run mode: just show preview and exit
+            if dry_run:
+                click.echo("\n✅ DRY RUN: No data was deleted.")
+                click.echo(f"   Use without --dry-run to actually purge {counts['total']} records.\n")
+                return
+
+            # Check if there's anything to delete
+            if counts['total'] == 0:
+                click.echo(f"\n✅ User '{user.username}' has no data to purge.\n")
+                return
+
+            # Triple confirmation for actual deletion
+            click.echo(f"\n⚠️  WARNING: This operation is IRREVERSIBLE!")
+            click.echo(f"All {counts['total']} records for user '{user.username}' will be permanently deleted.")
+            click.echo(f"The user account will be preserved but will have no associated data.\n")
+
+            # First confirmation: Yes/No prompt
+            if not force:
+                if not click.confirm("Are you absolutely sure you want to continue?"):
+                    click.echo("\n❌ Operation cancelled.\n")
+                    raise click.Abort()
+
+                # Second confirmation: Type username
+                click.echo(f"\nType the username '{user.username}' to confirm deletion:")
+                confirmation = click.prompt("Username", type=str)
+
+                if confirmation != user.username:
+                    click.echo(f"\n❌ Username mismatch. Operation cancelled.\n")
+                    raise click.Abort()
+
+            # Perform the actual purge
+            click.echo(f"\nPurging data for user {user_id}...")
+            actual_counts = manager.purge_user_data(user_id, dry_run=False)
+            session.commit()
+
+            # Report success
+            click.echo("\n" + "=" * 70)
+            click.echo("✅ SUCCESS: Data Purge Complete")
+            click.echo("=" * 70)
+            click.echo(f"  Trades deleted:             {actual_counts['trades']:>6}")
+            click.echo(f"  Completed Trades deleted:   {actual_counts['completed_trades']:>6}")
+            click.echo(f"  Positions deleted:          {actual_counts['positions']:>6}")
+            click.echo(f"  Setup Patterns deleted:     {actual_counts['setup_patterns']:>6}")
+            click.echo(f"  Processing Logs deleted:    {actual_counts['processing_log']:>6}")
+            click.echo("-" * 70)
+            click.echo(f"  TOTAL DELETED:              {actual_counts['total']:>6}")
+            click.echo("=" * 70)
+            click.echo(f"\nUser account '{user.username}' (ID: {user_id}) still exists but has no data.\n")
+
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Data purge failed: {e}", err=True)
         raise click.Abort()
 
 
