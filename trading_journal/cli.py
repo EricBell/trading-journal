@@ -28,6 +28,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Column metadata for the trades report (table output order)
+TRADE_TABLE_COLUMNS = [
+    {"key": "id", "label": "ID"},
+    {"key": "symbol", "label": "Symbol"},
+    {"key": "type", "label": "Type"},
+    {"key": "qty", "label": "Qty"},
+    {"key": "date", "label": "Date"},
+    {"key": "entm", "label": "EnTm"},
+    {"key": "entry", "label": "Entry"},
+    {"key": "extm", "label": "ExTm"},
+    {"key": "exit", "label": "Exit"},
+    {"key": "pnl", "label": "P&L"},
+    {"key": "result", "label": "Result"},
+    {"key": "pattern", "label": "Pattern"},
+]
+
+TRADE_SORTABLE_COLUMNS = {col["key"] for col in TRADE_TABLE_COLUMNS}
+
+
 @click.group()
 @click.version_option()
 def main() -> None:
@@ -454,9 +473,22 @@ def _display_dashboard_summary(data: dict, detailed: bool = False) -> None:
 @report.command()
 @click.option('--symbol', help='Filter by symbol')
 @click.option('--date-range', help='Date range in format YYYY-MM-DD,YYYY-MM-DD')
-@click.option('--format', 'output_format', default='table', type=click.Choice(['table', 'json', 'csv']))
-def trades(symbol: str, date_range: str, output_format: str) -> None:
-    """List completed trades."""
+@click.option(
+    '--format',
+    'output_format',
+    default='table',
+    type=click.Choice(['table', 'json', 'csv']),
+    help='Output format: table (default), json, or csv.',
+)
+@click.option(
+    '--sort',
+    'sort_keys',
+    default='date,entm',
+    show_default=True,
+    help='Comma-separated sort keys (e.g. "date,entm,pnl").',
+)
+def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> None:
+    """List completed trades with sortable output."""
     try:
         from .trade_completion import TradeCompletionEngine
         import json
@@ -469,6 +501,64 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
         if "message" in summary:
             click.echo(summary["message"])
             return
+
+        trades_list = summary.get("trades", []) or []
+
+        # Parse and validate sort keys
+        sort_key_list = [k.strip().lower() for k in (sort_keys or "").split(",") if k.strip()]
+        if sort_key_list:
+            invalid = [k for k in sort_key_list if k not in TRADE_SORTABLE_COLUMNS]
+            if invalid:
+                valid_keys = ", ".join(sorted(TRADE_SORTABLE_COLUMNS))
+                click.echo(f"❌ Invalid sort key(s): {', '.join(invalid)}", err=True)
+                click.echo(f"   Valid sort keys: {valid_keys}", err=True)
+                raise click.Abort()
+
+            def _parse_ts(ts: str):
+                if not ts:
+                    return None
+                try:
+                    return datetime.fromisoformat(ts)
+                except Exception:
+                    return None
+
+            def _sort_value(trade: dict, key: str):
+                if key == "id":
+                    return trade.get("id") or 0
+                if key == "symbol":
+                    return (trade.get("symbol") or "").upper()
+                if key == "type":
+                    return trade.get("type") or ""
+                if key == "qty":
+                    return trade.get("qty") or 0
+                if key in ("date", "entm", "extm"):
+                    opened = _parse_ts(trade.get("opened_at"))
+                    closed = _parse_ts(trade.get("closed_at"))
+                    if key == "date":
+                        dt = opened or closed
+                    elif key == "entm":
+                        dt = opened
+                    else:  # extm
+                        dt = closed
+                    return dt or datetime.min
+                if key == "entry":
+                    return trade.get("entry_price") or 0.0
+                if key == "exit":
+                    return trade.get("exit_price") or 0.0
+                if key == "pnl":
+                    return trade.get("pnl") or 0.0
+                if key == "result":
+                    # LOSS before WIN (False < True)
+                    return (trade.get("pnl") or 0.0) > 0
+                if key == "pattern":
+                    return (trade.get("setup_pattern") or "").lower()
+                return 0
+
+            def _sort_key(trade: dict):
+                return tuple(_sort_value(trade, key) for key in sort_key_list)
+
+            trades_list = sorted(trades_list, key=_sort_key)
+
         click.echo("📋 Completed Trades Report")
         if symbol:
             click.echo(f"Symbol: {symbol}")
@@ -498,7 +588,7 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
             ]
             writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
             writer.writeheader()
-            for trade in summary['trades']:
+            for trade in trades_list:
                 writer.writerow({
                     'id': trade['id'],
                     'symbol': trade['symbol'],
@@ -533,7 +623,7 @@ def trades(symbol: str, date_range: str, output_format: str) -> None:
                 return dt.strftime("%y%m%d"), dt.strftime("%H%M")
 
             # Table rows
-            for trade in summary['trades']:
+            for trade in trades_list:
                 status_emoji = "🟢" if trade['pnl'] > 0 else "🔴"
                 result_label = "WIN" if trade['pnl'] > 0 else "LOSS"
                 pattern = (trade['setup_pattern'] or "")[:20]
@@ -595,6 +685,49 @@ def positions(open_only: bool, symbol: str) -> None:
             click.echo("No positions found")
     except Exception as e:
         click.echo(f"❌ Position reporting failed: {e}")
+        raise click.Abort()
+
+
+@report.command("columns")
+@click.argument('report_name', type=click.Choice(['trades']), default='trades')
+@click.option(
+    '--format',
+    'output_format',
+    type=click.Choice(['table', 'json']),
+    default='table',
+    show_default=True,
+    help='Output format for column definitions.',
+)
+def report_columns(report_name: str, output_format: str) -> None:
+    """Show available columns for reports (e.g., trades)."""
+    try:
+        if report_name == 'trades':
+            columns = TRADE_TABLE_COLUMNS
+        else:
+            columns = []
+
+        if output_format == 'json':
+            import json
+
+            payload = {
+                'report': report_name,
+                'columns': [
+                    {
+                        'key': col['key'],
+                        'label': col['label'],
+                    }
+                    for col in columns
+                ],
+            }
+            click.echo(json.dumps(payload, indent=2))
+        else:
+            click.echo(f"📋 Columns for '{report_name}' report (display order):")
+            for col in columns:
+                click.echo(f"  - {col['key']:8} : {col['label']}")
+            click.echo("\nUse these keys with --sort, e.g.:")
+            click.echo("  report trades --sort date,entm,pnl")
+    except Exception as e:
+        click.echo(f"❌ Column listing failed: {e}", err=True)
         raise click.Abort()
 
 
