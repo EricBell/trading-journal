@@ -11,6 +11,7 @@ from .database import db_manager
 from .config import logging_config
 from .models import CompletedTrade
 from .cli_auth import require_authentication, AuthContext
+from .user_management import UserManager
 
 
 # Set up logging
@@ -737,6 +738,286 @@ def edit_note(completed_trade_id: int, text: str) -> None:
 
     except Exception as e:
         click.echo(f"❌ Note editing failed: {e}", err=True)
+        raise click.Abort()
+
+
+@main.group()
+def users() -> None:
+    """User management commands (admin-only)."""
+    pass
+
+
+@users.command("list")
+@click.option('--all', 'include_inactive', is_flag=True, help='Include inactive users')
+@click.option('--format', 'output_format', type=click.Choice(['table', 'json', 'csv']), default='table', help='Output format')
+@require_authentication
+def list_users(include_inactive: bool, output_format: str) -> None:
+    """List all users with trade counts."""
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+            users_list = manager.list_users(include_inactive=include_inactive)
+
+            if output_format == 'json':
+                import json
+                output = {
+                    'users': users_list,
+                    'total_users': len(users_list),
+                    'showing_inactive': include_inactive
+                }
+                click.echo(json.dumps(output, indent=2, default=str))
+            elif output_format == 'csv':
+                import csv
+                import sys
+                writer = csv.DictWriter(sys.stdout, fieldnames=[
+                    'user_id', 'username', 'email', 'is_active', 'is_admin',
+                    'trade_count', 'created_at', 'last_login_at'
+                ])
+                writer.writeheader()
+                writer.writerows(users_list)
+            else:  # table format
+                click.echo("\n" + "=" * 80)
+                click.echo("👥 USER MANAGEMENT")
+                click.echo("=" * 80)
+
+                active_count = sum(1 for u in users_list if u['is_active'])
+                total_count = len(users_list)
+
+                if include_inactive:
+                    click.echo(f"\nAll Users ({active_count} active, {total_count - active_count} inactive)")
+                else:
+                    click.echo(f"\nActive Users ({active_count} of {total_count} total)")
+
+                click.echo()
+                click.echo(f"{'User ID':<8} | {'Username':<20} | {'Email':<30} | {'Admin':<6} | {'Active':<7} | {'Trades':<7} | {'Last Login':<20}")
+                click.echo("-" * 80)
+
+                for user in users_list:
+                    user_id = str(user['user_id'])
+                    username = user['username'][:20]
+                    email = user['email'][:30]
+                    is_admin = 'Yes' if user['is_admin'] else 'No'
+                    is_active = 'Yes' if user['is_active'] else 'No'
+                    trade_count = str(user['trade_count'])
+                    last_login = user['last_login_at'].strftime('%Y-%m-%d %H:%M') if user['last_login_at'] else 'Never'
+
+                    click.echo(f"{user_id:<8} | {username:<20} | {email:<30} | {is_admin:<6} | {is_active:<7} | {trade_count:<7} | {last_login:<20}")
+
+                if not include_inactive:
+                    click.echo(f"\nTo include inactive users: users list --all")
+                click.echo()
+
+    except Exception as e:
+        click.echo(f"❌ User listing failed: {e}", err=True)
+        raise click.Abort()
+
+
+@users.command("create")
+@click.option('--username', prompt=True, help='Username (3-100 chars, alphanumeric + underscore/hyphen)')
+@click.option('--email', prompt=True, help='Email address')
+@click.option('--admin', is_flag=True, help='Grant admin privileges')
+@require_authentication
+def create_user(username: str, email: str, admin: bool) -> None:
+    """Create a new user with automatic API key generation."""
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+            user, raw_api_key = manager.create_user(username, email, is_admin=admin)
+            session.commit()
+
+            click.echo(f"\n✅ Successfully created user '{username}' (ID: {user.user_id})")
+            if admin:
+                click.echo("   Admin privileges: Granted")
+
+            click.echo("\n" + "=" * 80)
+            click.echo("🔑 API KEY - SAVE THIS NOW (shown only once)")
+            click.echo("=" * 80)
+            click.echo(f"\n{raw_api_key}\n")
+            click.echo("⚠️  This API key will NOT be shown again. Save it securely.")
+            click.echo("=" * 80 + "\n")
+
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ User creation failed: {e}", err=True)
+        raise click.Abort()
+
+
+@users.command("deactivate")
+@click.option('--user-id', type=int, required=True, help='User ID to deactivate')
+@require_authentication
+def deactivate_user(user_id: int) -> None:
+    """Deactivate a user account."""
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+            user = manager.deactivate_user(user_id)
+            session.commit()
+            click.echo(f"✅ Successfully deactivated user '{user.username}' (ID: {user_id})")
+
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ User deactivation failed: {e}", err=True)
+        raise click.Abort()
+
+
+@users.command("reactivate")
+@click.option('--user-id', type=int, required=True, help='User ID to reactivate')
+@require_authentication
+def reactivate_user(user_id: int) -> None:
+    """Reactivate a previously deactivated user account."""
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+            user = manager.reactivate_user(user_id)
+            session.commit()
+            click.echo(f"✅ Successfully reactivated user '{user.username}' (ID: {user_id})")
+
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ User reactivation failed: {e}", err=True)
+        raise click.Abort()
+
+
+@users.command("make-admin")
+@click.option('--user-id', type=int, required=True, help='User ID to grant admin privileges')
+@require_authentication
+def make_admin(user_id: int) -> None:
+    """Grant admin privileges to a user."""
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+            user = manager.make_admin(user_id)
+            session.commit()
+            click.echo(f"✅ Successfully granted admin privileges to user '{user.username}' (ID: {user_id})")
+
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Admin privilege grant failed: {e}", err=True)
+        raise click.Abort()
+
+
+@users.command("revoke-admin")
+@click.option('--user-id', type=int, required=True, help='User ID to revoke admin privileges')
+@require_authentication
+def revoke_admin(user_id: int) -> None:
+    """Revoke admin privileges from a user."""
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+            user = manager.revoke_admin(user_id)
+            session.commit()
+            click.echo(f"✅ Successfully revoked admin privileges from user '{user.username}' (ID: {user_id})")
+
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Admin privilege revocation failed: {e}", err=True)
+        raise click.Abort()
+
+
+@users.command("delete")
+@click.option('--user-id', type=int, required=True, help='User ID to delete')
+@click.option('--confirm', is_flag=True, help='Skip confirmation prompt')
+@require_authentication
+def delete_user(user_id: int, confirm: bool) -> None:
+    """Delete a user account (prevents deletion if user has trades)."""
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+            user = manager.get_user_or_raise(user_id)
+
+            # Confirmation prompt
+            if not confirm:
+                if not click.confirm(f"⚠️  Are you sure you want to delete user '{user.username}' (ID: {user_id})?"):
+                    click.echo("Delete operation cancelled.")
+                    return
+
+            manager.delete_user(user_id)
+            session.commit()
+            click.echo(f"✅ Successfully deleted user '{user.username}' (ID: {user_id})")
+
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ User deletion failed: {e}", err=True)
+        raise click.Abort()
+
+
+@users.command("regenerate-key")
+@click.option('--user-id', type=int, required=True, help='User ID to regenerate API key')
+@require_authentication
+def regenerate_key(user_id: int) -> None:
+    """Regenerate a user's API key (invalidates old key)."""
+    # Check admin
+    if not AuthContext.is_admin():
+        click.echo("❌ Error: This command requires administrator privileges.", err=True)
+        raise click.Abort()
+
+    try:
+        with db_manager.get_session() as session:
+            manager = UserManager(session)
+            user, raw_api_key = manager.regenerate_api_key(user_id)
+            session.commit()
+
+            click.echo(f"\n✅ Successfully regenerated API key for user '{user.username}' (ID: {user_id})")
+
+            click.echo("\n" + "=" * 80)
+            click.echo("🔑 NEW API KEY - SAVE THIS NOW (shown only once)")
+            click.echo("=" * 80)
+            click.echo(f"\n{raw_api_key}\n")
+            click.echo("⚠️  This API key will NOT be shown again. The old key is now invalid.")
+            click.echo("=" * 80 + "\n")
+
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ API key regeneration failed: {e}", err=True)
         raise click.Abort()
 
 

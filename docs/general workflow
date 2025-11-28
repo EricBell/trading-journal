@@ -1,0 +1,124 @@
+> If I create a user for myself, then want to ingest data, process it and report on it - what  are the steps I need to take? 
+
+● Great question! Here's the complete workflow from user creation to reporting:
+
+  Complete Workflow
+
+  Step 1: Create Your User Account
+
+  Option A: Using Admin Mode (Easiest for Development)
+  # Enable admin mode
+  export ADMIN_MODE_ENABLED=true
+  export ADMIN_MODE_USER_ID=1
+
+  # Create your user
+  uv run python main.py users create --username your_name --email you@example.com
+
+  # Save the API key that's displayed (shown only once!)
+
+  Option B: If you already have an admin account
+  # Set your admin API key
+  export TRADING_JOURNAL_API_KEY=your_admin_key_here
+
+  # Create a new user
+  uv run python main.py users create --username your_name --email you@example.com
+
+  Step 2: Set Your API Key for Authentication
+
+  After creating your user, you'll see output like:
+  ================================================================================
+  🔑 API KEY - SAVE THIS NOW (shown only once)
+  ================================================================================
+
+  aBc123XyZ...your_actual_key_here...
+
+  ⚠️  This API key will NOT be shown again. Save it securely.
+  ================================================================================
+
+  Save this key and export it:
+  export TRADING_JOURNAL_API_KEY=aBc123XyZ...your_actual_key_here...
+
+  # Optional: Add to your shell profile so it persists
+  echo 'export TRADING_JOURNAL_API_KEY=aBc123XyZ...' >> ~/.bashrc  # or ~/.zshrc
+
+  Step 3: Ingest Your Trading Data
+
+  # Single file ingestion
+  uv run python main.py ingest file ../schwab-csv-to-json/output.ndjson
+
+  # Or batch process multiple files
+  uv run python main.py ingest batch "../schwab-csv-to-json/*.ndjson"
+
+  # Dry run to validate first (recommended)
+  uv run python main.py ingest file ../schwab-csv-to-json/output.ndjson --dry-run
+
+  Step 4: Process Completed Trades
+
+  This step matches buy/sell executions into round-trip trades:
+
+  # Process all trades
+  uv run python main.py db process-trades
+
+  # Or process specific symbols
+  uv run python main.py db process-trades --symbol AAPL
+
+  Step 5: View Your Reports
+
+  # Dashboard with all metrics
+  uv run python main.py report dashboard
+
+  # Filter by date range
+  uv run python main.py report dashboard --date-range 2025-01-01,2025-01-31
+
+  # Filter by symbol
+  uv run python main.py report dashboard --symbol AAPL
+
+  # Detailed view with equity curve
+  uv run python main.py report dashboard --format detailed
+
+  # Export to JSON
+  uv run python main.py report dashboard --format json > my_results.json
+
+  # View completed trades
+  uv run python main.py report trades
+
+  # View positions
+  uv run python main.py report positions
+  uv run python main.py report positions --open-only
+
+  Step 6: Annotate Your Trades (Optional)
+
+  # Add a setup pattern to a trade
+  uv run python main.py pattern annotate --completed-trade-id 123 --pattern "MACD Scalp"
+
+  # Add notes to a trade
+  uv run python main.py notes add --completed-trade-id 123 --text "Great entry timing"
+
+  # View pattern performance
+  uv run python main.py pattern performance --pattern "MACD Scalp"
+
+  Quick Reference Card
+
+  One-Time Setup:
+  # 1. Enable admin mode (first time only)
+  export ADMIN_MODE_ENABLED=true
+  export ADMIN_MODE_USER_ID=1
+
+  # 2. Create user and save API key
+  uv run python main.py users create
+
+  # 3. Set API key permanently
+  export TRADING_JOURNAL_API_KEY=your_key_here
+
+  Regular Workflow:
+  # Ingest → Process → Report
+  uv run python main.py ingest file data.ndjson
+  uv run python main.py db process-trades
+  uv run python main.py report dashboard
+
+  Important Notes
+
+  1. API Key Security: Never commit your API key to git. Keep it in your shell environment or a .env file (which is in .gitignore)
+  2. Two-Step Process: You must run db process-trades after ingestion to see trades in reports. Ingestion only stores raw executions.
+  3. Admin Mode vs Regular User: Admin mode bypasses authentication for development. In production, you'd use the API key for each user.
+  4. Data Isolation: Each user only sees their own trades. Your data is completely isolated from other users.

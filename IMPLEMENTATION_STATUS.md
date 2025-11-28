@@ -91,6 +91,50 @@ This document tracks the current implementation status of the Trading Journal pr
 
 ---
 
+## 🚧 Phase 4: Production Features (IN PROGRESS)
+
+### 🎯 Planned: User Management (Admin-Only)
+
+**Comprehensive multi-user administration system:**
+- [ ] **User Listing** - Display all users with trade counts (database-level aggregation)
+  - Active/inactive filtering
+  - Multiple output formats (table, JSON, CSV)
+  - Efficient single-query performance with LEFT JOIN
+- [ ] **User Creation** - Create new users with automatic API key generation
+  - Username and email validation
+  - Admin privilege assignment
+  - Secure API key storage (SHA256 hashing)
+- [ ] **User Status Management** - Activate/deactivate accounts
+  - Prevents deletion while maintaining data
+  - Self-operation protection
+  - Last admin protection
+- [ ] **Admin Privilege Control** - Grant/revoke admin rights
+  - Authorization checks
+  - Prevent self-demotion
+  - Maintain at least one admin
+- [ ] **User Deletion** - Remove users with safety checks
+  - Prevents deletion if user has trades
+  - Confirmation prompts
+  - Cascade handling for empty accounts
+- [ ] **API Key Management** - Regenerate user API keys
+  - Immediate old key invalidation
+  - Secure new key generation
+  - One-time key display
+
+**CLI Commands:**
+```bash
+users list [--all] [--format json|csv]
+users create --username <name> --email <email> [--admin]
+users deactivate --user-id <id>
+users reactivate --user-id <id>
+users make-admin --user-id <id>
+users revoke-admin --user-id <id>
+users delete --user-id <id> [--confirm]
+users regenerate-key --user-id <id>
+```
+
+---
+
 ## 📊 Current Capabilities
 
 ### ✅ Working Features

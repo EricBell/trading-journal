@@ -162,6 +162,19 @@ The primary input is **NDJSON files** created by the existing Schwab CSV convert
 - [ ] **N.6.2** Implement health checks for database connectivity and schema version.
 - [ ] **N.6.3** Provide import summary reports with error counts and processing statistics.
 
+#### N.7 User Management & Access Control
+
+- [ ] **N.7.1** Implement admin-only user management CLI commands for multi-user system administration.
+- [ ] **N.7.2** Support user creation with automatic API key generation and secure storage.
+- [ ] **N.7.3** Provide user listing with database-level trade count aggregation for performance.
+- [ ] **N.7.4** Enable user activation/deactivation for account access control without data deletion.
+- [ ] **N.7.5** Support admin privilege management (grant/revoke) with proper authorization checks.
+- [ ] **N.7.6** Prevent deletion of users with existing trade data to maintain data integrity.
+- [ ] **N.7.7** Prevent self-modification of critical attributes (admin status, deactivation, deletion).
+- [ ] **N.7.8** Maintain at least one active admin account at all times for system security.
+- [ ] **N.7.9** Support API key regeneration for users with secure key invalidation.
+- [ ] **N.7.10** Provide multiple output formats (table, JSON, CSV) for user listings and reports.
+
 -----
 
 ## 4. Data Schema
@@ -679,6 +692,59 @@ trading-journal config set pnl-method average_cost
 # Display current configuration
 trading-journal config show
 ```
+
+### 7.3 User Management Commands (Admin-Only)
+
+**Authentication Required:** All user management commands require admin privileges.
+
+```bash
+# List all users with trade counts
+trading-journal users list
+trading-journal users list --all                # Include inactive users
+trading-journal users list --format json        # JSON output
+trading-journal users list --format csv         # CSV output
+
+# Create new user
+trading-journal users create --username trader1 --email trader1@example.com
+trading-journal users create --username admin2 --email admin2@example.com --admin
+
+# User activation management
+trading-journal users deactivate --user-id 5    # Disable user account
+trading-journal users reactivate --user-id 5    # Re-enable user account
+
+# Admin privilege management
+trading-journal users make-admin --user-id 5    # Grant admin privileges
+trading-journal users revoke-admin --user-id 5  # Revoke admin privileges
+
+# Delete user (with safety checks)
+trading-journal users delete --user-id 5
+trading-journal users delete --user-id 5 --confirm  # Skip confirmation prompt
+
+# API key management
+trading-journal users regenerate-key --user-id 5  # Generate new API key for user
+```
+
+**User Listing Output:**
+```
+👥 USER MANAGEMENT
+================================================================================
+
+Active Users (3 of 5 total)
+
+User ID | Username      | Email                 | Admin | Active | Trades | Last Login
+--------|---------------|----------------------|-------|--------|--------|------------------
+1       | admin         | admin@example.com    | Yes   | Yes    | 0      | 2025-11-27 21:00
+2       | trader_bob    | bob@traders.com      | No    | Yes    | 145    | 2025-11-26 18:30
+5       | trader_alice  | alice@traders.com    | No    | Yes    | 89     | 2025-11-25 14:15
+
+To include inactive users: users list --all
+```
+
+**Safety Features:**
+- Prevents deletion of users with existing trade data (suggests deactivation instead)
+- Prevents self-deactivation, self-deletion, or self-admin-revocation
+- Maintains at least one active admin account at all times
+- API keys displayed only once during creation/regeneration for security
 
 -----
 

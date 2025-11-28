@@ -112,13 +112,40 @@ uv run python main.py report positions --open-only
 uv run python main.py report positions --symbol AAPL
 ```
 
-#### Pattern & Notes Management (Planned - Not Yet Implemented)
+#### Pattern & Notes Management (Implemented)
 ```bash
-# Pattern annotation (coming soon)
+# Pattern annotation
 uv run python main.py pattern annotate --completed-trade-id 123 --pattern "MACD Scalp"
+uv run python main.py pattern list
+uv run python main.py pattern performance --pattern "MACD Scalp"
 
-# Trade notes (coming soon)
+# Trade notes
 uv run python main.py notes add --completed-trade-id 123 --text "Great entry timing"
+uv run python main.py notes show --completed-trade-id 123
+uv run python main.py notes edit --completed-trade-id 123 --text "Updated notes"
+```
+
+#### User Management (Admin-Only - Planned)
+```bash
+# List users with trade counts
+uv run python main.py users list
+uv run python main.py users list --all --format json
+
+# Create users
+uv run python main.py users create --username trader1 --email trader1@example.com
+uv run python main.py users create --username admin2 --email admin2@example.com --admin
+
+# Manage user status
+uv run python main.py users deactivate --user-id 5
+uv run python main.py users reactivate --user-id 5
+uv run python main.py users make-admin --user-id 5
+uv run python main.py users revoke-admin --user-id 5
+
+# Delete users (with safety checks)
+uv run python main.py users delete --user-id 5
+
+# API key management
+uv run python main.py users regenerate-key --user-id 5
 ```
 
 ## Technical Stack

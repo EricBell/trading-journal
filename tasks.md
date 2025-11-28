@@ -153,7 +153,56 @@ This file tracks the implementation progress of all requirements from PRD.md.
 - [ ] Notes Search functionality for keyword searching
 - [ ] Setup Pattern Filter
 
-## Phase 4: Production Features (Week 6)
+## Phase 4: Production Features (Week 6+)
+
+### User Management & Access Control (N.7)
+- [ ] **N.7.1** Implement admin-only user management CLI command group
+- [ ] **N.7.2** Create user creation with API key generation
+  - [ ] Username validation (3-100 chars, alphanumeric + underscore/hyphen)
+  - [ ] Email validation (format regex)
+  - [ ] Case-insensitive uniqueness checks
+  - [ ] Secure API key generation and hashing
+- [ ] **N.7.3** Implement user listing with database-level trade count aggregation
+  - [ ] Efficient single query with LEFT JOIN and GROUP BY
+  - [ ] Active/inactive filtering (--all flag)
+  - [ ] Table format output
+  - [ ] JSON format output
+  - [ ] CSV format output
+- [ ] **N.7.4** Build user activation/deactivation system
+  - [ ] Deactivate user command
+  - [ ] Reactivate user command
+  - [ ] Self-deactivation prevention
+  - [ ] Last admin protection
+- [ ] **N.7.5** Implement admin privilege management
+  - [ ] Make admin command
+  - [ ] Revoke admin command
+  - [ ] Self-demotion prevention
+  - [ ] Last admin protection
+- [ ] **N.7.6** Create user deletion with safety checks
+  - [ ] Prevent deletion if user has trades
+  - [ ] Confirmation prompt
+  - [ ] Self-deletion prevention
+  - [ ] Last admin deletion prevention
+- [ ] **N.7.7** Implement self-operation prevention across all commands
+- [ ] **N.7.8** Enforce at least one active admin at all times
+- [ ] **N.7.9** Build API key regeneration functionality
+  - [ ] Generate new API key
+  - [ ] Invalidate old key
+  - [ ] Display new key once
+- [ ] **N.7.10** Support multiple output formats for all user operations
+
+### User Management Testing
+- [ ] Create comprehensive test suite (test_user_management.py)
+  - [ ] Admin authorization tests
+  - [ ] User creation validation tests
+  - [ ] User listing and aggregation tests
+  - [ ] Activation/deactivation tests
+  - [ ] Admin privilege management tests
+  - [ ] User deletion safety tests
+  - [ ] API key regeneration tests
+  - [ ] Edge case tests
+- [ ] Integration tests for complete user lifecycle
+- [ ] Performance tests for database aggregation queries
 
 ### Advanced Error Handling (N.3)
 - [ ] **N.3.1** Implement database transactions for atomic file imports
