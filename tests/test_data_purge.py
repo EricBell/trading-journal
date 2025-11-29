@@ -106,19 +106,24 @@ def create_sample_data(db_session, user_id):
     db_session.add_all(trades)
 
     # Create completed trades
+    from decimal import Decimal
+    from datetime import timedelta
     completed_trades = [
         CompletedTrade(
             user_id=user_id,
             symbol='AAPL',
-            entry_timestamp=datetime(2025, 1, 15, 10, 0),
-            exit_timestamp=datetime(2025, 1, 15, 11, 0),
-            entry_price=150.00,
-            exit_price=155.00,
-            qty=100,
-            pnl=500.00,
-            pnl_percent=3.33,
-            hold_duration_seconds=3600,
-            instrument_type='EQUITY'
+            opened_at=datetime(2025, 1, 15, 10, 0),
+            closed_at=datetime(2025, 1, 15, 11, 0),
+            entry_avg_price=Decimal('150.00'),
+            exit_avg_price=Decimal('155.00'),
+            total_qty=100,
+            net_pnl=Decimal('500.00'),
+            gross_cost=Decimal('15000.00'),
+            gross_proceeds=Decimal('15500.00'),
+            hold_duration=timedelta(hours=1),
+            instrument_type='EQUITY',
+            is_winning_trade=True,
+            trade_type='LONG'
         )
         for _ in range(3)
     ]
@@ -129,20 +134,18 @@ def create_sample_data(db_session, user_id):
         Position(
             user_id=user_id,
             symbol='AAPL',
-            qty=100,
-            avg_cost=150.00,
-            total_cost=15000.00,
-            instrument_type='EQUITY',
-            is_closed=False
+            current_qty=100,
+            avg_cost_basis=Decimal('150.00'),
+            total_cost=Decimal('15000.00'),
+            instrument_type='EQUITY'
         ),
         Position(
             user_id=user_id,
             symbol='MSFT',
-            qty=50,
-            avg_cost=300.00,
-            total_cost=15000.00,
-            instrument_type='EQUITY',
-            is_closed=False
+            current_qty=50,
+            avg_cost_basis=Decimal('300.00'),
+            total_cost=Decimal('15000.00'),
+            instrument_type='EQUITY'
         )
     ]
     db_session.add_all(positions)
@@ -355,7 +358,7 @@ class TestDataPurgeEdgeCases:
                 order_type='LIMIT',
                 source_file_path='file.csv',
                 source_file_index=i,
-                raw_data={'test': 'data'},
+                raw_data=json.dumps({'test': 'data'}),
                 processing_timestamp=datetime.utcnow()
             )
             for i in range(3)
@@ -382,11 +385,10 @@ class TestDataPurgeEdgeCases:
         position = Position(
             user_id=target_user.user_id,
             symbol='AAPL',
-            qty=100,
-            avg_cost=150.00,
-            total_cost=15000.00,
-            instrument_type='EQUITY',
-            is_closed=False
+            current_qty=100,
+            avg_cost_basis=Decimal('150.00'),
+            total_cost=Decimal('15000.00'),
+            instrument_type='EQUITY'
         )
         db_session.add(position)
         db_session.commit()
@@ -423,7 +425,7 @@ class TestDataPurgeEdgeCases:
                 order_type='LIMIT',
                 source_file_path='file.csv',
                 source_file_index=i,
-                raw_data={'test': 'data'},
+                raw_data=json.dumps({'test': 'data'}),
                 processing_timestamp=datetime.utcnow()
             )
             for i in range(100)

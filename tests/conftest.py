@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
 from trading_journal.models import Base
+from trading_journal.database import db_manager
 
 
 @pytest.fixture(scope="session")
@@ -31,6 +32,10 @@ def db_engine():
     # Create all tables
     Base.metadata.create_all(engine)
 
+    # Configure global db_manager to use test database
+    db_manager._engine = engine
+    db_manager._session_factory = sessionmaker(bind=engine)
+
     yield engine
 
     # Drop all tables after tests
@@ -46,11 +51,11 @@ def db_session(db_engine):
 
     yield session
 
-    # Rollback any uncommitted changes and close session
-    session.rollback()
-    session.close()
-
-    # Clean up all tables for next test
+    # Clean up all tables for next test (before closing the session)
+    session.rollback()  # Rollback any uncommitted changes first
     for table in reversed(Base.metadata.sorted_tables):
         session.execute(table.delete())
-        session.commit()
+    session.commit()
+
+    # Close session
+    session.close()
