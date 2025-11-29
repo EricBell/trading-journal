@@ -30,8 +30,10 @@ def admin_user(db_session):
     auth_user = AuthUser(
         user_id=admin.user_id,
         username=admin.username,
+        email=admin.email,
         is_admin=True,
-        is_active=True
+        is_active=True,
+        auth_method='api_key'
     )
     AuthContext.set_current_user(auth_user)
 

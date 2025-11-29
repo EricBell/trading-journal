@@ -1,5 +1,6 @@
 """Test suite for duplicate detection functionality."""
 
+import json
 import pytest
 from datetime import datetime
 
@@ -77,7 +78,7 @@ def sample_trade_data():
         'order_type': 'LIMIT',
         'source_file_path': 'test-file.csv',
         'source_file_index': 1,
-        'raw_data': {'test': 'data'},
+        'raw_data': json.dumps({'test': 'data'}),
         'processing_timestamp': datetime.utcnow()
     }
 
@@ -86,6 +87,9 @@ def sample_trade_data():
 def sample_ndjson_record():
     """Sample NdjsonRecord for testing."""
     return NdjsonRecord(
+        section='test-section',
+        row_index=1,
+        raw=json.dumps({'test': 'data'}),
         exec_time=datetime(2025, 1, 15, 10, 0),
         event_type='fill',
         symbol='AAPL',
@@ -96,8 +100,7 @@ def sample_ndjson_record():
         net_price=150.00,
         order_type='LIMIT',
         source_file='test-file.csv',
-        source_file_index=1,
-        raw={'test': 'data'}
+        source_file_index=1
     )
 
 
@@ -253,6 +256,9 @@ class TestDuplicateDetector:
 
         # Create records: one duplicate, one new
         record1 = NdjsonRecord(
+            section='test-section',
+            row_index=1,
+            raw=json.dumps({'test': 'data'}),
             exec_time=datetime(2025, 1, 15, 10, 0),
             event_type='fill',
             symbol='AAPL',
@@ -263,11 +269,13 @@ class TestDuplicateDetector:
             net_price=150.00,
             order_type='LIMIT',
             source_file='test-file.csv',
-            source_file_index=1,
-            raw={'test': 'data'}
+            source_file_index=1
         )
 
         record2 = NdjsonRecord(
+            section='test-section',
+            row_index=2,
+            raw=json.dumps({'test': 'data2'}),
             exec_time=datetime(2025, 1, 15, 11, 0),
             event_type='fill',
             symbol='MSFT',
@@ -278,8 +286,7 @@ class TestDuplicateDetector:
             net_price=300.00,
             order_type='LIMIT',
             source_file='test-file.csv',
-            source_file_index=2,
-            raw={'test': 'data2'}
+            source_file_index=2
         )
 
         detector = DuplicateDetector(db_session)

@@ -1,5 +1,6 @@
 """Test suite for user data purge functionality."""
 
+import json
 import pytest
 from datetime import datetime
 
@@ -31,8 +32,10 @@ def admin_user(db_session):
     auth_user = AuthUser(
         user_id=admin.user_id,
         username=admin.username,
+        email=admin.email,
         is_admin=True,
-        is_active=True
+        is_active=True,
+        auth_method='api_key'
     )
     AuthContext.set_current_user(auth_user)
 
@@ -95,7 +98,7 @@ def create_sample_data(db_session, user_id):
             order_type='LIMIT',
             source_file_path='file.csv',
             source_file_index=i,
-            raw_data={'test': 'data'},
+            raw_data=json.dumps({'test': 'data'}),
             processing_timestamp=datetime.utcnow()
         )
         for i in range(5)

@@ -29,7 +29,9 @@ def test_user(db_session):
         user_id=user.user_id,
         username=user.username,
         email=user.email,
-        is_admin=user.is_admin
+        is_admin=user.is_admin,
+        is_active=user.is_active,
+        auth_method=user.auth_method
     )
     AuthContext.set_current_user(auth_user)
 

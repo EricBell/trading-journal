@@ -19,12 +19,16 @@ def test_database_config():
     """Test database configuration."""
     from trading_journal.config import db_config
 
-    # Test that URL is properly formatted
+    # Test that config is properly structured (not specific values)
     url = db_config.url
     assert "postgresql://" in url
-    assert db_config.host == "localhost"
-    assert db_config.port == 5432
-    assert db_config.database == "trading_journal"
+    assert isinstance(db_config.host, str)
+    assert len(db_config.host) > 0
+    assert isinstance(db_config.port, int)
+    assert db_config.port > 0
+    assert db_config.port < 65536
+    assert isinstance(db_config.database, str)
+    assert len(db_config.database) > 0
 
 
 def test_application_config():

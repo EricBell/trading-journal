@@ -1,32 +1,23 @@
 """Test database models."""
 
 import pytest
-from sqlalchemy import create_engine, JSON
-from sqlalchemy.orm import sessionmaker
-
-from trading_journal.models import Base, Trade, CompletedTrade, Position
+from trading_journal.models import Trade, CompletedTrade, Position, User
 
 
-@pytest.fixture
-def engine():
-    """Create in-memory SQLite database for testing."""
-    # For testing, we'll use SQLite but need to handle JSONB differently
-    return create_engine("sqlite:///:memory:")
-
-
-@pytest.fixture
-def session(engine):
-    """Create database session for testing."""
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    yield session
-    session.close()
-
-
-def test_trade_model_creation(session):
+def test_trade_model_creation(db_session):
     """Test creating a trade record."""
+    # Create test user first
+    user = User(
+        username="testuser",
+        email="test@example.com",
+        auth_method="api_key",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
     trade = Trade(
+        user_id=user.user_id,
         unique_key="test_trade_1",
         event_type="fill",
         symbol="AAPL",
@@ -38,20 +29,30 @@ def test_trade_model_creation(session):
         raw_data="test raw data"
     )
 
-    session.add(trade)
-    session.commit()
+    db_session.add(trade)
+    db_session.commit()
 
     assert trade.trade_id is not None
     assert trade.symbol == "AAPL"
     assert trade.instrument_type == "EQUITY"
 
 
-def test_completed_trade_model_creation(session):
+def test_completed_trade_model_creation(db_session):
     """Test creating a completed trade record."""
+    # Create test user first
+    user = User(
+        username="testuser2",
+        email="test2@example.com",
+        auth_method="api_key",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
     completed_trade = CompletedTrade(
+        user_id=user.user_id,
         symbol="AAPL",
         instrument_type="EQUITY",
-        # Skip option_details for SQLite compatibility
         total_qty=100,
         entry_avg_price=150.00,
         exit_avg_price=155.00,
@@ -61,17 +62,28 @@ def test_completed_trade_model_creation(session):
         is_winning_trade=True
     )
 
-    session.add(completed_trade)
-    session.commit()
+    db_session.add(completed_trade)
+    db_session.commit()
 
     assert completed_trade.completed_trade_id is not None
     assert completed_trade.setup_pattern == "5min ORB"
     assert completed_trade.is_winning_trade is True
 
 
-def test_position_model_creation(session):
+def test_position_model_creation(db_session):
     """Test creating a position record."""
+    # Create test user first
+    user = User(
+        username="testuser3",
+        email="test3@example.com",
+        auth_method="api_key",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
     position = Position(
+        user_id=user.user_id,
         symbol="AAPL",
         instrument_type="EQUITY",
         current_qty=100,
@@ -79,28 +91,40 @@ def test_position_model_creation(session):
         total_cost=15025.00
     )
 
-    session.add(position)
-    session.commit()
+    db_session.add(position)
+    db_session.commit()
 
     assert position.position_id is not None
     assert position.symbol == "AAPL"
     assert position.current_qty == 100
 
 
-def test_trade_completed_trade_relationship(session):
+def test_trade_completed_trade_relationship(db_session):
     """Test relationship between trades and completed trades."""
+    # Create test user first
+    user = User(
+        username="testuser4",
+        email="test4@example.com",
+        auth_method="api_key",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
     # Create completed trade
     completed_trade = CompletedTrade(
+        user_id=user.user_id,
         symbol="AAPL",
         instrument_type="EQUITY",
         total_qty=100,
         net_pnl=500.00
     )
-    session.add(completed_trade)
-    session.flush()  # Get the ID without committing
+    db_session.add(completed_trade)
+    db_session.flush()  # Get the ID without committing
 
     # Create executions linked to completed trade
     trade1 = Trade(
+        user_id=user.user_id,
         unique_key="exec_1",
         event_type="fill",
         symbol="AAPL",
@@ -112,6 +136,7 @@ def test_trade_completed_trade_relationship(session):
     )
 
     trade2 = Trade(
+        user_id=user.user_id,
         unique_key="exec_2",
         event_type="fill",
         symbol="AAPL",
@@ -122,8 +147,8 @@ def test_trade_completed_trade_relationship(session):
         completed_trade_id=completed_trade.completed_trade_id
     )
 
-    session.add_all([trade1, trade2])
-    session.commit()
+    db_session.add_all([trade1, trade2])
+    db_session.commit()
 
     # Test relationship
     assert len(completed_trade.executions) == 2
