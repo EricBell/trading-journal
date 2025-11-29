@@ -213,6 +213,7 @@ class TradeCompletionEngine:
                 "trades": [
                     {
                         "id": t.completed_trade_id,
+                        "instrument_type": t.instrument_type,
                         "symbol": t.symbol,
                         "type": t.trade_type,
                         "qty": t.total_qty,

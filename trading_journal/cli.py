@@ -13,6 +13,11 @@ from .config import logging_config
 from .models import CompletedTrade
 from .cli_auth import require_authentication, AuthContext
 from .user_management import UserManager
+from .report_configs import (
+    TRADE_COLUMN_DEFS,
+    TRADE_REPORT_LAYOUTS,
+    TRADE_SORTABLE_COLUMNS,
+)
 
 
 # Set up logging
@@ -26,25 +31,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-
-# Column metadata for the trades report (table output order)
-TRADE_TABLE_COLUMNS = [
-    {"key": "id", "label": "ID"},
-    {"key": "symbol", "label": "Symbol"},
-    {"key": "type", "label": "Type"},
-    {"key": "qty", "label": "Qty"},
-    {"key": "date", "label": "Date"},
-    {"key": "entm", "label": "EnTm"},
-    {"key": "entry", "label": "Entry"},
-    {"key": "extm", "label": "ExTm"},
-    {"key": "exit", "label": "Exit"},
-    {"key": "pnl", "label": "P&L"},
-    {"key": "result", "label": "Result"},
-    {"key": "pattern", "label": "Pattern"},
-]
-
-TRADE_SORTABLE_COLUMNS = {col["key"] for col in TRADE_TABLE_COLUMNS}
 
 
 @click.group()
@@ -471,6 +457,10 @@ def _display_dashboard_summary(data: dict, detailed: bool = False) -> None:
 
 
 @report.command()
+@click.argument(
+    'report_name',
+    type=click.Choice(sorted(TRADE_REPORT_LAYOUTS.keys())),
+)
 @click.option('--symbol', help='Filter by symbol')
 @click.option('--date-range', help='Date range in format YYYY-MM-DD,YYYY-MM-DD')
 @click.option(
@@ -483,12 +473,12 @@ def _display_dashboard_summary(data: dict, detailed: bool = False) -> None:
 @click.option(
     '--sort',
     'sort_keys',
-    default='date,entm',
-    show_default=True,
-    help='Comma-separated sort keys (e.g. "date,entm,pnl").',
+    default='',
+    help='Comma-separated sort keys (e.g. "date,entm,pnl"). '
+         'If omitted, the report layout default is used (if defined).',
 )
-def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> None:
-    """List completed trades with sortable output."""
+def trades(report_name: str, symbol: str, date_range: str, output_format: str, sort_keys: str) -> None:
+    """List completed trades using a named report layout."""
     try:
         from .trade_completion import TradeCompletionEngine
         import json
@@ -504,8 +494,20 @@ def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> 
 
         trades_list = summary.get("trades", []) or []
 
+        # Load report layout
+        layout = TRADE_REPORT_LAYOUTS.get(report_name)
+        if not layout:
+            available = ", ".join(sorted(TRADE_REPORT_LAYOUTS.keys()))
+            click.echo(f"❌ Unknown trades report layout: '{report_name}'", err=True)
+            click.echo(f"   Available layouts: {available}", err=True)
+            raise click.Abort()
+
+        layout_sort = layout.get("default_sort") or []
+
         # Parse and validate sort keys
         sort_key_list = [k.strip().lower() for k in (sort_keys or "").split(",") if k.strip()]
+        if not sort_key_list:
+            sort_key_list = [k.lower() for k in layout_sort]
         if sort_key_list:
             invalid = [k for k in sort_key_list if k not in TRADE_SORTABLE_COLUMNS]
             if invalid:
@@ -527,6 +529,8 @@ def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> 
                     return trade.get("id") or 0
                 if key == "symbol":
                     return (trade.get("symbol") or "").upper()
+                if key == "instrument_type":
+                    return (trade.get("instrument_type") or "").upper()
                 if key == "type":
                     return trade.get("type") or ""
                 if key == "qty":
@@ -576,6 +580,7 @@ def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> 
             fieldnames = [
                 'id',
                 'symbol',
+                'instrument_type',
                 'type',
                 'qty',
                 'entry_price',
@@ -592,6 +597,7 @@ def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> 
                 writer.writerow({
                     'id': trade['id'],
                     'symbol': trade['symbol'],
+                    'instrument_type': trade.get('instrument_type', ''),
                     'type': trade['type'],
                     'qty': trade['qty'],
                     'entry_price': trade['entry_price'],
@@ -604,13 +610,19 @@ def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> 
                 })
         else:
             click.echo(f"\n📋 Trade Details:")
-            # Table header
-            click.echo(
-                f"{'ID':<6} | {'Symbol':<8} | {'Type':<6} | {'Qty':>6} | "
-                f"{'Date':>6} | {'EnTm':>4} | {'Entry':>10} | "
-                f"{'ExTm':>4} | {'Exit':>10} | {'P&L':>12} | {'Result':<8} | {'Pattern':<20}"
-            )
-            click.echo("-" * 126)
+            # Table header based on layout columns
+            header_cells = []
+            for col_key in layout["columns"]:
+                col_def = TRADE_COLUMN_DEFS.get(col_key)
+                if not col_def:
+                    continue
+                label = str(col_def.get("label", col_key))
+                width = int(col_def.get("width", len(label)))
+                align = str(col_def.get("align", "<"))
+                header_cells.append(f"{label:{align}{width}}")
+            click.echo(" | ".join(header_cells))
+            # Separator line length roughly matches header length
+            click.echo("-" * min(160, sum(int(TRADE_COLUMN_DEFS[c]["width"]) + 3 for c in layout["columns"] if c in TRADE_COLUMN_DEFS)))
 
             # Helper to format timestamps
             def _format_ts(ts: str):
@@ -626,7 +638,7 @@ def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> 
             for trade in trades_list:
                 status_emoji = "🟢" if trade['pnl'] > 0 else "🔴"
                 result_label = "WIN" if trade['pnl'] > 0 else "LOSS"
-                pattern = (trade['setup_pattern'] or "")[:20]
+                pattern = (trade.get('setup_pattern') or "")[:20]
 
                 open_date, open_time = _format_ts(trade.get('opened_at'))
                 close_date, close_time = _format_ts(trade.get('closed_at'))
@@ -634,20 +646,46 @@ def trades(symbol: str, date_range: str, output_format: str, sort_keys: str) -> 
                 entry_time = open_time
                 exit_time = close_time
 
-                click.echo(
-                    f"{trade['id']:<6} | "
-                    f"{trade['symbol']:<8} | "
-                    f"{trade['type']:<6} | "
-                    f"{trade['qty']:>6} | "
-                    f"{date_str:>6} | "
-                    f"{entry_time:>4} | "
-                    f"{trade['entry_price']:>10.4f} | "
-                    f"{exit_time:>4} | "
-                    f"{trade['exit_price']:>10.4f} | "
-                    f"{trade['pnl']:>12.2f} | "
-                    f"{status_emoji} {result_label:<4} | "
-                    f"{pattern:<20}"
-                )
+                row_cells = []
+                for col_key in layout["columns"]:
+                    col_def = TRADE_COLUMN_DEFS.get(col_key)
+                    if not col_def:
+                        continue
+                    width = int(col_def.get("width", 8))
+                    align = str(col_def.get("align", "<"))
+
+                    if col_key == "id":
+                        value = str(trade.get("id", ""))
+                    elif col_key == "symbol":
+                        value = str(trade.get("symbol", ""))
+                    elif col_key == "instrument_type":
+                        value = str(trade.get("instrument_type") or "")
+                    elif col_key == "type":
+                        value = str(trade.get("type", ""))
+                    elif col_key == "qty":
+                        value = str(trade.get("qty") or "")
+                    elif col_key == "date":
+                        value = date_str or ""
+                    elif col_key == "entm":
+                        value = entry_time or ""
+                    elif col_key == "entry":
+                        value = f"{trade.get('entry_price', 0.0):.4f}"
+                    elif col_key == "extm":
+                        value = exit_time or ""
+                    elif col_key == "exit":
+                        value = f"{trade.get('exit_price', 0.0):.4f}"
+                    elif col_key == "pnl":
+                        value = f"{trade.get('pnl', 0.0):.2f}"
+                    elif col_key == "result":
+                        value = f"{status_emoji} {result_label}"
+                    elif col_key == "pattern":
+                        value = pattern
+                    else:
+                        value = ""
+
+                    row_cells.append(f"{value:{align}{width}}")
+
+                click.echo(" | ".join(row_cells))
     except Exception as e:
         click.echo(f"❌ Trade listing failed: {e}")
         raise click.Abort()
@@ -689,7 +727,8 @@ def positions(open_only: bool, symbol: str) -> None:
 
 
 @report.command("columns")
-@click.argument('report_name', type=click.Choice(['trades']), default='trades')
+@click.argument('report_type', type=click.Choice(['trades']))
+@click.argument('report_name', required=False)
 @click.option(
     '--format',
     'output_format',
@@ -698,34 +737,54 @@ def positions(open_only: bool, symbol: str) -> None:
     show_default=True,
     help='Output format for column definitions.',
 )
-def report_columns(report_name: str, output_format: str) -> None:
-    """Show available columns for reports (e.g., trades)."""
+def report_columns(report_type: str, report_name: str, output_format: str) -> None:
+    """Show available columns for reports and layouts."""
     try:
-        if report_name == 'trades':
-            columns = TRADE_TABLE_COLUMNS
+        if report_type == 'trades':
+            if report_name:
+                layout = TRADE_REPORT_LAYOUTS.get(report_name)
+                if not layout:
+                    available = ", ".join(sorted(TRADE_REPORT_LAYOUTS.keys()))
+                    click.echo(f"❌ Unknown trades report layout: '{report_name}'", err=True)
+                    click.echo(f"   Available layouts: {available}", err=True)
+                    raise click.Abort()
+                layouts = {report_name: layout}
+            else:
+                layouts = TRADE_REPORT_LAYOUTS
         else:
-            columns = []
+            layouts = {}
 
         if output_format == 'json':
             import json
 
             payload = {
-                'report': report_name,
-                'columns': [
-                    {
-                        'key': col['key'],
-                        'label': col['label'],
+                'report_type': report_type,
+                'layouts': {
+                    name: {
+                        'columns': [
+                            {
+                                'key': col_key,
+                                'label': TRADE_COLUMN_DEFS[col_key]["label"],
+                            }
+                            for col_key in layout['columns']
+                            if col_key in TRADE_COLUMN_DEFS
+                        ]
                     }
-                    for col in columns
-                ],
+                    for name, layout in layouts.items()
+                },
             }
-            click.echo(json.dumps(payload, indent=2))
+            click.echo(json.dumps(payload, indent=2, default=str))
         else:
-            click.echo(f"📋 Columns for '{report_name}' report (display order):")
-            for col in columns:
-                click.echo(f"  - {col['key']:8} : {col['label']}")
-            click.echo("\nUse these keys with --sort, e.g.:")
-            click.echo("  report trades --sort date,entm,pnl")
+            for name, layout in layouts.items():
+                click.echo(f"📋 Columns for trades report layout '{name}' (display order):")
+                for col_key in layout['columns']:
+                    if col_key not in TRADE_COLUMN_DEFS:
+                        continue
+                    col_def = TRADE_COLUMN_DEFS[col_key]
+                    click.echo(f"  - {col_key:16} : {col_def['label']}")
+                click.echo()
+            click.echo("Use these keys with --sort, e.g.:")
+            click.echo("  report trades default --sort date,entm,pnl")
     except Exception as e:
         click.echo(f"❌ Column listing failed: {e}", err=True)
         raise click.Abort()
