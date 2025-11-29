@@ -65,7 +65,7 @@ def user3(db_session):
 def sample_trade_data():
     """Sample trade data for creating test trades."""
     return {
-        'unique_key': 'test-file.csv::1::2025-01-15T10:00::AAPL::BUY::100',
+        'unique_key': 'test-file.csv:1:2025-01-15T10:00:00:AAPL:BUY:100',
         'exec_timestamp': datetime(2025, 1, 15, 10, 0),
         'event_type': 'fill',
         'symbol': 'AAPL',
@@ -376,7 +376,7 @@ class TestDuplicateDetectionIntegration:
         # User1 ingests trades
         trades_user1 = [
             Trade(
-                unique_key='file.csv::1::2025-01-15T10:00::AAPL::BUY::100',
+                unique_key='file.csv:1:2025-01-15T10:00:00:AAPL:BUY:100',
                 user_id=user1.user_id,
                 exec_timestamp=datetime(2025, 1, 15, 10, 0),
                 event_type='fill',
@@ -390,11 +390,11 @@ class TestDuplicateDetectionIntegration:
                 order_type='LIMIT',
                 source_file_path='file.csv',
                 source_file_index=1,
-                raw_data={'test': 'data'},
+                raw_data=json.dumps({'test': 'data'}),
                 processing_timestamp=datetime.utcnow()
             ),
             Trade(
-                unique_key='file.csv::2::2025-01-15T11:00::MSFT::BUY::50',
+                unique_key='file.csv:2:2025-01-15T11:00:00:MSFT:BUY:50',
                 user_id=user1.user_id,
                 exec_timestamp=datetime(2025, 1, 15, 11, 0),
                 event_type='fill',
@@ -408,7 +408,7 @@ class TestDuplicateDetectionIntegration:
                 order_type='LIMIT',
                 source_file_path='file.csv',
                 source_file_index=2,
-                raw_data={'test': 'data2'},
+                raw_data=json.dumps({'test': 'data2'}),
                 processing_timestamp=datetime.utcnow()
             )
         ]
@@ -418,6 +418,9 @@ class TestDuplicateDetectionIntegration:
         # User2 tries to ingest same file
         records_user2 = [
             NdjsonRecord(
+                section='test-section',
+                row_index=1,
+                raw=json.dumps({'test': 'data'}),
                 exec_time=datetime(2025, 1, 15, 10, 0),
                 event_type='fill',
                 symbol='AAPL',
@@ -428,10 +431,12 @@ class TestDuplicateDetectionIntegration:
                 net_price=150.00,
                 order_type='LIMIT',
                 source_file='file.csv',
-                source_file_index=1,
-                raw={'test': 'data'}
+                source_file_index=1
             ),
             NdjsonRecord(
+                section='test-section',
+                row_index=2,
+                raw=json.dumps({'test': 'data2'}),
                 exec_time=datetime(2025, 1, 15, 11, 0),
                 event_type='fill',
                 symbol='MSFT',
@@ -442,8 +447,7 @@ class TestDuplicateDetectionIntegration:
                 net_price=300.00,
                 order_type='LIMIT',
                 source_file='file.csv',
-                source_file_index=2,
-                raw={'test': 'data2'}
+                source_file_index=2
             )
         ]
 
@@ -460,7 +464,7 @@ class TestDuplicateDetectionIntegration:
         """Test scenario: user tries to re-ingest their own data."""
         # User1 ingests trade
         trade = Trade(
-            unique_key='file.csv::1::2025-01-15T10:00::AAPL::BUY::100',
+            unique_key='file.csv:1:2025-01-15T10:00:00:AAPL:BUY:100',
             user_id=user1.user_id,
             exec_timestamp=datetime(2025, 1, 15, 10, 0),
             event_type='fill',
@@ -474,7 +478,7 @@ class TestDuplicateDetectionIntegration:
             order_type='LIMIT',
             source_file_path='file.csv',
             source_file_index=1,
-            raw_data={'test': 'data'},
+            raw_data=json.dumps({'test': 'data'}),
             processing_timestamp=datetime.utcnow()
         )
         db_session.add(trade)
@@ -482,6 +486,9 @@ class TestDuplicateDetectionIntegration:
 
         # User1 tries to re-ingest
         record = NdjsonRecord(
+            section='test-section',
+            row_index=1,
+            raw=json.dumps({'test': 'data'}),
             exec_time=datetime(2025, 1, 15, 10, 0),
             event_type='fill',
             symbol='AAPL',
@@ -492,8 +499,7 @@ class TestDuplicateDetectionIntegration:
             net_price=150.00,
             order_type='LIMIT',
             source_file='file.csv',
-            source_file_index=1,
-            raw={'test': 'data'}
+            source_file_index=1
         )
 
         detector = DuplicateDetector(db_session)

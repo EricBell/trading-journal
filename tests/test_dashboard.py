@@ -221,11 +221,12 @@ def test_dashboard_max_drawdown(sample_trades):
     dd = dashboard["max_drawdown"]
 
     # The equity curve goes: 500 -> 250 -> 550 -> 470 -> 970
-    # Peak at 550, trough at 470, drawdown = 80
-    assert dd["max_drawdown"] == pytest.approx(80.0, rel=0.01)
-    assert dd["max_drawdown_pct"] == pytest.approx((80/550)*100, rel=0.01)
-    assert dd["peak_value"] == 550.0
-    assert dd["trough_value"] == 470.0
+    # Peak at 500, trough at 250, drawdown = 250 (maximum)
+    # (There's also a drawdown from 550 to 470 = 80, but 250 is larger)
+    assert dd["max_drawdown"] == pytest.approx(250.0, rel=0.01)
+    assert dd["max_drawdown_pct"] == pytest.approx((250/500)*100, rel=0.01)
+    assert dd["peak_value"] == 500.0
+    assert dd["trough_value"] == 250.0
 
 
 def test_dashboard_date_range_filter(sample_trades, test_user):

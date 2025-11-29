@@ -179,6 +179,7 @@ class UserManager:
         # Deactivate
         user.is_active = False
         user.updated_at = datetime.utcnow()
+        self.session.flush()
 
         return user
 
@@ -198,6 +199,7 @@ class UserManager:
         user = self.get_user_or_raise(user_id)
         user.is_active = True
         user.updated_at = datetime.utcnow()
+        self.session.flush()
 
         return user
 
@@ -217,6 +219,7 @@ class UserManager:
         user = self.get_user_or_raise(user_id)
         user.is_admin = True
         user.updated_at = datetime.utcnow()
+        self.session.flush()
 
         return user
 
@@ -252,6 +255,7 @@ class UserManager:
         # Revoke admin
         user.is_admin = False
         user.updated_at = datetime.utcnow()
+        self.session.flush()
 
         return user
 
@@ -293,6 +297,7 @@ class UserManager:
 
         # Delete user
         self.session.delete(user)
+        self.session.flush()
 
     def purge_user_data(self, user_id: int, dry_run: bool = False) -> Dict[str, int]:
         """
@@ -399,6 +404,7 @@ class UserManager:
         user.api_key_hash = hashed_key
         user.api_key_created_at = datetime.utcnow()
         user.updated_at = datetime.utcnow()
+        self.session.flush()
 
         return user, raw_key
 

@@ -2,7 +2,8 @@
 
 import json
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import Decimal
 
 from trading_journal.user_management import UserManager
 from trading_journal.models import (
@@ -106,8 +107,6 @@ def create_sample_data(db_session, user_id):
     db_session.add_all(trades)
 
     # Create completed trades
-    from decimal import Decimal
-    from datetime import timedelta
     completed_trades = [
         CompletedTrade(
             user_id=user_id,

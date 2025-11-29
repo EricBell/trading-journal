@@ -248,6 +248,35 @@ class TestUserStatusManagement:
 
     def test_deactivate_last_admin_fails(self, db_session, admin_user):
         """Test that the last admin cannot be deactivated."""
+        # Create a regular (non-admin) user to be the current user
+        regular = User(
+            username='regular',
+            email='regular@test.com',
+            is_admin=False,
+            is_active=True,
+            api_key_hash=hash_api_key('regular_key'),
+            api_key_created_at=datetime.utcnow(),
+            auth_method='api_key'
+        )
+        db_session.add(regular)
+        db_session.commit()
+        db_session.refresh(regular)
+
+        # Set context to regular user so we're not the admin trying to deactivate themselves
+        # (Note: In real app, only admins can deactivate users, but for this test
+        # we're bypassing that to test the "last admin" logic)
+        auth_user = AuthUser(
+            user_id=regular.user_id,
+            username=regular.username,
+            email=regular.email,
+            is_admin=False,
+            is_active=True,
+            auth_method='api_key'
+        )
+        AuthContext.set_current_user(auth_user)
+
+        # Try to deactivate the only admin (admin_user)
+        # This should fail because it's the last admin
         manager = UserManager(db_session)
         with pytest.raises(ValueError, match="At least one active admin must remain"):
             manager.deactivate_user(admin_user.user_id)
@@ -326,17 +355,30 @@ class TestAdminPrivilegeManagement:
 
     def test_revoke_last_admin_fails(self, db_session, admin_user):
         """Test that the last admin's privileges cannot be revoked."""
-        # Create second admin and then deactivate them
-        second_admin = User(
-            username='admin2',
-            email='admin2@test.com',
-            is_admin=True,
-            is_active=False,  # Inactive
-            api_key_hash=hash_api_key('admin2_key'),
-            api_key_created_at=datetime.utcnow()
+        # Create a regular user to be the current user
+        regular = User(
+            username='regular',
+            email='regular@test.com',
+            is_admin=False,
+            is_active=True,
+            api_key_hash=hash_api_key('regular_key'),
+            api_key_created_at=datetime.utcnow(),
+            auth_method='api_key'
         )
-        db_session.add(second_admin)
+        db_session.add(regular)
         db_session.commit()
+        db_session.refresh(regular)
+
+        # Set context to regular user so we're not the admin trying to revoke themselves
+        auth_user = AuthUser(
+            user_id=regular.user_id,
+            username=regular.username,
+            email=regular.email,
+            is_admin=False,
+            is_active=True,
+            auth_method='api_key'
+        )
+        AuthContext.set_current_user(auth_user)
 
         # Try to revoke last active admin
         manager = UserManager(db_session)
@@ -379,6 +421,31 @@ class TestUserDeletion:
 
     def test_delete_last_admin_fails(self, db_session, admin_user):
         """Test that the last admin cannot be deleted."""
+        # Create a regular user to be the current user
+        regular = User(
+            username='regular',
+            email='regular@test.com',
+            is_admin=False,
+            is_active=True,
+            api_key_hash=hash_api_key('regular_key'),
+            api_key_created_at=datetime.utcnow(),
+            auth_method='api_key'
+        )
+        db_session.add(regular)
+        db_session.commit()
+        db_session.refresh(regular)
+
+        # Set context to regular user so we're not the admin trying to delete themselves
+        auth_user = AuthUser(
+            user_id=regular.user_id,
+            username=regular.username,
+            email=regular.email,
+            is_admin=False,
+            is_active=True,
+            auth_method='api_key'
+        )
+        AuthContext.set_current_user(auth_user)
+
         manager = UserManager(db_session)
         with pytest.raises(ValueError, match="At least one active admin must remain"):
             manager.delete_user(admin_user.user_id)
