@@ -1,6 +1,7 @@
 """Command-line interface for trading journal."""
 
 import logging
+import os
 from pathlib import Path
 
 import click
@@ -33,11 +34,48 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _mask_api_key(api_key: str) -> str:
+    """
+    Mask API key for display, showing first 4 and last 4 characters.
+
+    Args:
+        api_key: The API key to mask
+
+    Returns:
+        Masked API key string (e.g., "sk_a****xyz")
+    """
+    if len(api_key) <= 8:
+        return "****"
+    return f"{api_key[:4]}****{api_key[-4:]}"
+
+
 @click.group()
 @click.version_option()
 def main() -> None:
     """Trading Journal - PostgreSQL-based trading data ingestion and analysis."""
     pass
+
+
+@main.command()
+@click.option('--reveal', is_flag=True, help='Show full API key value (default: masked)')
+def env(reveal: bool) -> None:
+    """Display authentication environment variables in export format."""
+
+    # Get current values from environment
+    admin_mode_enabled = os.getenv("ADMIN_MODE_ENABLED", "")
+    admin_user_id = os.getenv("ADMIN_MODE_USER_ID", "")
+    api_key = os.getenv("TRADING_JOURNAL_API_KEY", "")
+
+    # Mask API key by default
+    if api_key and not reveal:
+        api_key_display = _mask_api_key(api_key)
+    else:
+        api_key_display = api_key
+
+    # Display in export format
+    click.echo(f"export ADMIN_MODE_ENABLED={admin_mode_enabled}")
+    click.echo(f"export ADMIN_MODE_USER_ID={admin_user_id}")
+    click.echo(f"export TRADING_JOURNAL_API_KEY={api_key_display}")
 
 
 @main.group()
