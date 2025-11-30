@@ -4,7 +4,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional, Dict, Any, List
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class OptionDetails(BaseModel):
@@ -64,25 +64,29 @@ class NdjsonRecord(BaseModel):
     # Amendment details (for amendment records)
     amendment: Optional[Dict[str, Any]] = None
 
-    @validator('side')
+    @field_validator('side')
+    @classmethod
     def validate_side(cls, v):
         if v is not None and v not in ['BUY', 'SELL']:
             raise ValueError('side must be BUY or SELL')
         return v
 
-    @validator('pos_effect')
+    @field_validator('pos_effect')
+    @classmethod
     def validate_pos_effect(cls, v):
         if v is not None and v not in ['TO OPEN', 'TO CLOSE']:
             raise ValueError('pos_effect must be TO OPEN or TO CLOSE')
         return v
 
-    @validator('event_type')
+    @field_validator('event_type')
+    @classmethod
     def validate_event_type(cls, v):
         if v is not None and v not in ['fill', 'cancel', 'amend']:
             raise ValueError('event_type must be fill, cancel, or amend')
         return v
 
-    @validator('asset_type')
+    @field_validator('asset_type')
+    @classmethod
     def validate_asset_type(cls, v):
         if v is not None and v not in ['STOCK', 'OPTION', 'ETF']:
             raise ValueError('asset_type must be STOCK, OPTION, or ETF')
