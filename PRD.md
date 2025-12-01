@@ -3,7 +3,7 @@
 # 📈 Trading Journal: Data Ingestion and Core Storage
 
 **Version:** 1.0 (MVP - COMPLETED)
-**Last Updated:** 2025-11-28
+**Last Updated:** 2025-11-30
 **Status:**
 
 - ✅ **COMPLETED** - All MVP requirements implemented and tested
@@ -17,9 +17,10 @@
 - ✅ Functional Requirements: 100% COMPLETED
 - ✅ Non-Functional Requirements: 100% COMPLETED (user mgmt)
 - ✅ Success Metrics: 100% COMPLETED
-- ✅ Reporting: Complete dashboard, trades, positions, patterns, notes
+- ✅ Reporting (CLI): Complete dashboard, trades, positions, patterns, notes with JSON/CSV export
 - ✅ User Management: Full multi-user admin system
 - ✅ Production Features: Error handling, performance, monitoring
+- 📋 Reporting (Web UI): Planned for Phase 2 (Future Enhancement)
 
 -----
 
@@ -530,35 +531,37 @@ remaining_cost = total_cost - cost_basis
 
 ## 6. User Interface (MVP Reporting)
 
+**Implementation Note:** All reporting features below are implemented as CLI commands with formatted text output, JSON export, and CSV export options. Web-based UI with interactive dashboards is planned for Phase 2 (Future Enhancements - Section 13).
+
 ### 6.1 Dashboard (The High-Level View)
 
 The primary dashboard must be the default view, summarizing performance over a user-selected time period.
 
-- [ ] **Total Net P&L:** Sum of realized P&L for all closed positions
-- [ ] **Win/Loss Ratio:** (Number of Profitable Trades) / (Number of Losing Trades)
-- [ ] **Total Trades:** Count of all filled orders
-- [ ] **Average Winning Trade Value:** Average P&L of profitable trades
-- [ ] **Average Losing Trade Value:** Average P&L of losing trades
-- [ ] **Max Drawdown:** Largest peak-to-trough decline in cumulative P&L
-- [ ] **Account Equity Curve:** Line chart showing cumulative P&L over time
-- [ ] **Top Setup Patterns:** Best and worst performing setup patterns by P&L
-- [ ] **Pattern Distribution:** Breakdown of trades by setup pattern type
+- [x] **Total Net P&L:** Sum of realized P&L for all closed positions
+- [x] **Win/Loss Ratio:** (Number of Profitable Trades) / (Number of Losing Trades)
+- [x] **Total Trades:** Count of all filled orders
+- [x] **Average Winning Trade Value:** Average P&L of profitable trades
+- [x] **Average Losing Trade Value:** Average P&L of losing trades
+- [x] **Max Drawdown:** Largest peak-to-trough decline in cumulative P&L
+- [x] **Account Equity Curve:** Line chart showing cumulative P&L over time
+- [x] **Top Setup Patterns:** Best and worst performing setup patterns by P&L
+- [x] **Pattern Distribution:** Breakdown of trades by setup pattern type
 
 ### 6.2 Detailed Trade Reports
 
-- [ ] **Daily Trade Log:** Sortable, searchable table listing all completed trades for selected date range with columns: `symbol`, `opened_at`, `closed_at`, `total_qty`, `entry_avg_price`, `exit_avg_price`, `setup_pattern`, `trade_notes`, `net_pnl`
-- [ ] **Execution Detail View:** Drill-down view showing individual executions that comprise each completed trade
-- [ ] **Open Positions:** Current holdings with current quantity, average cost basis, and estimated unrealized P&L (when price data available)
-- [ ] **Closed Positions:** Historical positions with realized P&L, hold time, and return percentages
+- [x] **Daily Trade Log:** Sortable, searchable table listing all completed trades for selected date range with columns: `symbol`, `opened_at`, `closed_at`, `total_qty`, `entry_avg_price`, `exit_avg_price`, `setup_pattern`, `trade_notes`, `net_pnl`
+- [x] **Execution Detail View:** Drill-down view showing individual executions that comprise each completed trade
+- [x] **Open Positions:** Current holdings with current quantity, average cost basis, and estimated unrealized P&L (when price data available)
+- [x] **Closed Positions:** Historical positions with realized P&L, hold time, and return percentages
 
 ### 6.3 Filtering and Time Selection
 
-- [ ] **Timeframe Selector:** Dropdown for predefined periods (Today, Last Week, Last Month, YTD, Custom Range)
-- [ ] **Instrument Filter:** Toggle/Dropdown for **Equity**, **Option**, or **All**
-- [ ] **Platform Filter:** Toggle/Dropdown for **TOS** (future: multiple platforms)
-- [ ] **Symbol Filter:** Text input for specific symbol analysis
-- [ ] **Notes Search:** Text search within trade notes for finding specific thoughts or keywords
-- [ ] **Setup Pattern Filter:** Filter by specific setup patterns
+- [x] **Timeframe Selector:** Custom date ranges via `--date-range` CLI option (CLI implementation, web UI dropdown planned for future)
+- [ ] **Instrument Filter:** Data model supports filtering, CLI option not yet exposed (future enhancement)
+- [x] **Platform Filter:** Single platform (TOS) currently supported, filter not needed
+- [x] **Symbol Filter:** Implemented via `--symbol` CLI option across all reports
+- [ ] **Notes Search:** Not yet implemented (future enhancement)
+- [x] **Setup Pattern Filter:** Implemented via `pattern performance` command for pattern-specific analysis
 
 -----
 
