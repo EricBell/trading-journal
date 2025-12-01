@@ -1,0 +1,23 @@
+﻿Today's Trade Activity for 79967586SCHW (Contributory IRA) on 12/1/25 15:21:27
+
+Working Orders
+Notes,,Time Placed,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,PRICE,,TIF,Mark,Status
+
+Filled Orders
+,,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Price Improvement,Order Type
+,,12/1/25 09:47:41,STOCK,SELL,-15,TO CLOSE,QTTB,,,STOCK,5.73,5.73,-,STP
+,,12/1/25 09:46:47,STOCK,SELL,-10,TO CLOSE,QTTB,,,STOCK,5.81,5.81,-,LMT
+,,12/1/25 09:43:32,STOCK,SELL,-25,TO CLOSE,QTTB,,,STOCK,5.66,5.66,-,LMT
+,,12/1/25 09:43:18,STOCK,SELL,-25,TO CLOSE,QTTB,,,STOCK,5.72,5.72,-,LMT
+,,12/1/25 09:43:10,STOCK,SELL,-25,TO CLOSE,QTTB,,,STOCK,5.37,5.37,-,LMT
+,,12/1/25 09:36:28,STOCK,BUY,+100,TO OPEN,QTTB,,,STOCK,4.96,4.96,-,LMT
+
+Canceled Orders
+Notes,,Time Canceled,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,PRICE,,TIF,Status
+,,12/1/25 09:46:46,STOCK,SELL,-25,TO CLOSE,QTTB,,,STOCK,~,MKT,DAY,CANCELED
+,,,,,,,,,,,4.96,STP,STD,
+,,12/1/25 09:43:01,STOCK,SELL,-100,TO CLOSE,QTTB,,,STOCK,~,MKT,DAY,CANCELED
+,,,,,,,,,,,4.42,STP,STD,
+
+Rolling Strategies
+Covered Call Position,New Exp,Call By,Begin (Days),Order Price,Active Time,Move to MKT Time,Status

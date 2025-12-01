@@ -1,7 +1,7 @@
 """Trade completion engine - groups executions into completed round-trip trades."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Dict, Any, Optional
 from decimal import Decimal
 
@@ -189,14 +189,31 @@ class TradeCompletionEngine:
         )
         return completed_trade
 
-    def get_completed_trades_summary(self, symbol: Optional[str] = None) -> Dict[str, Any]:
-        """Get summary of completed trades."""
+    def get_completed_trades_summary(
+        self,
+        symbol: Optional[str] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None
+    ) -> Dict[str, Any]:
+        """Get summary of completed trades with optional filtering."""
+        user_id = AuthContext.require_user().user_id
 
         with self.db_manager.get_session() as session:
-            query = session.query(CompletedTrade)
+            query = session.query(CompletedTrade).filter(
+                CompletedTrade.user_id == user_id
+            )
 
             if symbol:
                 query = query.filter(CompletedTrade.symbol == symbol)
+
+            # Apply date filters
+            if start_date:
+                query = query.filter(CompletedTrade.closed_at >= start_date)
+            if end_date:
+                # Include the entire end date (through end of day)
+                query = query.filter(CompletedTrade.closed_at < datetime.combine(
+                    end_date, datetime.max.time()
+                ))
 
             completed_trades = query.all()
 

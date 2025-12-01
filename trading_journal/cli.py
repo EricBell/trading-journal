@@ -515,17 +515,33 @@ def _display_dashboard_summary(data: dict, detailed: bool = False) -> None:
     help='Comma-separated sort keys (e.g. "date,entm,pnl"). '
          'If omitted, the report layout default is used (if defined).',
 )
+@require_authentication
 def trades(report_name: str, symbol: str, date_range: str, output_format: str, sort_keys: str) -> None:
     """List completed trades using a named report layout."""
     try:
         from .trade_completion import TradeCompletionEngine
+        from .dashboard import DashboardEngine
         import json
         import csv
         import sys
         from datetime import datetime
 
+        # Parse date range if provided
+        start_date, end_date = None, None
+        if date_range:
+            try:
+                dashboard_engine = DashboardEngine()
+                start_date, end_date = dashboard_engine.parse_date_range(date_range)
+            except ValueError as e:
+                click.echo(f"❌ Invalid date range: {e}", err=True)
+                raise click.Abort()
+
         engine = TradeCompletionEngine()
-        summary = engine.get_completed_trades_summary(symbol)
+        summary = engine.get_completed_trades_summary(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date
+        )
         if "message" in summary:
             click.echo(summary["message"])
             return
@@ -604,6 +620,8 @@ def trades(report_name: str, symbol: str, date_range: str, output_format: str, s
         click.echo("📋 Completed Trades Report")
         if symbol:
             click.echo(f"Symbol: {symbol}")
+        if date_range:
+            click.echo(f"Date Range: {date_range}")
         click.echo(f"\n📊 Summary:")
         click.echo(f"   Total Trades: {summary['total_trades']}")
         click.echo(f"   Winning Trades: {summary['winning_trades']}")
@@ -732,6 +750,7 @@ def trades(report_name: str, symbol: str, date_range: str, output_format: str, s
 @report.command()
 @click.option('--open-only', is_flag=True, help='Show only open positions')
 @click.option('--symbol', help='Filter by symbol')
+@require_authentication
 def positions(open_only: bool, symbol: str) -> None:
     """Show position report."""
     try:
