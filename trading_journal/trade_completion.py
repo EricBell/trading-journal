@@ -11,6 +11,7 @@ from sqlalchemy import and_, func
 from .database import db_manager
 from .models import Trade, CompletedTrade
 from .authorization import AuthContext
+from .positions import get_contract_multiplier
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +92,18 @@ class TradeCompletionEngine:
                 if trade.pos_effect == 'TO CLOSE':
                     logger.warning(f"Skipping a 'TO CLOSE' trade that appears before any 'TO OPEN': {trade.trade_id}")
                     continue
-            
+
             cycle_executions.append(trade)
-            
-            # The qty is already signed, so just add it to the current position
-            current_position += trade.qty
+
+            # Sign the qty based on side and pos_effect
+            # TO OPEN: BUY = positive, SELL = negative (short)
+            # TO CLOSE: BUY = negative (closing long), SELL = positive (closing short)
+            if trade.pos_effect == 'TO OPEN':
+                signed_qty = trade.qty if trade.side == 'BUY' else -trade.qty
+            else:  # TO CLOSE
+                signed_qty = -trade.qty if trade.side == 'SELL' else trade.qty
+
+            current_position += signed_qty
 
             if current_position == 0:
                 # Position is closed, a cycle is complete.
@@ -117,17 +125,20 @@ class TradeCompletionEngine:
             logger.warning(f"Trade cycle for {cycle_trades[0].symbol} is incomplete, skipping.")
             return
 
+        # Get contract multiplier (100 for options, 1 for equity/ETF)
+        multiplier = get_contract_multiplier(cycle_trades[0].instrument_type)
+
         # Calculate weighted average entry price from all "TO OPEN" trades
-        total_open_cost = sum(Decimal(str(t.net_price)) * abs(t.qty) for t in opens)
+        total_open_cost = sum(Decimal(str(t.net_price)) * abs(t.qty) * multiplier for t in opens)
         total_open_qty = sum(abs(t.qty) for t in opens)
         entry_avg_price = total_open_cost / total_open_qty if total_open_qty else Decimal(0)
 
         # Calculate weighted average exit price from all "TO CLOSE" trades
-        total_close_proceeds = sum(Decimal(str(t.net_price)) * abs(t.qty) for t in closes)
+        total_close_proceeds = sum(Decimal(str(t.net_price)) * abs(t.qty) * multiplier for t in closes)
         total_close_qty = sum(abs(t.qty) for t in closes)
         exit_avg_price = total_close_proceeds / total_close_qty if total_close_qty else Decimal(0)
-        
-        # Gross cost and proceeds
+
+        # Gross cost and proceeds (already multiplied by contract multiplier)
         gross_cost = total_open_cost
         gross_proceeds = total_close_proceeds
 

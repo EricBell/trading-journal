@@ -5,7 +5,7 @@ from datetime import datetime, date
 from decimal import Decimal
 
 from trading_journal.models import Trade, Position, CompletedTrade
-from trading_journal.positions import PositionTracker
+from trading_journal.positions import PositionTracker, get_contract_multiplier
 from trading_journal.trade_completion import TradeCompletionEngine
 from trading_journal.schemas import NdjsonRecord, OptionDetails
 
@@ -341,6 +341,192 @@ def test_validation_errors():
 
     with pytest.raises(ValueError, match="asset_type must be STOCK, OPTION, or ETF"):
         NdjsonRecord(**invalid_asset_type_record)
+
+
+def test_contract_multiplier():
+    """Test contract multiplier function."""
+    assert get_contract_multiplier("EQUITY") == 1
+    assert get_contract_multiplier("OPTION") == 100
+
+
+def test_option_position_opening():
+    """Test options position opening with 100x multiplier."""
+    # Create options buy trade - 1 contract at $2.50 should cost $250
+    option_trade = Trade(
+        trade_id=1,
+        unique_key="test_option_buy_1",
+        exec_timestamp=datetime(2025, 1, 15, 10, 0),
+        event_type="fill",
+        symbol="SPY",
+        instrument_type="OPTION",
+        side="BUY",
+        qty=1,
+        pos_effect="TO OPEN",
+        net_price=2.50,
+        raw_data="test option buy",
+        exp_date=date(2025, 1, 21),
+        strike_price=Decimal('673.0'),
+        option_type="CALL"
+    )
+
+    position = Position(
+        symbol="SPY",
+        instrument_type="OPTION",
+        current_qty=0,
+        avg_cost_basis=Decimal('0'),
+        total_cost=Decimal('0'),
+        realized_pnl=Decimal('0')
+    )
+
+    tracker = PositionTracker()
+    tracker._handle_position_open(position, option_trade)
+
+    # 1 contract at $2.50 premium = $250 total cost
+    assert position.current_qty == 1
+    assert position.avg_cost_basis == Decimal('250.00')  # $2.50 * 100
+    assert position.total_cost == Decimal('250.00')  # $2.50 * 1 * 100
+
+
+def test_option_position_closing_with_profit():
+    """Test options position closing with profit and 100x multiplier."""
+    # Start with long 1 SPY call position at $250 cost basis
+    position = Position(
+        symbol="SPY",
+        instrument_type="OPTION",
+        current_qty=1,
+        avg_cost_basis=Decimal('250.00'),
+        total_cost=Decimal('250.00'),
+        realized_pnl=Decimal('0')
+    )
+
+    # Sell the contract for $3.00 premium ($300 proceeds)
+    sell_trade = Trade(
+        trade_id=2,
+        unique_key="test_option_sell_1",
+        exec_timestamp=datetime(2025, 1, 16, 15, 0),
+        event_type="fill",
+        symbol="SPY",
+        instrument_type="OPTION",
+        side="SELL",
+        qty=1,
+        pos_effect="TO CLOSE",
+        net_price=3.00,
+        raw_data="test option sell",
+        exp_date=date(2025, 1, 21),
+        strike_price=Decimal('673.0'),
+        option_type="CALL"
+    )
+
+    tracker = PositionTracker()
+    tracker._handle_position_close(position, sell_trade)
+
+    # P&L should be $300 (proceeds) - $250 (cost basis) = $50 profit
+    assert sell_trade.realized_pnl == 50.0
+    assert position.current_qty == 0
+    assert position.realized_pnl == Decimal('50.0')
+
+
+def test_option_position_closing_with_loss():
+    """Test options position closing with loss and 100x multiplier."""
+    # Start with long 2 SPY call position at $500 total cost basis
+    position = Position(
+        symbol="SPY",
+        instrument_type="OPTION",
+        current_qty=2,
+        avg_cost_basis=Decimal('250.00'),  # $2.50 * 100 per contract
+        total_cost=Decimal('500.00'),  # 2 contracts * $250 each
+        realized_pnl=Decimal('0')
+    )
+
+    # Sell 1 contract for $1.50 premium ($150 proceeds)
+    sell_trade = Trade(
+        trade_id=3,
+        unique_key="test_option_sell_2",
+        exec_timestamp=datetime(2025, 1, 16, 15, 0),
+        event_type="fill",
+        symbol="SPY",
+        instrument_type="OPTION",
+        side="SELL",
+        qty=1,
+        pos_effect="TO CLOSE",
+        net_price=1.50,
+        raw_data="test option sell",
+        exp_date=date(2025, 1, 21),
+        strike_price=Decimal('673.0'),
+        option_type="CALL"
+    )
+
+    tracker = PositionTracker()
+    tracker._handle_position_close(position, sell_trade)
+
+    # P&L should be $150 (proceeds) - $250 (cost basis for 1 contract) = -$100 loss
+    assert sell_trade.realized_pnl == -100.0
+    assert position.current_qty == 1  # 1 contract remaining
+    assert position.realized_pnl == Decimal('-100.0')
+    assert position.total_cost == Decimal('250.0')  # Cost for remaining 1 contract
+
+
+def test_equity_vs_option_multiplier_difference():
+    """Test that equity and options use different multipliers."""
+    # Equity trade - no multiplier
+    equity_position = Position(
+        symbol="AAPL",
+        instrument_type="EQUITY",
+        current_qty=0,
+        avg_cost_basis=Decimal('0'),
+        total_cost=Decimal('0'),
+        realized_pnl=Decimal('0')
+    )
+
+    equity_trade = Trade(
+        trade_id=4,
+        unique_key="equity_test",
+        exec_timestamp=datetime(2025, 1, 15, 10, 0),
+        event_type="fill",
+        symbol="AAPL",
+        instrument_type="EQUITY",
+        side="BUY",
+        qty=100,
+        pos_effect="TO OPEN",
+        net_price=150.00,
+        raw_data="equity test"
+    )
+
+    # Options trade - 100x multiplier
+    option_position = Position(
+        symbol="SPY",
+        instrument_type="OPTION",
+        current_qty=0,
+        avg_cost_basis=Decimal('0'),
+        total_cost=Decimal('0'),
+        realized_pnl=Decimal('0')
+    )
+
+    option_trade = Trade(
+        trade_id=5,
+        unique_key="option_test",
+        exec_timestamp=datetime(2025, 1, 15, 10, 0),
+        event_type="fill",
+        symbol="SPY",
+        instrument_type="OPTION",
+        side="BUY",
+        qty=1,
+        pos_effect="TO OPEN",
+        net_price=1.50,
+        raw_data="option test"
+    )
+
+    tracker = PositionTracker()
+    tracker._handle_position_open(equity_position, equity_trade)
+    tracker._handle_position_open(option_position, option_trade)
+
+    # Equity: 100 shares * $150 = $15,000 total cost
+    assert equity_position.total_cost == Decimal('15000.00')
+    assert equity_position.avg_cost_basis == Decimal('150.00')
+
+    # Option: 1 contract * $1.50 * 100 = $150 total cost
+    assert option_position.total_cost == Decimal('150.00')
+    assert option_position.avg_cost_basis == Decimal('150.00')
 
     # Verify that ETF asset_type is valid (should not raise error)
     valid_etf_record = {

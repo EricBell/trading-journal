@@ -15,6 +15,15 @@ from .models import Trade, Position, CompletedTrade
 logger = logging.getLogger(__name__)
 
 
+def get_contract_multiplier(instrument_type: str) -> int:
+    """Get the contract multiplier for the given instrument type.
+
+    Options contracts represent 100 shares, so premiums must be multiplied by 100.
+    Equity/ETF are 1:1.
+    """
+    return 100 if instrument_type == "OPTION" else 1
+
+
 class PositionTracker:
     """Manages position tracking and P&L calculations using average cost basis."""
 
@@ -108,7 +117,9 @@ class PositionTracker:
             return
 
         trade_qty = trade.qty
-        trade_cost = Decimal(str(trade.net_price)) * abs(trade_qty)
+        # Apply contract multiplier for options (100x) vs equity (1x)
+        multiplier = get_contract_multiplier(trade.instrument_type)
+        trade_cost = Decimal(str(trade.net_price)) * abs(trade_qty) * multiplier
 
         # Determine direction based on side
         if trade.side == "SELL":
@@ -119,7 +130,7 @@ class PositionTracker:
             # New position
             position.current_qty = trade_qty
             position.total_cost = trade_cost
-            position.avg_cost_basis = Decimal(str(trade.net_price))
+            position.avg_cost_basis = Decimal(str(trade.net_price)) * multiplier
             if not position.opened_at:
                 position.opened_at = trade.exec_timestamp
         else:
@@ -166,9 +177,11 @@ class PositionTracker:
         shares_closed = min(shares_closed, abs(position.current_qty))
 
         # Calculate P&L using average cost basis
+        # Apply contract multiplier for options
+        multiplier = get_contract_multiplier(trade.instrument_type)
         cost_basis_per_share = position.avg_cost_basis
         cost_basis = cost_basis_per_share * shares_closed
-        proceeds = Decimal(str(trade.net_price)) * shares_closed
+        proceeds = Decimal(str(trade.net_price)) * shares_closed * multiplier
 
         if position.current_qty > 0:  # Long position
             realized_pnl = proceeds - cost_basis
