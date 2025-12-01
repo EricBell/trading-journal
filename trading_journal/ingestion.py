@@ -217,6 +217,7 @@ class NdjsonIngester:
                     set_=dict(
                         # Update key fields if record already exists
                         exec_timestamp=stmt.excluded.exec_timestamp,
+                        qty=stmt.excluded.qty,  # Important: update qty to handle signed->unsigned conversion
                         net_price=stmt.excluded.net_price,
                         realized_pnl=stmt.excluded.realized_pnl,
                         processing_timestamp=stmt.excluded.processing_timestamp
@@ -311,7 +312,7 @@ class NdjsonIngester:
             "symbol": record.symbol,
             "instrument_type": instrument_type,
             "side": record.side,
-            "qty": record.qty,
+            "qty": abs(record.qty) if record.qty else None,  # Always store as positive
             "pos_effect": record.pos_effect,
             "price": record.price,
             "net_price": record.net_price,

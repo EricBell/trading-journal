@@ -1,0 +1,22 @@
+﻿Today's Trade Activity for 70445085SCHW (Individual) on 12/1/25 15:57:11
+
+Working Orders
+Notes,,Time Placed,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,PRICE,,TIF,Mark,Status
+
+Filled Orders
+,,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Price Improvement,Order Type
+,,12/1/25 15:55:47,SINGLE,SELL,-1,TO CLOSE,SPY,1 DEC 25,680,PUT,.41,.41,-,STP
+,,12/1/25 15:55:47,SINGLE,SELL,-1,TO CLOSE,SPY,1 DEC 25,680,PUT,.41,.41,-,STP
+,,12/1/25 15:54:53,SINGLE,BUY,+2,TO OPEN,SPY,1 DEC 25,680,PUT,.31,.31,-,STP
+
+Canceled Orders
+Notes,,Time Canceled,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,PRICE,,TIF,Status
+,,12/1/25 15:55:27,SINGLE,SELL,-2,TO CLOSE,SPY,1 DEC 25,680,PUT,~,MKT,DAY,CANCELED
+,,,RE #1004807139660,,,,,,,,.45,STP,STD,
+,,12/1/25 15:55:18,SINGLE,SELL,-2,TO CLOSE,SPY,1 DEC 25,680,PUT,~,MKT,DAY,CANCELED
+,,,RE #1004807139653,,,,,,,,.36,STP,STD,
+,,12/1/25 15:55:12,SINGLE,SELL,-2,TO CLOSE,SPY,1 DEC 25,680,PUT,~,MKT,DAY,CANCELED
+,,,,,,,,,,,.16,STP,STD,
+
+Rolling Strategies
+Covered Call Position,New Exp,Call By,Begin (Days),Order Price,Active Time,Move to MKT Time,Status
