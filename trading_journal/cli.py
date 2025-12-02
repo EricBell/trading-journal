@@ -315,20 +315,20 @@ def trades() -> None:
 
 
 @trades.command("show")
-@click.option('--completed-trade-id', type=int, required=True, help='Completed trade ID')
+@click.option('--id', type=int, required=True, help='Completed trade ID')
 @require_authentication
-def show_trade(completed_trade_id: int) -> None:
+def show_trade(id: int) -> None:
     """Show details for a single completed trade and its executions."""
     try:
         user_id = AuthContext.require_user().user_id
         with db_manager.get_session() as session:
             trade = session.query(CompletedTrade).filter_by(
-                completed_trade_id=completed_trade_id,
+                completed_trade_id=id,
                 user_id=user_id
             ).one_or_none()
 
             if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {completed_trade_id} not found.", err=True)
+                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
                 raise click.Abort()
 
             click.echo(f"📋 Details for Completed Trade ID: {trade.completed_trade_id}")
@@ -854,24 +854,24 @@ def pattern() -> None:
 
 
 @pattern.command()
-@click.option('--completed-trade-id', type=int, help='Completed trade ID to annotate')
+@click.option('--id', type=int, help='Completed trade ID to annotate')
 @click.option('--symbol', help='Symbol to annotate (for bulk operations)')
 @click.option('--date', help='Date in YYYY-MM-DD format (for bulk operations)')
 @click.option('--pattern', required=True, help='Setup pattern name')
-def annotate(completed_trade_id: int, symbol: str, date: str, pattern: str) -> None:
+def annotate(id: int, symbol: str, date: str, pattern: str) -> None:
     """Annotate completed trades with setup patterns."""
     try:
-        if not completed_trade_id:
-            click.echo("Error: --completed-trade-id is required for this operation.", err=True)
+        if not id:
+            click.echo("Error: --id is required for this operation.", err=True)
             raise click.Abort()
         with db_manager.get_session() as session:
-            trade = session.query(CompletedTrade).filter_by(completed_trade_id=completed_trade_id).one_or_none()
+            trade = session.query(CompletedTrade).filter_by(completed_trade_id=id).one_or_none()
             if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {completed_trade_id} not found.", err=True)
+                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
                 raise click.Abort()
             trade.setup_pattern = pattern
             session.commit()
-            click.echo(f"✅ Successfully annotated trade {completed_trade_id} with pattern: '{pattern}'")
+            click.echo(f"✅ Successfully annotated trade {id} with pattern: '{pattern}'")
     except Exception as e:
         click.echo(f"❌ Pattern annotation failed: {e}", err=True)
         raise click.Abort()
@@ -1069,41 +1069,41 @@ def notes() -> None:
 
 
 @notes.command("add")
-@click.option('--completed-trade-id', type=int, required=True, help='Completed trade ID')
+@click.option('--id', type=int, required=True, help='Completed trade ID')
 @click.option('--text', required=True, help='Note text')
 @require_authentication
-def add_note(completed_trade_id: int, text: str) -> None:
+def add_note(id: int, text: str) -> None:
     """Add notes to a completed trade."""
     try:
         with db_manager.get_session() as session:
-            trade = session.query(CompletedTrade).filter_by(completed_trade_id=completed_trade_id).one_or_none()
+            trade = session.query(CompletedTrade).filter_by(completed_trade_id=id).one_or_none()
             if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {completed_trade_id} not found.", err=True)
+                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
                 raise click.Abort()
             trade.trade_notes = text
             session.commit()
-            click.echo(f"✅ Successfully added note to trade {completed_trade_id}.")
+            click.echo(f"✅ Successfully added note to trade {id}.")
     except Exception as e:
         click.echo(f"❌ Note addition failed: {e}", err=True)
         raise click.Abort()
 
 
 @notes.command("show")
-@click.option('--completed-trade-id', type=int, required=True, help='Completed trade ID')
+@click.option('--id', type=int, required=True, help='Completed trade ID')
 @require_authentication
-def show_notes(completed_trade_id: int) -> None:
+def show_notes(id: int) -> None:
     """Show notes for a completed trade."""
     try:
         user_id = AuthContext.require_user().user_id
         with db_manager.get_session() as session:
             trade = session.query(CompletedTrade).filter_by(
-                completed_trade_id=completed_trade_id,
+                completed_trade_id=id,
                 user_id=user_id
             ).one_or_none()
             if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {completed_trade_id} not found.", err=True)
+                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
                 raise click.Abort()
-            click.echo(f"🗒️ Notes for trade {completed_trade_id}:")
+            click.echo(f"🗒️ Notes for trade {id}:")
             if trade.trade_notes:
                 click.echo(trade.trade_notes)
             else:
@@ -1114,26 +1114,26 @@ def show_notes(completed_trade_id: int) -> None:
 
 
 @notes.command("edit")
-@click.option('--completed-trade-id', type=int, required=True, help='Completed trade ID')
+@click.option('--id', type=int, required=True, help='Completed trade ID')
 @click.option('--text', required=True, help='New note text')
 @require_authentication
-def edit_note(completed_trade_id: int, text: str) -> None:
+def edit_note(id: int, text: str) -> None:
     """Edit the notes for a completed trade."""
     try:
         user_id = AuthContext.require_user().user_id
         with db_manager.get_session() as session:
             trade = session.query(CompletedTrade).filter_by(
-                completed_trade_id=completed_trade_id,
+                completed_trade_id=id,
                 user_id=user_id
             ).one_or_none()
 
             if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {completed_trade_id} not found.", err=True)
+                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
                 raise click.Abort()
 
             trade.trade_notes = text
             session.commit()
-            click.echo(f"✅ Successfully edited note for trade {completed_trade_id}.")
+            click.echo(f"✅ Successfully edited note for trade {id}.")
 
     except Exception as e:
         click.echo(f"❌ Note editing failed: {e}", err=True)

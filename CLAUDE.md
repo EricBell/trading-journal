@@ -115,14 +115,14 @@ uv run python main.py report positions --symbol AAPL
 #### Pattern & Notes Management (Implemented)
 ```bash
 # Pattern annotation
-uv run python main.py pattern annotate --completed-trade-id 123 --pattern "MACD Scalp"
+uv run python main.py pattern annotate --id 123 --pattern "MACD Scalp"
 uv run python main.py pattern list
 uv run python main.py pattern performance --pattern "MACD Scalp"
 
 # Trade notes
-uv run python main.py notes add --completed-trade-id 123 --text "Great entry timing"
-uv run python main.py notes show --completed-trade-id 123
-uv run python main.py notes edit --completed-trade-id 123 --text "Updated notes"
+uv run python main.py notes add --id 123 --text "Great entry timing"
+uv run python main.py notes show --id 123
+uv run python main.py notes edit --id 123 --text "Updated notes"
 ```
 
 #### User Management (Admin-Only - Planned)
