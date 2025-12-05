@@ -219,6 +219,34 @@ This project uses a **tasks.md** file to enumerate all tasks required to impleme
 - **Annotations**: Setup patterns and notes apply to completed trades, not individual executions
 - **Error Handling**: Comprehensive transaction-based error recovery with rollback capabilities
 
+## Version Management
+
+**Versioning System**: Uses `version_manager.py` with `version.json` for automatic file tracking and version control.
+
+### Version Increment Rules
+- **Patch increment** (0.2.0 → 0.2.1): Every time work is completed and ready for testing
+- **Minor increment** (0.2.0 → 0.3.0): When adding new features OR when existing features change significantly
+- **Major increment** (0.x.x → 1.0.0): Breaking changes or major releases
+
+### Version Management Commands
+```bash
+# Check current version
+python version_manager.py status
+
+# Check for file changes and auto-increment patch if needed
+python version_manager.py check
+
+# Manual version increments
+python version_manager.py patch    # Increment patch version
+python version_manager.py minor    # Increment minor version
+python version_manager.py major    # Increment major version
+
+# Reset to specific version
+python version_manager.py reset 0 2 0    # Reset to v0.2.0
+```
+
+**Current Version**: Check with `python version_manager.py status`
+
 ## Related Projects
 
 The application depends on output from the **Schwab CSV to JSON Converter** located at `../schwab-csv-to-json` for NDJSON input data.
