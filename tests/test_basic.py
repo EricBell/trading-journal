@@ -8,7 +8,7 @@ def test_imports():
     from trading_journal.config import db_config, logging_config, app_config
     from trading_journal.cli import main
 
-    assert __version__ == "0.1.0"
+    assert __version__ == "0.2.0"
     assert db_config is not None
     assert logging_config is not None
     assert app_config is not None
