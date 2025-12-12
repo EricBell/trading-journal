@@ -1,49 +1,73 @@
-"""Configuration management for trading journal."""
+"""
+Configuration management for trading journal.
 
-import os
-from typing import Optional
+DEPRECATED: This module provides backward compatibility with the old config system.
+New code should use config_manager.ConfigManager directly.
 
-from dotenv import load_dotenv
+This module uses lazy loading via proxy classes to maintain backward compatibility
+with existing code while using the new ConfigManager under the hood.
+"""
 
-# Load environment variables from .env file
-load_dotenv()
+from typing import Any
 
-
-class DatabaseConfig:
-    """Database configuration settings."""
-
-    host: str = os.getenv("DB_HOST", "localhost")
-    port: int = int(os.getenv("DB_PORT", "5432"))
-    database: str = os.getenv("DB_NAME", "trading_journal")
-    user: str = os.getenv("DB_USER", "postgres")
-    password: Optional[str] = os.getenv("DB_PASSWORD")
-
-    @property
-    def url(self) -> str:
-        """Build database URL."""
-        if self.password:
-            return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
-        return f"postgresql://{self.user}@{self.host}:{self.port}/{self.database}"
+from .config_manager import (
+    get_config_manager,
+    DatabaseConfig as _DatabaseConfig,
+    LoggingConfig as _LoggingConfig,
+    ApplicationConfig as _ApplicationConfig,
+)
 
 
-class LoggingConfig:
-    """Logging configuration settings."""
+class _ConfigProxy:
+    """
+    Lazy-loading proxy for configuration objects.
 
-    level: str = os.getenv("LOG_LEVEL", "INFO")
-    file: str = os.getenv("LOG_FILE", "trading_journal.log")
-    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    Maintains backward compatibility by allowing attribute access like:
+        from .config import db_config
+        db_config.host  # Works transparently
+    """
+
+    def __init__(self, config_type: str):
+        """
+        Initialize proxy.
+
+        Args:
+            config_type: Type of config to proxy ('database', 'logging', 'application')
+        """
+        self._config_type = config_type
+        self._config_obj = None
+
+    def _get_config(self) -> Any:
+        """Lazy load configuration object."""
+        if self._config_obj is None:
+            config_manager = get_config_manager()
+
+            if self._config_type == "database":
+                self._config_obj = config_manager.get_database_config()
+            elif self._config_type == "logging":
+                self._config_obj = config_manager.get_logging_config()
+            elif self._config_type == "application":
+                self._config_obj = config_manager.get_application_config()
+            else:
+                raise ValueError(f"Unknown config type: {self._config_type}")
+
+        return self._config_obj
+
+    def __getattr__(self, name: str) -> Any:
+        """Proxy attribute access to the underlying config object."""
+        return getattr(self._get_config(), name)
+
+    def __repr__(self) -> str:
+        """String representation."""
+        return repr(self._get_config())
 
 
-class ApplicationConfig:
-    """Application-specific configuration settings."""
+# Export original config classes for type hints
+DatabaseConfig = _DatabaseConfig
+LoggingConfig = _LoggingConfig
+ApplicationConfig = _ApplicationConfig
 
-    pnl_method: str = os.getenv("PNL_METHOD", "average_cost")
-    timezone: str = os.getenv("TIMEZONE", "US/Eastern")
-    batch_size: int = int(os.getenv("BATCH_SIZE", "1000"))
-    max_retries: int = int(os.getenv("MAX_RETRIES", "3"))
-
-
-# Global configuration instances
-db_config = DatabaseConfig()
-logging_config = LoggingConfig()
-app_config = ApplicationConfig()
+# Global configuration instances (using lazy-loading proxies)
+db_config = _ConfigProxy("database")
+logging_config = _ConfigProxy("logging")
+app_config = _ConfigProxy("application")

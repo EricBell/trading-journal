@@ -14,6 +14,8 @@ from trading_journal.config import db_config
 config = context.config
 
 # Set the database URL from our config
+# Note: db_config now uses ConfigManager under the hood (TOML + profiles)
+# but maintains backward compatibility with .env files
 config.set_main_option('sqlalchemy.url', db_config.url)
 
 # Interpret the config file for Python logging.

@@ -1,5 +1,6 @@
 """Command-line interface for trading journal."""
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -11,6 +12,8 @@ from sqlalchemy import text
 
 from .database import db_manager
 from .config import logging_config
+from .config_manager import get_config_manager
+from .setup_wizard import run_wizard
 from .models import CompletedTrade
 from .cli_auth import require_authentication, AuthContext
 from .user_management import UserManager
@@ -50,10 +53,40 @@ def _mask_api_key(api_key: str) -> str:
 
 
 @click.group()
+@click.option(
+    '--profile',
+    envvar='TRADING_JOURNAL_PROFILE',
+    help='Configuration profile to use (dev/prod/test)',
+)
+@click.pass_context
 @click.version_option()
-def main() -> None:
+def main(ctx: click.Context, profile: str) -> None:
     """Trading Journal - PostgreSQL-based trading data ingestion and analysis."""
-    pass
+    # Store profile in context for subcommands
+    ctx.ensure_object(dict)
+    ctx.obj['profile'] = profile
+
+    # Check if we're running a config command (skip config check for those)
+    if ctx.invoked_subcommand in ['config']:
+        return
+
+    # Check if configuration exists (except for config commands)
+    config_manager = get_config_manager(profile=profile)
+    if not config_manager.config_exists():
+        click.echo("⚠️  No configuration found.")
+        click.echo(f"Config file should be at: {config_manager.app_config_path}")
+        click.echo("\nRun the setup wizard to create your configuration:")
+        click.echo("  $ trading-journal config setup")
+
+        if click.confirm("\nRun setup wizard now?", default=True):
+            if run_wizard():
+                click.echo("\n✓ Configuration created successfully!")
+                # Reload config manager with new configuration
+                get_config_manager(profile=profile, reset=True)
+            else:
+                raise click.Abort()
+        else:
+            raise click.Abort()
 
 
 @main.command()
@@ -76,6 +109,195 @@ def env(reveal: bool) -> None:
     click.echo(f"export ADMIN_MODE_ENABLED={admin_mode_enabled}")
     click.echo(f"export ADMIN_MODE_USER_ID={admin_user_id}")
     click.echo(f"export TRADING_JOURNAL_API_KEY={api_key_display}")
+
+
+@main.group()
+def config() -> None:
+    """Configuration management commands."""
+    pass
+
+
+@config.command('setup')
+@click.option('--force', is_flag=True, help='Force reconfiguration even if config exists')
+def config_setup(force: bool) -> None:
+    """Run interactive setup wizard."""
+    try:
+        if run_wizard(force=force):
+            click.echo("\n✅ Configuration setup completed successfully")
+        else:
+            click.echo("\n⚠️  Configuration setup cancelled")
+    except Exception as e:
+        click.echo(f"❌ Setup failed: {e}")
+        raise click.Abort()
+
+
+@config.command('show')
+@click.option('--profile', help='Profile to display (overrides default)')
+@click.option(
+    '--format',
+    type=click.Choice(['text', 'json', 'toml'], case_sensitive=False),
+    default='text',
+    help='Output format'
+)
+@click.pass_context
+def config_show(ctx: click.Context, profile: str, format: str) -> None:
+    """Show current configuration."""
+    try:
+        # Use profile from context if not specified
+        if not profile:
+            profile = ctx.obj.get('profile')
+
+        config_manager = get_config_manager(profile=profile, reset=True)
+
+        if not config_manager.config_exists():
+            click.echo("❌ No configuration found. Run: trading-journal config setup")
+            raise click.Abort()
+
+        full_config = config_manager.get_all_config()
+        active_profile = config_manager.get_active_profile()
+
+        if format == 'json':
+            # Convert to JSON (mask password)
+            config_copy = full_config.copy()
+            if 'database' in config_copy and 'password' in config_copy['database']:
+                if config_copy['database']['password']:
+                    config_copy['database']['password'] = '********'
+            click.echo(json.dumps(config_copy, indent=2))
+
+        elif format == 'toml':
+            import tomli_w
+            config_copy = full_config.copy()
+            if 'database' in config_copy and 'password' in config_copy['database']:
+                if config_copy['database']['password']:
+                    config_copy['database']['password'] = '********'
+            click.echo(tomli_w.dumps(config_copy))
+
+        else:  # text format
+            click.echo(f"\nActive Profile: {active_profile}")
+            click.echo(f"Config File: {config_manager.app_config_path}")
+            click.echo("\nDatabase Configuration:")
+            db_config = config_manager.get_database_config()
+            click.echo(f"  Host: {db_config.host}")
+            click.echo(f"  Port: {db_config.port}")
+            click.echo(f"  Database: {db_config.database}")
+            click.echo(f"  User: {db_config.user}")
+            click.echo(f"  Password: {'********' if db_config.password else '(not set)'}")
+
+            click.echo("\nLogging Configuration:")
+            log_config = config_manager.get_logging_config()
+            click.echo(f"  Level: {log_config.level}")
+            click.echo(f"  File: {log_config.file}")
+
+            click.echo("\nApplication Configuration:")
+            app_config = config_manager.get_application_config()
+            click.echo(f"  P&L Method: {app_config.pnl_method}")
+            click.echo(f"  Timezone: {app_config.timezone}")
+            click.echo(f"  Batch Size: {app_config.batch_size}")
+            click.echo(f"  Max Retries: {app_config.max_retries}")
+
+    except Exception as e:
+        click.echo(f"❌ Failed to show configuration: {e}")
+        raise click.Abort()
+
+
+@config.command('validate')
+@click.pass_context
+def config_validate(ctx: click.Context) -> None:
+    """Validate configuration and test database connection."""
+    try:
+        profile = ctx.obj.get('profile')
+        config_manager = get_config_manager(profile=profile, reset=True)
+
+        if not config_manager.config_exists():
+            click.echo("❌ No configuration found. Run: trading-journal config setup")
+            raise click.Abort()
+
+        click.echo("Validating configuration...")
+
+        # Validate database config
+        db_config = config_manager.get_database_config()
+        click.echo(f"✓ Database config valid: {db_config.database}@{db_config.host}:{db_config.port}")
+
+        # Test database connection
+        click.echo("\nTesting database connection...")
+        try:
+            import psycopg2
+            conn = psycopg2.connect(
+                host=db_config.host,
+                port=db_config.port,
+                user=db_config.user,
+                password=db_config.password or "",
+                database=db_config.database,
+                connect_timeout=5,
+            )
+            conn.close()
+            click.echo("✓ Database connection successful")
+        except Exception as e:
+            click.echo(f"❌ Database connection failed: {e}")
+            raise click.Abort()
+
+        # Validate logging config
+        log_config = config_manager.get_logging_config()
+        click.echo(f"✓ Logging config valid: {log_config.level} -> {log_config.file}")
+
+        # Validate app config
+        app_config = config_manager.get_application_config()
+        click.echo(f"✓ Application config valid: {app_config.pnl_method}")
+
+        click.echo("\n✅ All configuration validation passed")
+
+    except click.Abort:
+        raise
+    except Exception as e:
+        click.echo(f"❌ Validation failed: {e}")
+        raise click.Abort()
+
+
+@config.command('migrate')
+def config_migrate() -> None:
+    """Migrate from .env to new TOML configuration."""
+    try:
+        env_path = Path.cwd() / ".env"
+
+        if not env_path.exists():
+            click.echo("❌ No .env file found to migrate")
+            raise click.Abort()
+
+        click.echo("Migrating .env to TOML configuration...")
+        click.echo(f"Source: {env_path}")
+
+        # Load existing .env
+        from dotenv import dotenv_values
+        env_values = dotenv_values(env_path)
+
+        # Extract values
+        postgres_config = {
+            "host": env_values.get("DB_HOST", "localhost"),
+            "port": int(env_values.get("DB_PORT", "5432")),
+            "user": env_values.get("DB_USER", "postgres"),
+            "password": env_values.get("DB_PASSWORD"),
+        }
+        database_name = env_values.get("DB_NAME", "trading_journal")
+        log_level = env_values.get("LOG_LEVEL", "INFO")
+        timezone = env_values.get("TIMEZONE", "US/Eastern")
+        pnl_method = env_values.get("PNL_METHOD", "average_cost")
+
+        # Create wizard with prepopulated values
+        wizard = run_wizard(force=False)
+
+        if wizard:
+            # Backup .env file
+            backup_path = env_path.with_suffix(".env.backup")
+            env_path.rename(backup_path)
+            click.echo(f"✓ Backed up .env to: {backup_path}")
+            click.echo("✅ Migration completed successfully")
+            click.echo("\nYou can now delete the .env.backup file if everything works correctly")
+        else:
+            click.echo("⚠️  Migration cancelled")
+
+    except Exception as e:
+        click.echo(f"❌ Migration failed: {e}")
+        raise click.Abort()
 
 
 @main.group()

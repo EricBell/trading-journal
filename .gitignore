@@ -139,6 +139,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.backup
 .envrc
 .venv
 env/
@@ -146,6 +147,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Local configuration overrides
+*.local.toml
 
 # Spyder project settings
 .spyderproject
