@@ -10,6 +10,7 @@ Guides users through creating configuration files with:
 
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -363,7 +364,7 @@ class SetupWizard:
                     "password": postgres_config["password"],
                 },
                 "metadata": {
-                    "created_at": click.DateTime().get_metavar(None),
+                    "created_at": datetime.now().isoformat(),
                     "description": "Main PostgreSQL server",
                 },
             }
