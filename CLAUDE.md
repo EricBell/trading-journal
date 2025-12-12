@@ -24,6 +24,162 @@ This is a **Trading Journal** application designed to ingest and analyze trading
 - Multiple completed trades → One position (per symbol)
 - Setup patterns and notes belong at the **TRADE** level, not execution level
 
+## Configuration System
+
+The application uses a **two-tier TOML configuration system** designed for:
+- `uv tools install` support (isolated environments)
+- Shared PostgreSQL config across multiple applications
+- Multiple deployment profiles (dev/prod/test)
+- Environment variable overrides for CI/CD
+
+### Configuration Architecture
+
+**Tier 1: Shared Postgres Config** (Cross-Application)
+- Location: `~/.config/postgres/default.toml`
+- Purpose: Share DB server credentials across multiple apps
+- Format: TOML with `[server]` section
+
+**Tier 2: App-Specific Config**
+- Location: `~/.config/trading-journal/config.toml`
+- Purpose: Profiles, app settings, references to shared postgres config
+- Format: TOML with `[profiles.{name}]` sections
+
+### Configuration Priority (Highest to Lowest)
+
+1. **Environment Variables** - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `LOG_LEVEL`, etc.
+2. **Profile-specific settings** - From `--profile` flag or `TRADING_JOURNAL_PROFILE` env var
+3. **User config file** - `~/.config/trading-journal/config.toml`
+4. **Shared postgres config** - `~/.config/postgres/default.toml`
+5. **Legacy .env file** - Deprecated, backward compatibility only (shows warning)
+6. **Built-in defaults** - Fallback values
+
+### First-Time Setup
+
+On first run, the application will automatically prompt you to run the interactive setup wizard:
+
+```bash
+# Explicit setup (or re-configuration)
+trading-journal config setup
+
+# Or just run any command and you'll be prompted
+trading-journal db status
+```
+
+The wizard will guide you through:
+1. PostgreSQL server configuration (or reuse existing shared config)
+2. Database connection testing
+3. Database creation (prod/dev/test)
+4. Application settings (timezone, log level)
+5. Profile configuration
+
+Configuration files are created with secure permissions (0600 for files, 0700 for directories).
+
+### Using Profiles
+
+```bash
+# Use default profile (usually "prod")
+trading-journal db status
+
+# Use development profile
+trading-journal --profile dev db migrate
+trading-journal --profile dev ingest file data.ndjson
+
+# Or set via environment variable
+export TRADING_JOURNAL_PROFILE=dev
+trading-journal db status
+
+# Show active profile and configuration
+trading-journal config show
+trading-journal config show --profile prod --format json
+```
+
+### Configuration Commands
+
+```bash
+# Run interactive setup wizard
+trading-journal config setup
+trading-journal config setup --force  # Reconfigure even if config exists
+
+# Display current configuration
+trading-journal config show                    # Text format
+trading-journal config show --format json      # JSON format
+trading-journal config show --format toml      # TOML format
+trading-journal config show --profile dev      # Specific profile
+
+# Validate configuration and test database connection
+trading-journal config validate
+
+# Migrate from legacy .env file to TOML
+trading-journal config migrate
+```
+
+### Configuration File Locations
+
+- **App Config**: `~/.config/trading-journal/config.toml`
+- **Shared Postgres**: `~/.config/postgres/default.toml`
+- **Legacy .env**: `./env` (deprecated, shows warning when used)
+
+### Example Configuration Files
+
+**~/.config/postgres/default.toml:**
+```toml
+[server]
+host = "192.168.1.249"
+port = 32768
+user = "postgres"
+password = "your_password_here"
+
+[metadata]
+created_at = "2025-12-12T10:00:00Z"
+description = "Main PostgreSQL server"
+```
+
+**~/.config/trading-journal/config.toml:**
+```toml
+default_profile = "prod"
+
+[app]
+timezone = "US/Eastern"
+pnl_method = "average_cost"
+
+[logging]
+level = "INFO"
+file = "~/.local/share/trading-journal/trading_journal.log"
+
+[profiles.prod]
+database_name = "trading_journal"
+postgres_config = "default"  # References ~/.config/postgres/default.toml
+description = "Production environment"
+
+[profiles.dev]
+database_name = "trading_journal_dev"
+postgres_config = "default"
+log_level = "DEBUG"
+description = "Development environment"
+
+[profiles.test]
+database_name = "trading_journal_test"
+postgres_config = "default"
+log_level = "WARNING"
+description = "Test environment"
+```
+
+### Migrating from .env
+
+If you have an existing `.env` file, use the migration command:
+
+```bash
+trading-journal config migrate
+```
+
+This will:
+1. Read your existing `.env` file
+2. Run the setup wizard with pre-populated values
+3. Create TOML configuration files
+4. Backup `.env` to `.env.backup`
+
+The old `.env` file will continue to work (with deprecation warnings) until you're ready to remove it.
+
 ## Development Commands
 
 ### Project Setup

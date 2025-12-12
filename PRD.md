@@ -817,37 +817,75 @@ To include inactive users: users list --all
 
 -----
 
-## 10. Configuration Management
+## 10. Configuration Management ✅ **ENHANCED**
 
-### 10.1 Configuration Structure
-```python
-# Environment Variables
-DATABASE_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'database': os.getenv('DB_NAME', 'trading_journal'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD'),
-}
+### 10.1 Two-Tier TOML Configuration System
 
-LOGGING_CONFIG = {
-    'level': os.getenv('LOG_LEVEL', 'INFO'),
-    'file': os.getenv('LOG_FILE', 'trading_journal.log'),
-    'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-}
+**New configuration system** (implemented post-Phase 4) provides:
+- Support for `uv tools install` (isolated environments)
+- Shared PostgreSQL configuration across multiple applications
+- Multiple deployment profiles (dev/prod/test)
+- Environment variable overrides for CI/CD
+- Interactive setup wizard for first-time configuration
+- Backward compatibility with legacy `.env` files
 
-APPLICATION_CONFIG = {
-    'pnl_method': os.getenv('PNL_METHOD', 'average_cost'),
-    'timezone': os.getenv('TIMEZONE', 'US/Eastern'),
-    'batch_size': int(os.getenv('BATCH_SIZE', '1000')),
-    'max_retries': int(os.getenv('MAX_RETRIES', '3')),
-}
+### 10.2 Configuration Architecture
+
+**Tier 1: Shared Postgres Config** (Cross-Application)
+- **Location**: `~/.config/postgres/default.toml`
+- **Purpose**: Share DB server credentials across multiple apps
+- **Format**: TOML with `[server]` section
+
+**Tier 2: App-Specific Config**
+- **Location**: `~/.config/trading-journal/config.toml`
+- **Purpose**: Profiles, app settings, references to shared postgres config
+- **Format**: TOML with `[profiles.{name}]` sections
+
+### 10.3 Configuration Priority (Highest to Lowest)
+
+1. **Environment Variables** - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `LOG_LEVEL`
+2. **Profile-specific settings** - From `--profile` flag or `TRADING_JOURNAL_PROFILE` env var
+3. **User config file** - `~/.config/trading-journal/config.toml`
+4. **Shared postgres config** - `~/.config/postgres/default.toml`
+5. **Legacy .env file** - Deprecated, backward compatibility only (shows warning)
+6. **Built-in defaults** - Fallback values
+
+### 10.4 Configuration Commands
+
+```bash
+# Interactive setup wizard (auto-prompts on first run)
+trading-journal config setup
+trading-journal config setup --force
+
+# Display configuration
+trading-journal config show
+trading-journal config show --profile dev --format json
+
+# Validate and test database connection
+trading-journal config validate
+
+# Migrate from legacy .env to TOML
+trading-journal config migrate
 ```
 
-### 10.2 Configuration Files
-- **development.env**: Local development settings
-- **production.env**: Production environment configuration
-- **test.env**: Testing environment with isolated database
+### 10.5 Profile Management
+
+```bash
+# Use specific profile
+trading-journal --profile dev db status
+trading-journal --profile prod ingest file data.ndjson
+
+# Or via environment variable
+export TRADING_JOURNAL_PROFILE=dev
+trading-journal db status
+```
+
+### 10.6 Security Features
+
+- **Secure file permissions**: 0600 for config files, 0700 for directories
+- **XDG Base Directory compliance**: Follows `~/.config/` standard
+- **Password masking**: In display/show commands
+- **Separation of concerns**: Shared postgres config vs app-specific settings
 
 -----
 
