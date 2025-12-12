@@ -25,6 +25,10 @@ from .report_configs import (
 
 
 # Set up logging
+# Ensure log directory exists
+log_file_path = Path(logging_config.file)
+log_file_path.parent.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=getattr(logging, logging_config.level),
     format=logging_config.format,
