@@ -376,3 +376,215 @@
      9. Migration - Test .env → TOML migration path
      10. End-to-End Testing - Fresh uv tool install on clean machine
 
+---------- 
+
+ The configuration system redesign is now complete. Here's a summary of what was accomplished:
+
+  ✅ Configuration System Redesign - COMPLETED
+
+  What Was Implemented
+
+  4 commits created:
+  1. Added tomli-w dependency for TOML writing
+  2. Implemented two-tier TOML configuration system
+  3. Added comprehensive unit tests (24 tests, all passing)
+  4. Updated documentation (CLAUDE.md and PRD.md)
+
+  Core Components Created
+
+  1. ConfigManager (trading_journal/config_manager.py)
+    - Multi-source configuration loading with priority hierarchy
+    - Environment variables → Profiles → App config → Shared postgres → .env → Defaults
+    - Deep merge algorithm for nested configurations
+    - Validation and error handling
+  2. Setup Wizard (trading_journal/setup_wizard.py)
+    - Interactive first-run configuration experience
+    - Detects and reuses existing postgres configs
+    - Tests database connections before saving
+    - Creates databases automatically
+    - Secure file permissions (0600/0700)
+  3. CLI Integration (trading_journal/cli.py)
+    - Added --profile global flag
+    - New config command group:
+        - config setup - Interactive wizard
+      - config show - Display configuration (text/json/toml)
+      - config validate - Test config and DB connection
+      - config migrate - Migrate from .env to TOML
+    - Auto-prompts setup on first run
+  4. Backward Compatibility
+    - config.py - Lazy-loading proxies (existing code works unchanged)
+    - database.py - Optional DatabaseConfig parameter
+    - alembic/env.py - Transparent integration
+    - Legacy .env support with deprecation warnings
+
+  Key Features
+
+  ✅ Works seamlessly with uv tools install (isolated environments)
+  ✅ Shared postgres config across multiple applications
+  ✅ Multiple named profiles (dev/prod/test)
+  ✅ XDG Base Directory compliance (~/.config/)
+  ✅ Secure file permissions (0600 for files, 0700 for dirs)
+  ✅ Environment variable overrides (CI/CD compatible)
+  ✅ Interactive setup wizard
+  ✅ Backward compatible with .env files
+  ✅ Comprehensive tests (24 tests passing)
+  ✅ Complete documentation
+
+  Configuration Files
+
+  - App Config: ~/.config/trading-journal/config.toml
+  - Shared Postgres: ~/.config/postgres/default.toml
+  - Legacy .env: Still supported with deprecation warning
+
+  Next Steps
+
+  You can now:
+  1. Test the setup wizard: uv run python main.py config setup
+  2. Try profile switching: uv run python main.py --profile dev db status
+  3. Validate the config: uv run python main.py config validate
+  4. Migrate from .env (if desired): uv run python main.py config migrate
+
+  All changes are committed and ready to push!
+
+  ---------- After 'config setup'
+  Next steps:
+  1. Run database migrations:
+     $ trading-journal db migrate
+
+  2. Create your first user:
+     $ export ADMIN_MODE_ENABLED=true
+     $ export ADMIN_MODE_USER_ID=1
+     $ uv run python create_user.py
+
+  3. Ingest trading data:
+     $ export TRADING_JOURNAL_API_KEY=your_api_key
+     $ trading-journal ingest file data.ndjson
+
+  4. Process completed trades:
+     $ trading-journal db process-trades
+
+  5. View reports:
+     $ trading-journal report dashboard
+
+✅ Configuration setup completed successfully
+
+---------- Questioned Claude about this set of steps...
+
+ The configuration system changes only affect how the application connects to the database, not the database itself or its contents. Here's what's still there:
+
+  Your Existing Data is Safe ✅
+
+  - ✅ Database schema - Unchanged, no migrations needed
+  - ✅ Users table - All your existing users and their API keys
+  - ✅ Trades data - All executions and completed trades
+  - ✅ Positions - All position data
+  - ✅ Setup patterns & notes - All annotations preserved
+
+  Modified Steps for Existing Database
+
+  Since you already have data, here's what you actually need to do:
+
+  1. ✅ Skip Database Migrations (if already up-to-date)
+
+  Check if you need migrations:
+  uv run python main.py db status
+
+  If you see "Current revision matches head", you're good to skip migrations.
+
+  2. ✅ Skip User Creation (you already have users)
+
+  You can retrieve your existing API key from the database. Let me check what user you have:
+
+  # Check your existing users
+  uv run python main.py users list
+
+  If you need to see your API key:
+  # For user ID 1 (assuming that's your user)
+  export ADMIN_MODE_ENABLED=true
+  export ADMIN_MODE_USER_ID=1
+  uv run python main.py users list --all
+
+  Or regenerate it if you've forgotten:
+  export ADMIN_MODE_ENABLED=true
+  uv run python main.py users regenerate-key --user-id 1
+
+  3. ✅ Set Your API Key and Start Using
+
+  # Set your API key (use the one from step 2)
+  export TRADING_JOURNAL_API_KEY=your_existing_api_key
+
+  # Your data is already there, so you can immediately view reports
+  uv run python main.py report dashboard
+  uv run python main.py report trades
+  uv run python main.py report positions
+
+  4. ✅ Ingest New Data (only if you have new files)
+
+  If you have new trading data to ingest:
+  uv run python main.py ingest file new_data.ndjson
+  uv run python main.py db process-trades
+
+  Quick Verification
+
+  Run this to verify everything is working:
+
+  # Set environment for admin access
+  export ADMIN_MODE_ENABLED=true
+  export ADMIN_MODE_USER_ID=1
+
+  # Check database status
+  uv run python main.py db status
+
+  # List users
+  uv run python main.py users list
+
+  # Once you have your API key, check your data
+  export TRADING_JOURNAL_API_KEY=your_key_here
+  uv run python main.py report dashboard
+
+  The configuration changes were purely about where config is stored (moved from .env to ~/.config/trading-journal/config.toml), not about data storage. Your PostgreSQL database and all its data are exactly as you left them! 🎉
+---------- Had an issue with 'db status'...
+I've fixed the logging directory issue. The command now works properly.
+
+  Your Database Status
+
+  From the output:
+  - ✅ Database connection: OK
+  - ✅ Schema is up-to-date (5ecc33ba8812 (head) - current revision matches head)
+
+  This means you don't need to run migrations - your database is already at the latest schema version!
+
+  Next Steps
+
+  Now let's retrieve your existing user's API key:
+
+  # Set admin mode
+  export ADMIN_MODE_ENABLED=true
+  export ADMIN_MODE_USER_ID=1
+
+  # List your existing users
+  uv run python main.py users list
+
+  This will show you your user(s) and their API keys (partially masked).
+
+  If you need the full API key, you can either:
+
+  Option 1: Regenerate a new API key
+  export ADMIN_MODE_ENABLED=true
+  uv run python main.py users regenerate-key --user-id 1
+
+  Option 2: Check your old .env file if you still have it
+  cat .env | grep TRADING_JOURNAL_API_KEY
+
+  Once you have your API key, you can immediately start using the application:
+
+  export TRADING_JOURNAL_API_KEY=your_api_key_here
+  uv run python main.py report dashboard
+  uv run python main.py report trades
+  uv run python main.py report positions
+
+  All your existing data (users, trades, positions, etc.) is still there and ready to use! 🎉
+
+∴ Thought for 1s (ctrl+o to show thinking)
+
+· Forming… (esc to interrupt · 36s · ↓ 1.6k tokens)
