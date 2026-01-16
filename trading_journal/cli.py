@@ -56,16 +56,37 @@ def _mask_api_key(api_key: str) -> str:
     return f"{api_key[:4]}****{api_key[-4:]}"
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.option(
     '--profile',
     envvar='TRADING_JOURNAL_PROFILE',
     help='Configuration profile to use (dev/prod/test)',
 )
+@click.option(
+    '--overview',
+    is_flag=True,
+    help='Display project overview and exit',
+)
 @click.pass_context
 @click.version_option()
-def main(ctx: click.Context, profile: str) -> None:
+def main(ctx: click.Context, profile: str, overview: bool) -> None:
     """Trading Journal - PostgreSQL-based trading data ingestion and analysis."""
+    # Handle --overview flag
+    if overview:
+        click.echo("\n" + "=" * 80)
+        click.echo("TRADING JOURNAL - OVERVIEW")
+        click.echo("=" * 80 + "\n")
+        click.echo("A comprehensive trading journal application that ingests NDJSON trade data")
+        click.echo("from brokerage platforms and provides profit/loss analysis, position tracking,")
+        click.echo("and performance reporting. Built with Python, PostgreSQL, and SQLAlchemy.")
+        click.echo("\n" + "=" * 80 + "\n")
+        ctx.exit(0)
+
+    # If no command provided and no --overview flag, show help
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
+
     # Store profile in context for subcommands
     ctx.ensure_object(dict)
     ctx.obj['profile'] = profile

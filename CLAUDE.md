@@ -182,6 +182,23 @@ The old `.env` file will continue to work (with deprecation warnings) until you'
 
 ## Development Commands
 
+### General CLI Options
+
+The CLI supports the following global options that can be used with any command:
+
+```bash
+# Display project overview (from README.md "Overview" section)
+trading-journal --overview
+
+# Use a specific configuration profile
+trading-journal --profile dev [command]
+
+# Show version information
+trading-journal --version
+```
+
+The `--overview` flag displays a brief description of the Trading Journal application and exits. This is useful for quickly understanding the purpose and capabilities of the tool.
+
 ### Project Setup
 ```bash
 # Install dependencies with uv
@@ -400,6 +417,16 @@ python version_manager.py major    # Increment major version
 # Reset to specific version
 python version_manager.py reset 0 2 0    # Reset to v0.2.0
 ```
+
+**IMPORTANT**: After running any version increment command, you must also manually update the version in `pyproject.toml`:
+
+```toml
+[project]
+name = "trading-journal"
+version = "0.3.0"  # ← Update this to match the new version
+```
+
+The `version_manager.py` script updates `version.json`, but the CLI's `--version` flag reads from `pyproject.toml`, so both files must be kept in sync.
 
 **Current Version**: Check with `python version_manager.py status`
 

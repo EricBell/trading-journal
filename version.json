@@ -1,10 +1,9 @@
 {
   "major": 0,
-  "minor": 2,
-  "patch": 1,
+  "minor": 3,
+  "patch": 0,
   "file_hashes": {
     "create_user.py": "6853c9069730f83e0e6c03ede5401798262451f2ba59623c84482ea7913a7fcb",
-    "debug_config.py": "67617e8e153ef388c93ff2fa478d7e4216c82d091881cd87b158edb31983c4c7",
     "main.py": "b26b89c69e70df471ccc82d98c2c7c40084c66a726e213516d52e65833ca6a25",
     "version_manager.py": "904e2edb93a5aa50d1cd02a3563fd811945de594e88adb1140c72388df786a68"
   }
