@@ -394,41 +394,13 @@ This project uses a **tasks.md** file to enumerate all tasks required to impleme
 
 ## Version Management
 
-**Versioning System**: Uses `version_manager.py` with `version.json` for automatic file tracking and version control.
+Version is stored **only in `pyproject.toml`** under `[project] version`. Format is `x.y.z`:
 
-### Version Increment Rules
-- **Patch increment** (0.2.0 → 0.2.1): Every time work is completed and ready for testing
-- **Minor increment** (0.2.0 → 0.3.0): When adding new features OR when existing features change significantly
-- **Major increment** (0.x.x → 1.0.0): Breaking changes or major releases
+- **x** — major: breaking changes or major releases
+- **y** — minor: increment by 1 when one or more new features are delivered in a turn (even if multiple features are implemented together, only increment once)
+- **z** — patch: increment by 1 when delivering bug fixes or non-feature changes
 
-### Version Management Commands
-```bash
-# Check current version
-python version_manager.py status
-
-# Check for file changes and auto-increment patch if needed
-python version_manager.py check
-
-# Manual version increments
-python version_manager.py patch    # Increment patch version
-python version_manager.py minor    # Increment minor version
-python version_manager.py major    # Increment major version
-
-# Reset to specific version
-python version_manager.py reset 0 2 0    # Reset to v0.2.0
-```
-
-**IMPORTANT**: After running any version increment command, you must also manually update the version in `pyproject.toml`:
-
-```toml
-[project]
-name = "trading-journal"
-version = "0.3.0"  # ← Update this to match the new version
-```
-
-The `version_manager.py` script updates `version.json`, but the CLI's `--version` flag reads from `pyproject.toml`, so both files must be kept in sync.
-
-**Current Version**: Check with `python version_manager.py status`
+Claude must update `pyproject.toml` at the end of every turn where code changes were made.
 
 ## Related Projects
 

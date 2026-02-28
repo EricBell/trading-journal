@@ -98,10 +98,16 @@ class TradeCompletionEngine:
             # Sign the qty based on side and pos_effect
             # TO OPEN: BUY = positive, SELL = negative (short)
             # TO CLOSE: BUY = negative (closing long), SELL = positive (closing short)
+            # AUTO: infer from context — if position is flat, treat as TO OPEN; otherwise TO CLOSE
             if trade.pos_effect == 'TO OPEN':
                 signed_qty = trade.qty if trade.side == 'BUY' else -trade.qty
-            else:  # TO CLOSE
+            elif trade.pos_effect == 'TO CLOSE':
                 signed_qty = -trade.qty if trade.side == 'SELL' else trade.qty
+            else:  # AUTO
+                if current_position == 0:
+                    signed_qty = trade.qty if trade.side == 'BUY' else -trade.qty
+                else:
+                    signed_qty = -trade.qty if trade.side == 'SELL' else trade.qty
 
             current_position += signed_qty
 
@@ -118,8 +124,27 @@ class TradeCompletionEngine:
         if not cycle_trades:
             return
 
-        opens = [t for t in cycle_trades if t.pos_effect == 'TO OPEN']
-        closes = [t for t in cycle_trades if t.pos_effect == 'TO CLOSE']
+        # Classify AUTO trades by their position in the cycle:
+        # first AUTO trade(s) when position is flat = open, remaining = close
+        position = 0
+        auto_opens = set()
+        auto_closes = set()
+        for t in cycle_trades:
+            if t.pos_effect == 'AUTO':
+                if position == 0:
+                    auto_opens.add(t.trade_id)
+                    signed = t.qty if t.side == 'BUY' else -t.qty
+                else:
+                    auto_closes.add(t.trade_id)
+                    signed = -t.qty if t.side == 'SELL' else t.qty
+            elif t.pos_effect == 'TO OPEN':
+                signed = t.qty if t.side == 'BUY' else -t.qty
+            else:
+                signed = -t.qty if t.side == 'SELL' else t.qty
+            position += signed
+
+        opens = [t for t in cycle_trades if t.pos_effect == 'TO OPEN' or t.trade_id in auto_opens]
+        closes = [t for t in cycle_trades if t.pos_effect == 'TO CLOSE' or t.trade_id in auto_closes]
 
         if not opens or not closes:
             logger.warning(f"Trade cycle for {cycle_trades[0].symbol} is incomplete, skipping.")
