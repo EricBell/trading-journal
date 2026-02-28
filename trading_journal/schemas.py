@@ -71,18 +71,30 @@ class NdjsonRecord(BaseModel):
             raise ValueError('side must be BUY or SELL')
         return v
 
+    @field_validator('qty', mode='before')
+    @classmethod
+    def coerce_qty(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, int):
+            return v
+        try:
+            return int(str(v).replace('+', ''))
+        except (ValueError, TypeError):
+            return None  # e.g. "100%" — already flagged in issues
+
     @field_validator('pos_effect')
     @classmethod
     def validate_pos_effect(cls, v):
-        if v is not None and v not in ['TO OPEN', 'TO CLOSE']:
-            raise ValueError('pos_effect must be TO OPEN or TO CLOSE')
+        if v is not None and v not in ['TO OPEN', 'TO CLOSE', 'AUTO']:
+            raise ValueError('pos_effect must be TO OPEN, TO CLOSE, or AUTO')
         return v
 
     @field_validator('event_type')
     @classmethod
     def validate_event_type(cls, v):
-        if v is not None and v not in ['fill', 'cancel', 'amend']:
-            raise ValueError('event_type must be fill, cancel, or amend')
+        if v is not None and v not in ['fill', 'cancel', 'amend', 'other']:
+            raise ValueError('event_type must be fill, cancel, amend, or other')
         return v
 
     @field_validator('asset_type')
