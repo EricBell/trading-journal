@@ -34,7 +34,7 @@ class DatabaseManager:
             pool_pre_ping=True,
             pool_recycle=3600,
         )
-        self._session_factory = sessionmaker(bind=self._engine)
+        self._session_factory = sessionmaker(bind=self._engine, expire_on_commit=False)
 
     @property
     def engine(self) -> Engine:
@@ -70,6 +70,7 @@ class DatabaseManager:
             session.rollback()
             raise
         finally:
+            session.expunge_all()
             session.close()
 
     def test_connection(self) -> bool:

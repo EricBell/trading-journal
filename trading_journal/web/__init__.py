@@ -1,7 +1,13 @@
 """Flask web application factory."""
 
 import os
+from importlib.metadata import version, PackageNotFoundError
 from flask import Flask
+
+try:
+    _APP_VERSION = version('trading-journal')
+except PackageNotFoundError:
+    _APP_VERSION = 'dev'
 
 
 def create_app() -> Flask:
@@ -12,6 +18,10 @@ def create_app() -> Flask:
     app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev-change-in-production')
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+    @app.context_processor
+    def inject_version():
+        return {'app_version': _APP_VERSION}
 
     # Register auth hooks (set/clear AuthContext per request)
     from .auth import register_auth_hooks

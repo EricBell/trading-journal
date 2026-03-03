@@ -43,7 +43,7 @@
         {% endif %}
       </ul>
       <span class="navbar-text me-3 text-light">
-        {{ user.username }}{% if user.is_admin %} <span class="badge bg-warning text-dark">admin</span>{% endif %}
+        <span class="text-secondary small me-2">v{{ app_version }}</span>{{ user.username }}{% if user.is_admin %} <span class="badge bg-warning text-dark">admin</span>{% endif %}
       </span>
       <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
         <button class="btn btn-outline-light btn-sm">Logout</button>
