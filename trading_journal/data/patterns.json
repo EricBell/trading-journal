@@ -1,0 +1,17 @@
+{
+  "(?i)^,,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Price Improvement,Order Type": "Filled Orders",
+  "(?i)^,Working Orders": "Working Orders",
+  "(?i)^Notes,,Time Canceled,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,PRICE,,TIF,Status": "Canceled Orders",
+  "(?i)^,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Order Type": "Account Trade History",
+  "(?i)^Notes,,Time Placed,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,PRICE,,TIF,Status": "Account Order History",
+  "(?i)^Equities\\s*$": null,
+  "(?i)^Cash Balance\\s*$": null,
+  "(?i)^Futures Statements\\s*$": null,
+  "(?i)^Forex Statements\\s*$": null,
+  "(?i)^Crypto.*Statements\\s*$": null,
+  "(?i)^Profits and Losses\\s*$": null,
+  "(?i)^Account Summary\\s*$": null,
+  "(?i)^Symbol,Description,Qty": null,
+  "(?i)^Symbol,Description,P/L": null,
+  "(?i)^,Rolling Strategies": "Rolling Strategies"
+}

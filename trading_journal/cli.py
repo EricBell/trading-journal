@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 from pathlib import Path
 
 import click
@@ -41,27 +40,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _mask_api_key(api_key: str) -> str:
-    """
-    Mask API key for display, showing first 4 and last 4 characters.
-
-    Args:
-        api_key: The API key to mask
-
-    Returns:
-        Masked API key string (e.g., "sk_a****xyz")
-    """
-    if len(api_key) <= 8:
-        return "****"
-    return f"{api_key[:4]}****{api_key[-4:]}"
-
-
 @click.group(invoke_without_command=True)
-@click.option(
-    '--profile',
-    envvar='TRADING_JOURNAL_PROFILE',
-    help='Configuration profile to use (dev/prod/test)',
-)
 @click.option(
     '--overview',
     is_flag=True,
@@ -69,14 +48,14 @@ def _mask_api_key(api_key: str) -> str:
 )
 @click.pass_context
 @click.version_option()
-def main(ctx: click.Context, profile: str, overview: bool) -> None:
+def main(ctx: click.Context, overview: bool) -> None:
     """Trading Journal - PostgreSQL-based trading data ingestion and analysis."""
     # Handle --overview flag
     if overview:
         click.echo("\n" + "=" * 80)
         click.echo("TRADING JOURNAL - OVERVIEW")
         click.echo("=" * 80 + "\n")
-        click.echo("A comprehensive trading journal application that ingests NDJSON trade data")
+        click.echo("A comprehensive trading journal application that ingests CSV trade data")
         click.echo("from brokerage platforms and provides profit/loss analysis, position tracking,")
         click.echo("and performance reporting. Built with Python, PostgreSQL, and SQLAlchemy.")
         click.echo("\n" + "=" * 80 + "\n")
@@ -87,16 +66,14 @@ def main(ctx: click.Context, profile: str, overview: bool) -> None:
         click.echo(ctx.get_help())
         ctx.exit(0)
 
-    # Store profile in context for subcommands
     ctx.ensure_object(dict)
-    ctx.obj['profile'] = profile
 
     # Check if we're running a config command (skip config check for those)
     if ctx.invoked_subcommand in ['config']:
         return
 
     # Check if configuration exists (except for config commands)
-    config_manager = get_config_manager(profile=profile)
+    config_manager = get_config_manager()
     if not config_manager.config_exists():
         click.echo("⚠️  No configuration found.")
         click.echo(f"Config file should be at: {config_manager.app_config_path}")
@@ -106,34 +83,11 @@ def main(ctx: click.Context, profile: str, overview: bool) -> None:
         if click.confirm("\nRun setup wizard now?", default=True):
             if run_wizard():
                 click.echo("\n✓ Configuration created successfully!")
-                # Reload config manager with new configuration
-                get_config_manager(profile=profile, reset=True)
+                get_config_manager(reset=True)
             else:
                 raise click.Abort()
         else:
             raise click.Abort()
-
-
-@main.command()
-@click.option('--reveal', is_flag=True, help='Show full API key value (default: masked)')
-def env(reveal: bool) -> None:
-    """Display authentication environment variables in export format."""
-
-    # Get current values from environment
-    admin_mode_enabled = os.getenv("ADMIN_MODE_ENABLED", "")
-    admin_user_id = os.getenv("ADMIN_MODE_USER_ID", "")
-    api_key = os.getenv("TRADING_JOURNAL_API_KEY", "")
-
-    # Mask API key by default
-    if api_key and not reveal:
-        api_key_display = _mask_api_key(api_key)
-    else:
-        api_key_display = api_key
-
-    # Display in export format
-    click.echo(f"export ADMIN_MODE_ENABLED={admin_mode_enabled}")
-    click.echo(f"export ADMIN_MODE_USER_ID={admin_user_id}")
-    click.echo(f"export TRADING_JOURNAL_API_KEY={api_key_display}")
 
 
 @main.group()
@@ -168,10 +122,6 @@ def config_setup(force: bool) -> None:
 def config_show(ctx: click.Context, profile: str, format: str) -> None:
     """Show current configuration."""
     try:
-        # Use profile from context if not specified
-        if not profile:
-            profile = ctx.obj.get('profile')
-
         config_manager = get_config_manager(profile=profile, reset=True)
 
         if not config_manager.config_exists():
@@ -230,8 +180,7 @@ def config_show(ctx: click.Context, profile: str, format: str) -> None:
 def config_validate(ctx: click.Context) -> None:
     """Validate configuration and test database connection."""
     try:
-        profile = ctx.obj.get('profile')
-        config_manager = get_config_manager(profile=profile, reset=True)
+        config_manager = get_config_manager(reset=True)
 
         if not config_manager.config_exists():
             click.echo("❌ No configuration found. Run: trading-journal config setup")
@@ -459,44 +408,47 @@ def ingest() -> None:
     pass
 
 
-@ingest.command("file")
-@click.argument('file_path', type=click.Path(exists=True, path_type=Path))
+@ingest.command("csv")
+@click.argument('files', nargs=-1, required=True, type=click.Path(exists=True))
+@click.option('--include-rolling', is_flag=True, help='Include Rolling Strategies section')
+@click.option('--encoding', default='utf-8', show_default=True, help='CSV file encoding')
 @click.option('--dry-run', is_flag=True, help='Validate without database changes')
 @click.option('--verbose', is_flag=True, help='Enable verbose output')
-@click.option('--skip-duplicate-check', is_flag=True, help='Skip pre-flight duplicate detection (faster)')
-@click.option('--force', is_flag=True, help='Bypass duplicate confirmation prompts')
 @require_authentication
-def ingest_file(
-    file_path: Path,
+def ingest_csv(
+    files: tuple,
+    include_rolling: bool,
+    encoding: str,
     dry_run: bool,
     verbose: bool,
-    skip_duplicate_check: bool,
-    force: bool
 ) -> None:
-    """Ingest a single NDJSON file with duplicate detection and warnings."""
+    """Ingest one or more Schwab CSV trade activity files."""
+    from .csv_parser import CsvParser
     from .ingestion import NdjsonIngester, IngestionError
+
     if dry_run:
         click.echo("🔍 DRY RUN MODE - No database changes will be made")
+
     try:
+        parser = CsvParser(include_rolling=include_rolling, encoding=encoding)
+        records = parser.parse_files(list(files))
+
+        if verbose:
+            fill_count = sum(1 for r in records if r.get('event_type') == 'fill')
+            click.echo(f"📄 Parsed {len(records)} total records ({fill_count} fills) from {len(files)} file(s)")
+
         ingester = NdjsonIngester()
-        result = ingester.process_file(
-            file_path,
-            dry_run=dry_run,
-            verbose=verbose,
-            skip_duplicate_check=skip_duplicate_check,
-            force=force
-        )
-        click.echo(f"\n📁 File: {result['file_path']}")
+        result = ingester.ingest_records(records, dry_run=dry_run, verbose=verbose)
+
         click.echo(f"✅ Records processed: {result['records_processed']}")
         click.echo(f"❌ Records failed: {result['records_failed']}")
 
-        # Show insert/update breakdown if available
-        if not dry_run and 'inserts' in result:
+        if not dry_run:
             click.echo(f"➕ New records inserted: {result['inserts']}")
             click.echo(f"🔄 Existing records updated: {result['updates']}")
 
         if result['validation_errors']:
-            click.echo(f"\n⚠️  Validation errors:")
+            click.echo("\n⚠️  Validation errors:")
             for error in result['validation_errors']:
                 click.echo(f"   {error}")
 
@@ -504,45 +456,9 @@ def ingest_file(
             click.echo("🎉 Ingestion completed successfully")
         else:
             click.echo("⚠️  Ingestion completed with errors")
+
     except IngestionError as e:
         click.echo(f"❌ Ingestion failed: {e}")
-        raise click.Abort()
-    except Exception as e:
-        click.echo(f"❌ Unexpected error: {e}")
-        raise click.Abort()
-
-
-@ingest.command("batch")
-@click.argument('pattern', default='*.ndjson')
-@click.option('--output-summary', is_flag=True, help='Show processing summary')
-@click.option('--dry-run', is_flag=True, help='Validate without database changes')
-@require_authentication
-def ingest_batch(pattern: str, output_summary: bool, dry_run: bool) -> None:
-    """Ingest multiple NDJSON files matching pattern."""
-    from .ingestion import NdjsonIngester, IngestionError
-    if dry_run:
-        click.echo("🔍 DRY RUN MODE - No database changes will be made")
-    try:
-        ingester = NdjsonIngester()
-        result = ingester.process_batch(pattern, dry_run=dry_run, verbose=output_summary)
-        click.echo(f"\n📊 Batch Processing Summary")
-        click.echo(f"📁 Files processed: {result['files_processed']}")
-        click.echo(f"❌ Files failed: {result['files_failed']}")
-        click.echo(f"✅ Total records processed: {result['total_records_processed']}")
-        click.echo(f"❌ Total records failed: {result['total_records_failed']}")
-        if output_summary:
-            click.echo(f"\n📋 File Details:")
-            for file_result in result['results']:
-                if 'error' in file_result:
-                    click.echo(f"   ❌ {file_result['file_path']}: {file_result['error']}")
-                else:
-                    click.echo(f"   ✅ {file_result['file_path']}: {file_result['records_processed']} records")
-        if result['files_failed'] == 0:
-            click.echo("🎉 Batch processing completed successfully")
-        else:
-            click.echo("⚠️  Batch processing completed with errors")
-    except IngestionError as e:
-        click.echo(f"❌ Batch ingestion failed: {e}")
         raise click.Abort()
     except Exception as e:
         click.echo(f"❌ Unexpected error: {e}")

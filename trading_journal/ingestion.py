@@ -341,6 +341,78 @@ class NdjsonIngester:
         with self.db_manager.get_session() as session:
             session.add(processing_log)
 
+    def ingest_records(
+        self,
+        records: List[Dict[str, Any]],
+        dry_run: bool = False,
+        verbose: bool = False,
+    ) -> Dict[str, Any]:
+        """Ingest pre-parsed records (from CsvParser) directly into the database.
+
+        Args:
+            records: List of record dicts as produced by CsvParser.parse_file/parse_files.
+            dry_run: If True, validate only — no database changes.
+            verbose: Log additional detail.
+
+        Returns:
+            Dict with keys: records_processed, records_failed, inserts, updates,
+            validation_errors, success, dry_run.
+        """
+        user_id = AuthContext.require_user().user_id
+        records_processed = 0
+        records_failed = 0
+        validation_errors = []
+        successful_records = []
+
+        for record_data in records:
+            try:
+                record = NdjsonRecord(**record_data)
+
+                if record.is_section_header:
+                    if verbose:
+                        logger.debug(f"Skipping section header: {record.section}")
+                    continue
+
+                if not record.is_fill:
+                    if verbose:
+                        logger.debug(f"Skipping non-fill record: {record.event_type}")
+                    continue
+
+                successful_records.append(record)
+                records_processed += 1
+
+            except ValidationError as e:
+                records_failed += 1
+                error_msg = f"Row {record_data.get('row_index', 'unknown')}: {str(e)}"
+                validation_errors.append(error_msg)
+                logger.warning(f"Validation error: {error_msg}")
+
+        insert_count = 0
+        update_count = 0
+
+        if not dry_run and successful_records:
+            insert_count, update_count = self._insert_records_with_tracking(
+                user_id,
+                successful_records,
+                'csv_upload',
+            )
+
+        if verbose or validation_errors:
+            logger.info(
+                f"ingest_records: processed={records_processed}, failed={records_failed}, "
+                f"inserts={insert_count}, updates={update_count}"
+            )
+
+        return {
+            'records_processed': records_processed,
+            'records_failed': records_failed,
+            'inserts': insert_count,
+            'updates': update_count,
+            'validation_errors': validation_errors,
+            'success': records_failed == 0,
+            'dry_run': dry_run,
+        }
+
     def process_batch(
         self,
         file_pattern: str,
