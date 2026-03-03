@@ -599,7 +599,10 @@ def show_trade(id: int) -> None:
 
 
 @report.command()
-@click.option('--date-range', help='Date range in format YYYY-MM-DD,YYYY-MM-DD')
+@click.option('--date-range', help=(
+    'Date range filter. Formats: "today", "7d" (last 7 days), '
+    '"YYYY-MM-DD/YYYY-MM-DD", "YYYY-MM-DD/" (to today), "/YYYY-MM-DD" (up to date).'
+))
 @click.option('--symbol', help='Filter by symbol')
 @click.option('--format', 'output_format', default='summary', type=click.Choice(['summary', 'detailed', 'json']))
 @require_authentication
@@ -747,7 +750,10 @@ def _display_dashboard_summary(data: dict, detailed: bool = False) -> None:
     type=click.Choice(sorted(TRADE_REPORT_LAYOUTS.keys())),
 )
 @click.option('--symbol', help='Filter by symbol')
-@click.option('--date-range', help='Date range in format YYYY-MM-DD,YYYY-MM-DD')
+@click.option('--date-range', help=(
+    'Date range filter. Formats: "today", "7d" (last 7 days), '
+    '"YYYY-MM-DD/YYYY-MM-DD", "YYYY-MM-DD/" (to today), "/YYYY-MM-DD" (up to date).'
+))
 @click.option(
     '--format',
     'output_format',

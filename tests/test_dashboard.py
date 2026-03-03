@@ -260,8 +260,8 @@ def test_parse_date_range():
     """Test date range parsing."""
     engine = DashboardEngine()
 
-    # Valid range
-    start, end = engine.parse_date_range("2025-01-01,2025-01-31")
+    # Valid slash-separated range
+    start, end = engine.parse_date_range("2025-01-01/2025-01-31")
     assert start == date(2025, 1, 1)
     assert end == date(2025, 1, 31)
 
@@ -270,9 +270,113 @@ def test_parse_date_range():
     assert start is None
     assert end is None
 
-    # Invalid format
+    # Empty string
+    start, end = engine.parse_date_range("")
+    assert start is None
+    assert end is None
+
+    # Bare date returns single-day range
+    start, end = engine.parse_date_range("2025-01-01")
+    assert start == date(2025, 1, 1)
+    assert end == date(2025, 1, 1)
+
+    # Old comma format raises ValueError
     with pytest.raises(ValueError):
-        engine.parse_date_range("2025-01-01")
+        engine.parse_date_range("2025-01-01,2025-01-31")
+
+
+def test_parse_date_range_today():
+    """Test 'today' keyword."""
+    engine = DashboardEngine()
+    today = date.today()
+
+    for s in ("today", "TODAY", "Today"):
+        start, end = engine.parse_date_range(s)
+        assert start == today
+        assert end == today
+
+
+def test_parse_date_range_nd_notation():
+    """Test Nd shorthand notation."""
+    from datetime import timedelta
+    engine = DashboardEngine()
+    today = date.today()
+
+    # "1d" = just today
+    start, end = engine.parse_date_range("1d")
+    assert start == today
+    assert end == today
+
+    # "7d" = last 7 days
+    start, end = engine.parse_date_range("7d")
+    assert start == today - timedelta(days=6)
+    assert end == today
+
+    # "30d"
+    start, end = engine.parse_date_range("30d")
+    assert start == today - timedelta(days=29)
+    assert end == today
+
+    # Case-insensitive
+    start, end = engine.parse_date_range("7D")
+    assert start == today - timedelta(days=6)
+    assert end == today
+
+
+def test_parse_date_range_nd_zero_raises():
+    """Test that '0d' raises ValueError."""
+    engine = DashboardEngine()
+    with pytest.raises(ValueError, match="1 or greater"):
+        engine.parse_date_range("0d")
+
+
+def test_parse_date_range_open_end():
+    """Test 'YYYY-MM-DD/' open-end range (to today)."""
+    engine = DashboardEngine()
+    today = date.today()
+
+    start, end = engine.parse_date_range("2025-01-01/")
+    assert start == date(2025, 1, 1)
+    assert end == today
+
+
+def test_parse_date_range_open_start():
+    """Test '/YYYY-MM-DD' open-start range (no lower bound)."""
+    engine = DashboardEngine()
+
+    start, end = engine.parse_date_range("/2025-01-31")
+    assert start is None
+    assert end == date(2025, 1, 31)
+
+
+def test_parse_date_range_slash_only():
+    """Test '/' (no bounds at all)."""
+    engine = DashboardEngine()
+    today = date.today()
+
+    start, end = engine.parse_date_range("/")
+    assert start is None
+    assert end == today
+
+
+def test_parse_date_range_invalid_date_values():
+    """Test that invalid date strings raise clear error messages."""
+    engine = DashboardEngine()
+
+    with pytest.raises(ValueError, match="Invalid start date"):
+        engine.parse_date_range("2025-13-01/2025-01-31")
+
+    with pytest.raises(ValueError, match="Invalid end date"):
+        engine.parse_date_range("2025-01-01/2025-99-99")
+
+
+def test_parse_date_range_completely_invalid():
+    """Test completely invalid inputs raise ValueError."""
+    engine = DashboardEngine()
+
+    for bad in ("last week", "jan-2025", "7"):
+        with pytest.raises(ValueError):
+            engine.parse_date_range(bad)
 
 
 def test_dashboard_streaks(sample_trades):
