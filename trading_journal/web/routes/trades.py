@@ -14,14 +14,14 @@ bp = Blueprint('trades', __name__)
 @login_required
 def index():
     user = AuthContext.require_user()
-    symbol = request.args.get('symbol', '').strip() or None
+    symbol = (request.args.get('symbol', '').strip().upper()) or None
     range_filter = request.args.get('range', '').strip() or None
 
     with db_manager.get_session() as session:
         query = session.query(CompletedTrade).filter_by(user_id=user.user_id)
 
         if symbol:
-            query = query.filter(CompletedTrade.symbol == symbol.upper())
+            query = query.filter(CompletedTrade.symbol == symbol)
 
         if range_filter:
             from datetime import date, timedelta

@@ -15,7 +15,7 @@ bp = Blueprint('positions', __name__)
 def index():
     user = AuthContext.require_user()
     open_only = request.args.get('open_only') == '1'
-    symbol = request.args.get('symbol', '').strip() or None
+    symbol = (request.args.get('symbol', '').strip().upper()) or None
 
     with db_manager.get_session() as session:
         query = session.query(Position).filter_by(user_id=user.user_id)
@@ -23,7 +23,7 @@ def index():
         if open_only:
             query = query.filter(Position.closed_at.is_(None), Position.current_qty != 0)
         if symbol:
-            query = query.filter(Position.symbol == symbol.upper())
+            query = query.filter(Position.symbol == symbol)
 
         positions = query.order_by(Position.symbol).all()
 

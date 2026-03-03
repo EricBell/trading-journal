@@ -90,7 +90,7 @@ let equityChart, winLossChart, monthlyChart, patternChart;
 
 function loadDashboard() {
   const range = document.getElementById('rangeSelect').value;
-  const symbol = document.getElementById('symbolInput').value.trim();
+  const symbol = document.getElementById('symbolInput').value.trim().toUpperCase();
   const params = new URLSearchParams();
   if (range) params.set('range', range);
   if (symbol) params.set('symbol', symbol);
