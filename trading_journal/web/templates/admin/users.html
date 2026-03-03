@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Users — Admin{% endblock %}
+
+{% block content %}
+<h4 class="mb-3">User Management</h4>
+
+<!-- Create user form -->
+<div class="card mb-4">
+  <div class="card-header">Create New User</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('admin.create_user') }}" class="row g-2">
+      <div class="col-md-3">
+        <input type="text" name="username" class="form-control form-control-sm" placeholder="Username" required>
+      </div>
+      <div class="col-md-3">
+        <input type="email" name="email" class="form-control form-control-sm" placeholder="Email" required>
+      </div>
+      <div class="col-md-3">
+        <input type="password" name="password" class="form-control form-control-sm" placeholder="Password (for web login)">
+      </div>
+      <div class="col-auto d-flex align-items-center">
+        <div class="form-check me-2">
+          <input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdmin">
+          <label class="form-check-label" for="isAdmin">Admin</label>
+        </div>
+        <button class="btn btn-sm btn-primary">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Users table -->
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>ID</th><th>Username</th><th>Email</th>
+        <th>Admin</th><th>Active</th><th>Trades</th><th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.user_id }}</td>
+        <td><strong>{{ u.username }}</strong></td>
+        <td>{{ u.email }}</td>
+        <td>{% if u.is_admin %}<span class="badge bg-warning text-dark">admin</span>{% else %}—{% endif %}</td>
+        <td>{% if u.is_active %}<span class="badge bg-success">active</span>{% else %}<span class="badge bg-secondary">inactive</span>{% endif %}</td>
+        <td>{{ u.trade_count }}</td>
+        <td>{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '—' }}</td>
+        <td>
+          <div class="d-flex gap-1 flex-wrap">
+            {% if u.is_active %}
+            <form method="post" action="{{ url_for('admin.deactivate_user', target_user_id=u.user_id) }}" class="d-inline">
+              <button class="btn btn-sm btn-outline-warning">Deactivate</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('admin.reactivate_user', target_user_id=u.user_id) }}" class="d-inline">
+              <button class="btn btn-sm btn-outline-success">Reactivate</button>
+            </form>
+            {% endif %}
+            <!-- Set password inline -->
+            <button class="btn btn-sm btn-outline-secondary" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#setPwd{{ u.user_id }}">
+              Set Password
+            </button>
+          </div>
+          <div class="collapse mt-1" id="setPwd{{ u.user_id }}">
+            <form method="post" action="{{ url_for('admin.set_password', target_user_id=u.user_id) }}" class="d-flex gap-1">
+              <input type="password" name="password" class="form-control form-control-sm" placeholder="New password" required>
+              <button class="btn btn-sm btn-primary text-nowrap">Set</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

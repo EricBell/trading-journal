@@ -19,7 +19,6 @@ from .user_management import UserManager
 from .report_configs import (
     TRADE_COLUMN_DEFS,
     TRADE_REPORT_LAYOUTS,
-    TRADE_SORTABLE_COLUMNS,
 )
 
 
@@ -520,13 +519,11 @@ def show_trade(id: int) -> None:
     '"YYYY-MM-DD/YYYY-MM-DD", "YYYY-MM-DD/" (to today), "/YYYY-MM-DD" (up to date).'
 ))
 @click.option('--symbol', help='Filter by symbol')
-@click.option('--format', 'output_format', default='summary', type=click.Choice(['summary', 'detailed', 'json']))
 @require_authentication
-def dashboard(date_range: str, symbol: str, output_format: str) -> None:
+def dashboard(date_range: str, symbol: str) -> None:
     """Generate dashboard metrics."""
     try:
         from .dashboard import DashboardEngine
-        import json
 
         engine = DashboardEngine()
 
@@ -551,13 +548,7 @@ def dashboard(date_range: str, symbol: str, output_format: str) -> None:
             click.echo(f"ℹ️  {dashboard_data['message']}")
             return
 
-        # Output format
-        if output_format == 'json':
-            click.echo(json.dumps(dashboard_data, indent=2, default=str))
-            return
-
-        # Summary or detailed format
-        _display_dashboard_summary(dashboard_data, detailed=(output_format == 'detailed'))
+        _display_dashboard_summary(dashboard_data)
 
     except Exception as e:
         click.echo(f"❌ Dashboard generation failed: {e}", err=True)
@@ -670,29 +661,12 @@ def _display_dashboard_summary(data: dict, detailed: bool = False) -> None:
     'Date range filter. Formats: "today", "7d" (last 7 days), '
     '"YYYY-MM-DD/YYYY-MM-DD", "YYYY-MM-DD/" (to today), "/YYYY-MM-DD" (up to date).'
 ))
-@click.option(
-    '--format',
-    'output_format',
-    default='table',
-    type=click.Choice(['table', 'json', 'csv']),
-    help='Output format: table (default), json, or csv.',
-)
-@click.option(
-    '--sort',
-    'sort_keys',
-    default='',
-    help='Comma-separated sort keys (e.g. "date,entm,pnl"). '
-         'If omitted, the report layout default is used (if defined).',
-)
 @require_authentication
-def trades(report_name: str, symbol: str, date_range: str, output_format: str, sort_keys: str) -> None:
+def trades(report_name: str, symbol: str, date_range: str) -> None:
     """List completed trades using a named report layout."""
     try:
         from .trade_completion import TradeCompletionEngine
         from .dashboard import DashboardEngine
-        import json
-        import csv
-        import sys
         from datetime import datetime
 
         # Parse date range if provided
@@ -727,18 +701,7 @@ def trades(report_name: str, symbol: str, date_range: str, output_format: str, s
 
         layout_sort = layout.get("default_sort") or []
 
-        # Parse and validate sort keys
-        sort_key_list = [k.strip().lower() for k in (sort_keys or "").split(",") if k.strip()]
-        if not sort_key_list:
-            sort_key_list = [k.lower() for k in layout_sort]
-        if sort_key_list:
-            invalid = [k for k in sort_key_list if k not in TRADE_SORTABLE_COLUMNS]
-            if invalid:
-                valid_keys = ", ".join(sorted(TRADE_SORTABLE_COLUMNS))
-                click.echo(f"❌ Invalid sort key(s): {', '.join(invalid)}", err=True)
-                click.echo(f"   Valid sort keys: {valid_keys}", err=True)
-                raise click.Abort()
-
+        if layout_sort:
             def _parse_ts(ts: str):
                 if not ts:
                     return None
@@ -775,16 +738,13 @@ def trades(report_name: str, symbol: str, date_range: str, output_format: str, s
                 if key == "pnl":
                     return trade.get("pnl") or 0.0
                 if key == "result":
-                    # LOSS before WIN (False < True)
                     return (trade.get("pnl") or 0.0) > 0
                 if key == "pattern":
                     return (trade.get("setup_pattern") or "").lower()
                 return 0
 
-            def _sort_key(trade: dict):
-                return tuple(_sort_value(trade, key) for key in sort_key_list)
-
-            trades_list = sorted(trades_list, key=_sort_key)
+            sort_key_list = [k.lower() for k in layout_sort]
+            trades_list = sorted(trades_list, key=lambda t: tuple(_sort_value(t, k) for k in sort_key_list))
 
         click.echo("📋 Completed Trades Report")
         if symbol:
@@ -799,118 +759,83 @@ def trades(report_name: str, symbol: str, date_range: str, output_format: str, s
         click.echo(f"   Total P&L: ${summary['total_pnl']:.2f}")
         click.echo(f"   Average Win: ${summary['average_win']:.2f}")
         click.echo(f"   Average Loss: ${summary['average_loss']:.2f}")
-        if output_format == 'json':
-            click.echo(json.dumps(summary, indent=2, default=str))
-        elif output_format == 'csv':
-            fieldnames = [
-                'id',
-                'symbol',
-                'instrument_type',
-                'type',
-                'qty',
-                'entry_price',
-                'exit_price',
-                'pnl',
-                'opened_at',
-                'closed_at',
-                'setup_pattern',
-                'notes',
-            ]
-            writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
-            writer.writeheader()
-            for trade in trades_list:
-                writer.writerow({
-                    'id': trade['id'],
-                    'symbol': trade['symbol'],
-                    'instrument_type': trade.get('instrument_type', ''),
-                    'type': trade['type'],
-                    'qty': trade['qty'],
-                    'entry_price': trade['entry_price'],
-                    'exit_price': trade['exit_price'],
-                    'pnl': trade['pnl'],
-                    'opened_at': trade['opened_at'],
-                    'closed_at': trade['closed_at'],
-                    'setup_pattern': trade['setup_pattern'] or '',
-                    'notes': trade['notes'] or '',
-                })
-        else:
-            click.echo(f"\n📋 Trade Details:")
-            # Table header based on layout columns
-            header_cells = []
+        click.echo(f"\n📋 Trade Details:")
+        # Table header based on layout columns
+        header_cells = []
+        for col_key in layout["columns"]:
+            col_def = TRADE_COLUMN_DEFS.get(col_key)
+            if not col_def:
+                continue
+            label = str(col_def.get("label", col_key))
+            width = int(col_def.get("width", len(label)))
+            align = str(col_def.get("align", "<"))
+            header_cells.append(f"{label:{align}{width}}")
+        click.echo(" | ".join(header_cells))
+        # Separator line length roughly matches header length
+        click.echo("-" * min(160, sum(int(TRADE_COLUMN_DEFS[c]["width"]) + 3 for c in layout["columns"] if c in TRADE_COLUMN_DEFS)))
+
+        # Helper to format timestamps
+        def _format_ts(ts: str):
+            if not ts:
+                return "", ""
+            try:
+                dt = datetime.fromisoformat(ts)
+            except Exception:
+                return "", ""
+            return dt.strftime("%y%m%d"), dt.strftime("%H%M")
+
+        # Table rows
+        for trade in trades_list:
+            status_emoji = "🟢" if trade['pnl'] > 0 else "🔴"
+            result_label = "WIN" if trade['pnl'] > 0 else "LOSS"
+            pattern = (trade.get('setup_pattern') or "")[:20]
+
+            open_date, open_time = _format_ts(trade.get('opened_at'))
+            close_date, close_time = _format_ts(trade.get('closed_at'))
+            date_str = open_date or close_date
+            entry_time = open_time
+            exit_time = close_time
+
+            row_cells = []
             for col_key in layout["columns"]:
                 col_def = TRADE_COLUMN_DEFS.get(col_key)
                 if not col_def:
                     continue
-                label = str(col_def.get("label", col_key))
-                width = int(col_def.get("width", len(label)))
+                width = int(col_def.get("width", 8))
                 align = str(col_def.get("align", "<"))
-                header_cells.append(f"{label:{align}{width}}")
-            click.echo(" | ".join(header_cells))
-            # Separator line length roughly matches header length
-            click.echo("-" * min(160, sum(int(TRADE_COLUMN_DEFS[c]["width"]) + 3 for c in layout["columns"] if c in TRADE_COLUMN_DEFS)))
 
-            # Helper to format timestamps
-            def _format_ts(ts: str):
-                if not ts:
-                    return "", ""
-                try:
-                    dt = datetime.fromisoformat(ts)
-                except Exception:
-                    return "", ""
-                return dt.strftime("%y%m%d"), dt.strftime("%H%M")
+                if col_key == "id":
+                    value = str(trade.get("id", ""))
+                elif col_key == "symbol":
+                    value = str(trade.get("symbol", ""))
+                elif col_key == "instrument_type":
+                    value = str(trade.get("instrument_type") or "")
+                elif col_key == "type":
+                    value = str(trade.get("type", ""))
+                elif col_key == "qty":
+                    value = str(trade.get("qty") or "")
+                elif col_key == "date":
+                    value = date_str or ""
+                elif col_key == "entm":
+                    value = entry_time or ""
+                elif col_key == "entry":
+                    value = f"{trade.get('entry_price', 0.0):.4f}"
+                elif col_key == "extm":
+                    value = exit_time or ""
+                elif col_key == "exit":
+                    value = f"{trade.get('exit_price', 0.0):.4f}"
+                elif col_key == "pnl":
+                    value = f"{trade.get('pnl', 0.0):.2f}"
+                elif col_key == "result":
+                    value = f"{status_emoji} {result_label}"
+                elif col_key == "pattern":
+                    value = pattern
+                else:
+                    value = ""
 
-            # Table rows
-            for trade in trades_list:
-                status_emoji = "🟢" if trade['pnl'] > 0 else "🔴"
-                result_label = "WIN" if trade['pnl'] > 0 else "LOSS"
-                pattern = (trade.get('setup_pattern') or "")[:20]
+                row_cells.append(f"{value:{align}{width}}")
 
-                open_date, open_time = _format_ts(trade.get('opened_at'))
-                close_date, close_time = _format_ts(trade.get('closed_at'))
-                date_str = open_date or close_date
-                entry_time = open_time
-                exit_time = close_time
-
-                row_cells = []
-                for col_key in layout["columns"]:
-                    col_def = TRADE_COLUMN_DEFS.get(col_key)
-                    if not col_def:
-                        continue
-                    width = int(col_def.get("width", 8))
-                    align = str(col_def.get("align", "<"))
-
-                    if col_key == "id":
-                        value = str(trade.get("id", ""))
-                    elif col_key == "symbol":
-                        value = str(trade.get("symbol", ""))
-                    elif col_key == "instrument_type":
-                        value = str(trade.get("instrument_type") or "")
-                    elif col_key == "type":
-                        value = str(trade.get("type", ""))
-                    elif col_key == "qty":
-                        value = str(trade.get("qty") or "")
-                    elif col_key == "date":
-                        value = date_str or ""
-                    elif col_key == "entm":
-                        value = entry_time or ""
-                    elif col_key == "entry":
-                        value = f"{trade.get('entry_price', 0.0):.4f}"
-                    elif col_key == "extm":
-                        value = exit_time or ""
-                    elif col_key == "exit":
-                        value = f"{trade.get('exit_price', 0.0):.4f}"
-                    elif col_key == "pnl":
-                        value = f"{trade.get('pnl', 0.0):.2f}"
-                    elif col_key == "result":
-                        value = f"{status_emoji} {result_label}"
-                    elif col_key == "pattern":
-                        value = pattern
-                    else:
-                        value = ""
-
-                    row_cells.append(f"{value:{align}{width}}")
-
-                click.echo(" | ".join(row_cells))
+            click.echo(" | ".join(row_cells))
     except Exception as e:
         click.echo(f"❌ Trade listing failed: {e}")
         raise click.Abort()
@@ -951,362 +876,6 @@ def positions(open_only: bool, symbol: str) -> None:
         click.echo(f"❌ Position reporting failed: {e}")
         raise click.Abort()
 
-
-@report.command("columns")
-@click.argument('report_type', type=click.Choice(['trades']))
-@click.argument('report_name', required=False)
-@click.option(
-    '--format',
-    'output_format',
-    type=click.Choice(['table', 'json']),
-    default='table',
-    show_default=True,
-    help='Output format for column definitions.',
-)
-def report_columns(report_type: str, report_name: str, output_format: str) -> None:
-    """Show available columns for reports and layouts."""
-    try:
-        if report_type == 'trades':
-            if report_name:
-                layout = TRADE_REPORT_LAYOUTS.get(report_name)
-                if not layout:
-                    available = ", ".join(sorted(TRADE_REPORT_LAYOUTS.keys()))
-                    click.echo(f"❌ Unknown trades report layout: '{report_name}'", err=True)
-                    click.echo(f"   Available layouts: {available}", err=True)
-                    raise click.Abort()
-                layouts = {report_name: layout}
-            else:
-                layouts = TRADE_REPORT_LAYOUTS
-        else:
-            layouts = {}
-
-        if output_format == 'json':
-            import json
-
-            payload = {
-                'report_type': report_type,
-                'layouts': {
-                    name: {
-                        'columns': [
-                            {
-                                'key': col_key,
-                                'label': TRADE_COLUMN_DEFS[col_key]["label"],
-                            }
-                            for col_key in layout['columns']
-                            if col_key in TRADE_COLUMN_DEFS
-                        ]
-                    }
-                    for name, layout in layouts.items()
-                },
-            }
-            click.echo(json.dumps(payload, indent=2, default=str))
-        else:
-            for name, layout in layouts.items():
-                click.echo(f"📋 Columns for trades report layout '{name}' (display order):")
-                for col_key in layout['columns']:
-                    if col_key not in TRADE_COLUMN_DEFS:
-                        continue
-                    col_def = TRADE_COLUMN_DEFS[col_key]
-                    click.echo(f"  - {col_key:16} : {col_def['label']}")
-                click.echo()
-            click.echo("Use these keys with --sort, e.g.:")
-            click.echo("  report trades default --sort date,entm,pnl")
-    except Exception as e:
-        click.echo(f"❌ Column listing failed: {e}", err=True)
-        raise click.Abort()
-
-
-@main.group()
-def pattern() -> None:
-    """Setup pattern management commands."""
-    pass
-
-
-@pattern.command()
-@click.option('--id', type=int, help='Completed trade ID to annotate')
-@click.option('--symbol', help='Symbol to annotate (for bulk operations)')
-@click.option('--date', help='Date in YYYY-MM-DD format (for bulk operations)')
-@click.option('--pattern', required=True, help='Setup pattern name')
-def annotate(id: int, symbol: str, date: str, pattern: str) -> None:
-    """Annotate completed trades with setup patterns."""
-    try:
-        if not id:
-            click.echo("Error: --id is required for this operation.", err=True)
-            raise click.Abort()
-        with db_manager.get_session() as session:
-            trade = session.query(CompletedTrade).filter_by(completed_trade_id=id).one_or_none()
-            if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
-                raise click.Abort()
-            trade.setup_pattern = pattern
-            session.commit()
-            click.echo(f"✅ Successfully annotated trade {id} with pattern: '{pattern}'")
-    except Exception as e:
-        click.echo(f"❌ Pattern annotation failed: {e}", err=True)
-        raise click.Abort()
-
-
-@pattern.command("list")
-
-
-@require_authentication
-
-
-def list_patterns() -> None:
-
-
-    """List all unique patterns used."""
-
-
-    try:
-
-
-        user_id = AuthContext.require_user().user_id
-
-
-        with db_manager.get_session() as session:
-
-
-            patterns = session.query(CompletedTrade.setup_pattern).filter(
-
-
-                CompletedTrade.user_id == user_id,
-
-
-                CompletedTrade.setup_pattern.isnot(None),
-
-
-                CompletedTrade.setup_pattern != ''
-
-
-            ).distinct().all()
-
-
-
-
-
-            if not patterns:
-
-
-                click.echo("No setup patterns found.")
-
-
-                return
-
-
-
-
-
-            click.echo("📝 Unique Setup Patterns:")
-
-
-            for (pattern,) in patterns:
-
-
-                click.echo(f"- {pattern}")
-
-
-
-
-
-    except Exception as e:
-
-
-        click.echo(f"❌ Pattern listing failed: {e}", err=True)
-
-
-        raise click.Abort()
-
-
-
-
-
-
-
-
-@pattern.command("performance")
-
-
-@click.option('--pattern', required=True, help='The setup pattern to analyze.')
-
-
-@require_authentication
-
-
-def pattern_performance(pattern: str) -> None:
-
-
-    """Analyze the performance of a specific setup pattern."""
-
-
-    try:
-
-
-        user_id = AuthContext.require_user().user_id
-
-
-        with db_manager.get_session() as session:
-
-
-            trades = session.query(CompletedTrade).filter(
-
-
-                CompletedTrade.user_id == user_id,
-
-
-                CompletedTrade.setup_pattern == pattern
-
-
-            ).all()
-
-
-
-
-
-            if not trades:
-
-
-                click.echo(f"No trades found for pattern: '{pattern}'")
-
-
-                return
-
-
-
-
-
-            total_trades = len(trades)
-
-
-            winning_trades = len([t for t in trades if t.is_winning_trade])
-
-
-            losing_trades = total_trades - winning_trades
-
-
-            win_rate = (winning_trades / total_trades) * 100 if total_trades > 0 else 0
-
-
-            total_pnl = sum(t.net_pnl for t in trades)
-
-
-
-
-
-            click.echo(f"📈 Performance for pattern: '{pattern}'")
-
-
-            click.echo(f"   Total Trades: {total_trades}")
-
-
-            click.echo(f"   Winning Trades: {winning_trades}")
-
-
-            click.echo(f"   Losing Trades: {losing_trades}")
-
-
-            click.echo(f"   Win Rate: {win_rate:.2f}%")
-
-
-            click.echo(f"   Total P&L: ${total_pnl:.2f}")
-
-
-
-
-
-    except Exception as e:
-
-
-        click.echo(f"❌ Pattern performance analysis failed: {e}", err=True)
-
-
-        raise click.Abort()
-
-
-
-
-
-
-
-
-@main.group()
-
-
-def notes() -> None:
-    """Trade notes management commands."""
-    pass
-
-
-@notes.command("add")
-@click.option('--id', type=int, required=True, help='Completed trade ID')
-@click.option('--text', required=True, help='Note text')
-@require_authentication
-def add_note(id: int, text: str) -> None:
-    """Add notes to a completed trade."""
-    try:
-        with db_manager.get_session() as session:
-            trade = session.query(CompletedTrade).filter_by(completed_trade_id=id).one_or_none()
-            if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
-                raise click.Abort()
-            trade.trade_notes = text
-            session.commit()
-            click.echo(f"✅ Successfully added note to trade {id}.")
-    except Exception as e:
-        click.echo(f"❌ Note addition failed: {e}", err=True)
-        raise click.Abort()
-
-
-@notes.command("show")
-@click.option('--id', type=int, required=True, help='Completed trade ID')
-@require_authentication
-def show_notes(id: int) -> None:
-    """Show notes for a completed trade."""
-    try:
-        user_id = AuthContext.require_user().user_id
-        with db_manager.get_session() as session:
-            trade = session.query(CompletedTrade).filter_by(
-                completed_trade_id=id,
-                user_id=user_id
-            ).one_or_none()
-            if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
-                raise click.Abort()
-            click.echo(f"🗒️ Notes for trade {id}:")
-            if trade.trade_notes:
-                click.echo(trade.trade_notes)
-            else:
-                click.echo("No notes found for this trade.")
-    except Exception as e:
-        click.echo(f"❌ Note display failed: {e}", err=True)
-        raise click.Abort()
-
-
-@notes.command("edit")
-@click.option('--id', type=int, required=True, help='Completed trade ID')
-@click.option('--text', required=True, help='New note text')
-@require_authentication
-def edit_note(id: int, text: str) -> None:
-    """Edit the notes for a completed trade."""
-    try:
-        user_id = AuthContext.require_user().user_id
-        with db_manager.get_session() as session:
-            trade = session.query(CompletedTrade).filter_by(
-                completed_trade_id=id,
-                user_id=user_id
-            ).one_or_none()
-
-            if not trade:
-                click.echo(f"❌ Error: Completed trade with ID {id} not found.", err=True)
-                raise click.Abort()
-
-            trade.trade_notes = text
-            session.commit()
-            click.echo(f"✅ Successfully edited note for trade {id}.")
-
-    except Exception as e:
-        click.echo(f"❌ Note editing failed: {e}", err=True)
-        raise click.Abort()
 
 
 @main.group()
@@ -1389,23 +958,41 @@ def list_users(include_inactive: bool, output_format: str) -> None:
 @click.option('--username', prompt=True, help='Username (3-100 chars, alphanumeric + underscore/hyphen)')
 @click.option('--email', prompt=True, help='Email address')
 @click.option('--admin', is_flag=True, help='Grant admin privileges')
+@click.option('--password', default=None, help='Web login password (optional; prompted if omitted)')
 @require_authentication
-def create_user(username: str, email: str, admin: bool) -> None:
+def create_user(username: str, email: str, admin: bool, password: str) -> None:
     """Create a new user with automatic API key generation."""
+    from werkzeug.security import generate_password_hash
+
     # Check admin
     if not AuthContext.is_admin():
         click.echo("❌ Error: This command requires administrator privileges.", err=True)
         raise click.Abort()
 
+    # Prompt for password if not supplied
+    if password is None:
+        password = click.prompt(
+            "Web login password (leave blank to skip)",
+            default='',
+            hide_input=True,
+            confirmation_prompt=False,
+        )
+
     try:
         with db_manager.get_session() as session:
             manager = UserManager(session)
             user, raw_api_key = manager.create_user(username, email, is_admin=admin)
+
+            if password:
+                user.password_hash = generate_password_hash(password)
+
             session.commit()
 
             click.echo(f"\n✅ Successfully created user '{username}' (ID: {user.user_id})")
             if admin:
                 click.echo("   Admin privileges: Granted")
+            if password:
+                click.echo("   Web login password: set")
 
             click.echo("\n" + "=" * 80)
             click.echo("🔑 API KEY - SAVE THIS NOW (shown only once)")

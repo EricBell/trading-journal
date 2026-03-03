@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Positions — Trading Journal{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Positions</h4>
+</div>
+
+<form class="row g-2 mb-3" method="get">
+  <div class="col-auto">
+    <input type="text" name="symbol" class="form-control form-control-sm" placeholder="Symbol" value="{{ symbol }}">
+  </div>
+  <div class="col-auto">
+    <div class="form-check form-check-inline mt-1">
+      <input class="form-check-input" type="checkbox" name="open_only" value="1" id="openOnly"
+             {% if open_only %}checked{% endif %}>
+      <label class="form-check-label" for="openOnly">Open only</label>
+    </div>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-sm btn-primary">Filter</button>
+    <a href="{{ url_for('positions.index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+  </div>
+</form>
+
+{% if positions %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Symbol</th><th>Type</th><th>Qty</th>
+        <th>Avg Cost</th><th>Realized P&L</th>
+        <th>Opened</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in positions %}
+      <tr>
+        <td><strong>{{ p.symbol }}</strong></td>
+        <td><span class="badge bg-secondary">{{ p.instrument_type }}</span></td>
+        <td>{{ p.current_qty }}</td>
+        <td>${{ "%.4f"|format(p.avg_cost_basis|float) if p.avg_cost_basis else '—' }}</td>
+        <td class="fw-bold {% if p.realized_pnl and p.realized_pnl > 0 %}text-success{% elif p.realized_pnl and p.realized_pnl < 0 %}text-danger{% endif %}">
+          ${{ "%.2f"|format(p.realized_pnl|float) if p.realized_pnl else '0.00' }}
+        </td>
+        <td>{{ p.opened_at.strftime('%Y-%m-%d') if p.opened_at else '—' }}</td>
+        <td>
+          {% if p.closed_at %}
+            <span class="badge bg-secondary">Closed</span>
+          {% else %}
+            <span class="badge bg-success">Open</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-muted small">{{ positions|length }} position(s)</p>
+{% else %}
+<div class="text-center text-muted mt-5">
+  <p class="fs-5">No positions found.</p>
+</div>
+{% endif %}
+{% endblock %}

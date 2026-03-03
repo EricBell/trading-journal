@@ -1,6 +1,6 @@
 [project]
 name = "trading-journal"
-version = "0.5.0"
+version = "1.0.0"
 description = "PostgreSQL-based trading journal for data ingestion and performance analysis"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
     "tomli-w>=1.0.0",
+    "flask>=3.0.0",
+    "flask-session>=0.8.0",
+    "werkzeug>=3.0.0",
+    "gunicorn>=21.0.0",
 ]
 
 [project.optional-dependencies]
@@ -58,3 +62,8 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.1",
+]

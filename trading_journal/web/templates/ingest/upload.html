@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Upload CSV — Trading Journal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Upload Schwab CSV Files</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('ingest.upload') }}" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label">CSV Files</label>
+            <input type="file" name="files" class="form-control" multiple accept=".csv"
+                   id="fileInput">
+            <div class="form-text">Select one or more Schwab Trade Activity CSV files.</div>
+          </div>
+
+          <div id="fileList" class="mb-3 text-muted small"></div>
+
+          <div class="mb-3 form-check">
+            <input type="checkbox" name="include_rolling" value="1" class="form-check-input" id="inclRolling">
+            <label class="form-check-label" for="inclRolling">Include Rolling Strategies section</label>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Upload &amp; Ingest</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('fileInput').addEventListener('change', function() {
+  const div = document.getElementById('fileList');
+  const files = Array.from(this.files);
+  if (files.length === 0) { div.textContent = ''; return; }
+  div.innerHTML = `<strong>${files.length} file(s) selected:</strong><ul class="mb-0">` +
+    files.map(f => `<li>${f.name} (${(f.size/1024).toFixed(1)} KB)</li>`).join('') +
+    '</ul>';
+});
+</script>
+{% endblock %}
