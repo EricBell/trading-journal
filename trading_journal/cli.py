@@ -74,19 +74,23 @@ def main(ctx: click.Context, overview: bool) -> None:
     # Check if configuration exists (except for config commands)
     config_manager = get_config_manager()
     if not config_manager.config_exists():
-        click.echo("⚠️  No configuration found.")
-        click.echo(f"Config file should be at: {config_manager.app_config_path}")
-        click.echo("\nRun the setup wizard to create your configuration:")
-        click.echo("  $ trading-journal config setup")
+        # Skip the wizard when env vars supply a complete DB connection (e.g. Docker)
+        import os
+        has_env_config = all(os.environ.get(v) for v in ('DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'))
+        if not has_env_config:
+            click.echo("⚠️  No configuration found.")
+            click.echo(f"Config file should be at: {config_manager.app_config_path}")
+            click.echo("\nRun the setup wizard to create your configuration:")
+            click.echo("  $ trading-journal config setup")
 
-        if click.confirm("\nRun setup wizard now?", default=True):
-            if run_wizard():
-                click.echo("\n✓ Configuration created successfully!")
-                get_config_manager(reset=True)
+            if click.confirm("\nRun setup wizard now?", default=True):
+                if run_wizard():
+                    click.echo("\n✓ Configuration created successfully!")
+                    get_config_manager(reset=True)
+                else:
+                    raise click.Abort()
             else:
                 raise click.Abort()
-        else:
-            raise click.Abort()
 
 
 @main.group()
