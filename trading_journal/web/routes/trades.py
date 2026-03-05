@@ -1,6 +1,7 @@
 """Trade routes: /trades, /trades/<id>, /trades/<id>/annotate."""
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from sqlalchemy import asc, desc
 
 from ..auth import login_required
 from ...authorization import AuthContext
@@ -8,6 +9,21 @@ from ...database import db_manager
 from ...models import CompletedTrade, SetupPattern
 
 bp = Blueprint('trades', __name__)
+
+SORT_COLUMNS = {
+    'id':      CompletedTrade.completed_trade_id,
+    'symbol':  CompletedTrade.symbol,
+    'type':    CompletedTrade.instrument_type,
+    'qty':     CompletedTrade.total_qty,
+    'entry':   CompletedTrade.entry_avg_price,
+    'exit':    CompletedTrade.exit_avg_price,
+    'opened':  CompletedTrade.opened_at,
+    'closed':  CompletedTrade.closed_at,
+    'pnl':     CompletedTrade.net_pnl,
+    'pattern': CompletedTrade.setup_pattern,
+}
+DEFAULT_SORT, DEFAULT_DIR = 'closed', 'desc'
+PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 
 @bp.route('/trades')
@@ -17,8 +33,31 @@ def index():
     symbol = (request.args.get('symbol', '').strip().upper()) or None
     range_filter = request.args.get('range', '').strip() or None
 
-    with db_manager.get_session() as session:
-        query = session.query(CompletedTrade).filter_by(user_id=user.user_id)
+    # Sorting
+    sort_col = request.args.get('sort', DEFAULT_SORT)
+    if sort_col not in SORT_COLUMNS:
+        sort_col = DEFAULT_SORT
+    sort_dir = request.args.get('dir', DEFAULT_DIR)
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = DEFAULT_DIR
+
+    # Pagination
+    if 'per_page' in request.args:
+        try:
+            per_page = int(request.args['per_page'])
+            if per_page in PER_PAGE_OPTIONS:
+                session['trades_per_page'] = per_page
+        except ValueError:
+            pass
+    per_page = session.get('trades_per_page', 25)
+
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except ValueError:
+        page = 1
+
+    with db_manager.get_session() as db_session:
+        query = db_session.query(CompletedTrade).filter_by(user_id=user.user_id)
 
         if symbol:
             query = query.filter(CompletedTrade.symbol == symbol)
@@ -34,11 +73,18 @@ def index():
                 except ValueError:
                     pass
 
-        trades = query.order_by(CompletedTrade.closed_at.desc()).all()
+        col = SORT_COLUMNS[sort_col]
+        order_fn = asc if sort_dir == 'asc' else desc
+        query = query.order_by(order_fn(col))
+
+        total = query.count()
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        page = min(page, total_pages)
+        trades = query.offset((page - 1) * per_page).limit(per_page).all()
 
         # Fetch user patterns for filter dropdown
         patterns = (
-            session.query(CompletedTrade.setup_pattern)
+            db_session.query(CompletedTrade.setup_pattern)
             .filter(
                 CompletedTrade.user_id == user.user_id,
                 CompletedTrade.setup_pattern.isnot(None),
@@ -55,6 +101,13 @@ def index():
         symbol=symbol or '',
         range_filter=range_filter or '',
         pattern_names=pattern_names,
+        sort_col=sort_col,
+        sort_dir=sort_dir,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=total_pages,
+        per_page_options=PER_PAGE_OPTIONS,
     )
 
 

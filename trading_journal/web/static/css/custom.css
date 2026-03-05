@@ -30,6 +30,10 @@ tbody tr[onclick]:hover {
   background-color: rgba(13, 110, 253, 0.05);
 }
 
+/* Sortable column headers */
+thead th a { color: inherit; text-decoration: none; white-space: nowrap; }
+thead th a:hover { opacity: 0.8; }
+
 /* Tighten card padding on small screens */
 @media (max-width: 576px) {
   .card-body {
