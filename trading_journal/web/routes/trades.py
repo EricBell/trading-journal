@@ -155,7 +155,7 @@ def annotate(trade_id: int):
             return redirect(url_for('trades.index'))
 
         trade.setup_pattern = request.form.get('setup_pattern') or None
-        trade.trade_notes = request.form.get('trade_notes') or None
+        trade.trade_notes = request.form.get('trade_notes', '').strip() or None
         session.commit()
         flash('Trade updated.', 'success')
 
