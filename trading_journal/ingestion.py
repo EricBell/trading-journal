@@ -366,6 +366,16 @@ class NdjsonIngester:
 
         for record_data in records:
             try:
+                # Pre-filter header rows and known non-fill types before pydantic validation
+                # so they don't generate spurious validation errors.
+                if 'section_header' in record_data.get('issues', []):
+                    continue
+                event_type = record_data.get('event_type')
+                if event_type is not None and event_type != 'fill':
+                    if verbose:
+                        logger.debug(f"Skipping {event_type} record at row {record_data.get('row_index')}")
+                    continue
+
                 record = NdjsonRecord(**record_data)
 
                 if record.is_section_header:

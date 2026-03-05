@@ -13,5 +13,5 @@
   "(?i)^Account Summary\\s*$": null,
   "(?i)^Symbol,Description,Qty": null,
   "(?i)^Symbol,Description,P/L": null,
-  "(?i)^,Rolling Strategies": "Rolling Strategies"
+  "(?i)^,?Rolling Strategies": "Rolling Strategies"
 }
