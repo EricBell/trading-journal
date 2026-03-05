@@ -32,6 +32,7 @@ def upload():
         return redirect(url_for('ingest.upload_form'))
 
     include_rolling = bool(request.form.get('include_rolling'))
+    dry_run = bool(request.form.get('dry_run'))
     tmpdir = tempfile.mkdtemp()
     saved_paths = []
 
@@ -51,9 +52,44 @@ def upload():
         parser = CsvParser(include_rolling=include_rolling)
         records = parser.parse_files(saved_paths)
 
-        # Ingest into DB
+        # Ingest into DB (dry_run=True skips all writes)
         ingester = NdjsonIngester()
-        result = ingester.ingest_records(records)
+        result = ingester.ingest_records(records, dry_run=dry_run)
+
+        if dry_run:
+            # Build per-symbol breakdown from parsed fills
+            fills = [r for r in records if r.get('event_type') == 'fill']
+            by_symbol = {}
+            for r in fills:
+                sym = r.get('symbol', 'UNKNOWN')
+                if sym not in by_symbol:
+                    by_symbol[sym] = {'buys': 0, 'sells': 0, 'net_qty': 0}
+                side = r.get('side', '')
+                qty = abs(r.get('qty', 0) or 0)
+                if side == 'BUY':
+                    by_symbol[sym]['buys'] += 1
+                    by_symbol[sym]['net_qty'] += qty
+                elif side == 'SELL':
+                    by_symbol[sym]['sells'] += 1
+                    by_symbol[sym]['net_qty'] -= qty
+
+            dry_run_results = {
+                'file_count': len(saved_paths),
+                'file_names': [Path(p).name for p in saved_paths],
+                'fill_count': len(fills),
+                'records_processed': result['records_processed'],
+                'records_failed': result['records_failed'],
+                'validation_errors': result['validation_errors'],
+                'success': result['success'],
+                'by_symbol': sorted(by_symbol.items()),
+                'include_rolling': include_rolling,
+            }
+            return render_template(
+                'ingest/upload.html',
+                user=AuthContext.get_current_user(),
+                dry_run_results=dry_run_results,
+                include_rolling=include_rolling,
+            )
 
         # Process trades
         engine = TradeCompletionEngine()

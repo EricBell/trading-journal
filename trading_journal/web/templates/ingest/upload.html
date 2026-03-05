@@ -17,15 +17,126 @@
 
           <div id="fileList" class="mb-3 text-muted small"></div>
 
-          <div class="mb-3 form-check">
-            <input type="checkbox" name="include_rolling" value="1" class="form-check-input" id="inclRolling">
-            <label class="form-check-label" for="inclRolling">Include Rolling Strategies section</label>
+          <div class="mb-3 d-flex flex-wrap gap-4">
+            <div class="form-check">
+              <input type="checkbox" name="include_rolling" value="1" class="form-check-input"
+                     id="inclRolling" {% if include_rolling %}checked{% endif %}>
+              <label class="form-check-label" for="inclRolling">Include Rolling Strategies section</label>
+            </div>
+            <div class="form-check">
+              <input type="checkbox" name="dry_run" value="1" class="form-check-input"
+                     id="dryRun">
+              <label class="form-check-label text-warning fw-semibold" for="dryRun">Dry Run (preview only — no DB changes)</label>
+            </div>
           </div>
 
-          <button type="submit" class="btn btn-primary">Upload &amp; Ingest</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">Upload &amp; Ingest</button>
         </form>
       </div>
     </div>
+
+    {% if dry_run_results %}
+    <div class="card shadow-sm mt-4 border-warning">
+      <div class="card-header fw-bold text-warning bg-dark d-flex align-items-center gap-2">
+        <span>Dry Run Results</span>
+        <span class="badge bg-warning text-dark ms-1">No changes made</span>
+        {% if dry_run_results.success %}
+        <span class="badge bg-success ms-auto">All records valid</span>
+        {% else %}
+        <span class="badge bg-danger ms-auto">{{ dry_run_results.records_failed }} failed</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+
+        {# Summary row #}
+        <div class="row text-center mb-3 g-2">
+          <div class="col">
+            <div class="border rounded py-2">
+              <div class="fs-4 fw-bold">{{ dry_run_results.file_count }}</div>
+              <div class="text-muted small">File{{ 's' if dry_run_results.file_count != 1 }}</div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="border rounded py-2">
+              <div class="fs-4 fw-bold">{{ dry_run_results.fill_count }}</div>
+              <div class="text-muted small">Fills parsed</div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="border rounded py-2 {% if dry_run_results.records_failed > 0 %}border-danger{% endif %}">
+              <div class="fs-4 fw-bold {% if dry_run_results.records_failed > 0 %}text-danger{% endif %}">
+                {{ dry_run_results.records_failed }}
+              </div>
+              <div class="text-muted small">Invalid</div>
+            </div>
+          </div>
+        </div>
+
+        {# Files list #}
+        <p class="text-muted small mb-2">
+          <strong>Files:</strong>
+          {{ dry_run_results.file_names | join(', ') }}
+        </p>
+
+        {# Validation errors #}
+        {% if dry_run_results.validation_errors %}
+        <div class="alert alert-danger py-2 mb-3">
+          <strong>Validation errors (first {{ [dry_run_results.validation_errors|length, 10]|min }}):</strong>
+          <ul class="mb-0 mt-1 small">
+            {% for err in dry_run_results.validation_errors[:10] %}
+            <li>{{ err }}</li>
+            {% endfor %}
+          </ul>
+          {% if dry_run_results.validation_errors|length > 10 %}
+          <div class="small mt-1">...and {{ dry_run_results.validation_errors|length - 10 }} more</div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {# Per-symbol breakdown #}
+        {% if dry_run_results.by_symbol %}
+        <h6 class="mb-2">Breakdown by Symbol</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>Symbol</th>
+                <th class="text-center">Buys</th>
+                <th class="text-center">Sells</th>
+                <th class="text-end">Net Qty</th>
+              </tr>
+            </thead>
+            <tbody class="small">
+              {% for sym, info in dry_run_results.by_symbol %}
+              <tr>
+                <td class="fw-semibold">{{ sym }}</td>
+                <td class="text-center text-success">{{ info.buys }}</td>
+                <td class="text-center text-danger">{{ info.sells }}</td>
+                <td class="text-end {% if info.net_qty > 0 %}text-success{% elif info.net_qty < 0 %}text-danger{% endif %}">
+                  {% if info.net_qty > 0 %}+{% endif %}{{ info.net_qty }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+
+        {# CTA to commit #}
+        {% if dry_run_results.success %}
+        <div class="alert alert-success mt-3 mb-0 d-flex align-items-center gap-2">
+          <span>Looks good! Re-upload your files with <strong>Dry Run unchecked</strong> to commit to the database.</span>
+        </div>
+        {% else %}
+        <div class="alert alert-warning mt-3 mb-0">
+          Fix the validation errors above before ingesting.
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 </div>
 {% endblock %}
@@ -40,5 +151,19 @@ document.getElementById('fileInput').addEventListener('change', function() {
     files.map(f => `<li>${f.name} (${(f.size/1024).toFixed(1)} KB)</li>`).join('') +
     '</ul>';
 });
+
+// Update button label based on dry run checkbox
+const dryRunCb = document.getElementById('dryRun');
+const submitBtn = document.getElementById('submitBtn');
+function updateBtn() {
+  if (dryRunCb.checked) {
+    submitBtn.textContent = 'Preview (Dry Run)';
+    submitBtn.className = 'btn btn-warning';
+  } else {
+    submitBtn.textContent = 'Upload & Ingest';
+    submitBtn.className = 'btn btn-primary';
+  }
+}
+dryRunCb.addEventListener('change', updateBtn);
 </script>
 {% endblock %}
