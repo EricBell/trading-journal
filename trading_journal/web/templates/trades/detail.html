@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Trade {{ trade.completed_trade_id }} — Trading Journal{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+{% endblock %}
+
 {% block content %}
 <div class="mb-3">
   <a href="{{ url_for('trades.index') }}" class="btn btn-sm btn-outline-secondary">&larr; Back to Trades</a>
@@ -89,7 +93,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Notes</label>
-            <textarea name="trade_notes" class="form-control" rows="6"
+            <textarea id="trade_notes" name="trade_notes" rows="6"
                       placeholder="Trade notes…">{{ trade.trade_notes or '' }}</textarea>
           </div>
           <button type="submit" class="btn btn-primary">Save</button>
@@ -101,6 +105,16 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<script>
+const easyMDE = new EasyMDE({
+  element: document.getElementById('trade_notes'),
+  spellChecker: false,
+  autosave: { enabled: false },
+  toolbar: ['bold','italic','heading','|','unordered-list','ordered-list','|','link','code','|','preview','side-by-side','fullscreen'],
+  minHeight: '150px',
+});
+</script>
 <script>
 // If custom pattern is filled in, use it instead of the select
 const form = document.querySelector('form[action*="annotate"]');
