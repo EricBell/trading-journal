@@ -402,6 +402,10 @@ Version is stored **only in `pyproject.toml`** under `[project] version`. Format
 
 Claude must update `pyproject.toml` at the end of every turn where code changes were made.
 
+## Planning Mode
+
+When in plan mode, plans must NOT include code. Present strategy, approach, trade-offs, and discussion only. Code should appear only during implementation.
+
 ## Related Projects
 
 The application depends on output from the **Schwab CSV to JSON Converter** located at `../schwab-csv-to-json` for NDJSON input data.
