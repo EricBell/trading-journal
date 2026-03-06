@@ -331,11 +331,10 @@ class NdjsonIngester:
             # Commit the transaction
             session.commit()
 
-            # Update positions for fill trades
-            for trade_id in inserted_trade_ids:
-                trade = session.get(Trade, trade_id)
-                if trade and trade.is_fill:
-                    self.position_tracker.update_positions_from_trade(trade)
+        # Reprocess all positions from scratch to ensure idempotency on re-uploads.
+        # Per-trade updates corrupt positions when the same records are uploaded again,
+        # because closed positions get re-opened and then can't be re-closed.
+        self.position_tracker.reprocess_all_positions(user_id)
 
         return insert_count, update_count
 

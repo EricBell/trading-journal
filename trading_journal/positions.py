@@ -258,26 +258,29 @@ class PositionTracker:
                 ]
             }
 
-    def reprocess_all_positions(self) -> Dict[str, Any]:
-        """Reprocess all positions from scratch based on trade history."""
+    def reprocess_all_positions(self, user_id: int) -> Dict[str, Any]:
+        """Reprocess all positions from scratch based on trade history for a specific user."""
+        # Clear existing positions for this user in a committed transaction first,
+        # so subsequent per-trade sessions see a clean slate.
         with self.db_manager.get_session() as session:
-            # Clear existing positions
-            session.query(Position).delete()
+            session.query(Position).filter(Position.user_id == user_id).delete()
+            session.commit()
 
-            # Get all fill trades in chronological order
+        # Fetch all fill trades for this user in chronological order.
+        # Load into memory before closing the session so objects aren't detached mid-loop.
+        with self.db_manager.get_session() as session:
             trades = session.query(Trade).filter(
+                Trade.user_id == user_id,
                 Trade.event_type == 'fill'
             ).order_by(Trade.exec_timestamp).all()
 
-            processed_count = 0
-            for trade in trades:
-                if trade.symbol and trade.net_price and trade.qty:
-                    self.update_positions_from_trade(trade)
-                    processed_count += 1
+        processed_count = 0
+        for trade in trades:
+            if trade.symbol and trade.net_price and trade.qty:
+                self.update_positions_from_trade(trade)
+                processed_count += 1
 
-            session.commit()
-
-            return {
-                "trades_processed": processed_count,
-                "message": f"Reprocessed {processed_count} trades"
-            }
+        return {
+            "trades_processed": processed_count,
+            "message": f"Reprocessed {processed_count} trades"
+        }

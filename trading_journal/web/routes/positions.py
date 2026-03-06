@@ -28,7 +28,7 @@ PER_PAGE_OPTIONS = [10, 25, 50, 100]
 @login_required
 def index():
     user = AuthContext.require_user()
-    open_only = request.args.get('open_only') == '1'
+    open_only = request.args.get('open_only', '1') == '1'
     symbol = (request.args.get('symbol', '').strip().upper()) or None
     account_filter = request.args.get('account', '').strip() or None
 
