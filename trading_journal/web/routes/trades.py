@@ -15,7 +15,7 @@ bp = Blueprint('trades', __name__)
 SORT_COLUMNS = {
     'id':      CompletedTrade.completed_trade_id,
     'symbol':  CompletedTrade.symbol,
-    'type':    CompletedTrade.instrument_type,
+    'type':    CompletedTrade.trade_type,
     'qty':     CompletedTrade.total_qty,
     'entry':   CompletedTrade.entry_avg_price,
     'exit':    CompletedTrade.exit_avg_price,
