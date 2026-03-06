@@ -369,12 +369,15 @@ class NdjsonIngester:
 
         # Add option-specific fields
         if record.is_option and record.option:
+            # Use json round-trip to convert date objects to strings, then store as dict
+            # (psycopg2 needs a plain dict for JSONB, not a json string)
+            option_dict = json.loads(json.dumps(record.option.dict(), default=str))
             trade_data.update({
                 "exp_date": record.option.exp_date,
                 "strike_price": record.option.strike,
                 "option_type": record.option.right,
                 "spread_type": record.spread,
-                "option_data": json.dumps(record.option.dict(), default=str) if record.option else None
+                "option_data": option_dict,
             })
 
         return trade_data

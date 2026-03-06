@@ -84,7 +84,16 @@
       <tr onclick="location.href='{{ url_for('trades.detail', trade_id=t.completed_trade_id) }}'"
           style="cursor:pointer" class="{% if ns.band == 1 %}date-band-alt{% endif %}">
         <td>{{ t.completed_trade_id }}</td>
-        <td><strong>{{ t.symbol }}</strong></td>
+        <td>
+          <strong>{{ t.symbol }}</strong>
+          {% if t.instrument_type == 'OPTION' and t.option_details_dict %}
+          <br><small class="text-muted">
+            ${{ "%.0f"|format(t.option_details_dict.get('strike', 0)|float) }}
+            {{ t.option_details_dict.get('right', '') }}
+            &middot; {{ t.option_details_dict.get('exp_date', '') }}
+          </small>
+          {% endif %}
+        </td>
         <td><span class="badge bg-secondary">{{ t.trade_type or t.instrument_type }}</span></td>
         <td>{{ t.total_qty }}</td>
         <td>${{ "%.4f"|format(t.entry_avg_price|float) if t.entry_avg_price else '—' }}</td>

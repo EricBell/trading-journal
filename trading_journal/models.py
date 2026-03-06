@@ -220,6 +220,19 @@ class CompletedTrade(Base):
     account = relationship("Account")
     executions = relationship("Trade", back_populates="completed_trade")
 
+    @property
+    def option_details_dict(self) -> Optional[Dict[str, Any]]:
+        """Return option_details as a dict, handling legacy JSON string storage."""
+        if self.option_details is None:
+            return None
+        if isinstance(self.option_details, str):
+            import json as _json
+            try:
+                return _json.loads(self.option_details)
+            except (ValueError, TypeError):
+                return None
+        return self.option_details
+
 
 class Position(Base):
     """Current holdings aggregate table."""
