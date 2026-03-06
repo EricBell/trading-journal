@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import click
 from pydantic import ValidationError
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session  # noqa: F401 (used in type hint)
 
@@ -251,6 +252,20 @@ class NdjsonIngester:
             session.flush()
         return account.account_id
 
+    def _backfill_completed_trade_accounts(self, user_id: int) -> None:
+        """Propagate account_id from executions to already-completed trades that lack it."""
+        with self.db_manager.get_session() as session:
+            session.execute(text("""
+                UPDATE completed_trades ct
+                SET account_id = t.account_id
+                FROM trades t
+                WHERE t.completed_trade_id = ct.completed_trade_id
+                  AND ct.account_id IS NULL
+                  AND t.account_id IS NOT NULL
+                  AND ct.user_id = :user_id
+            """), {'user_id': user_id})
+            session.commit()
+
     def _insert_records_with_tracking(
         self,
         user_id: int,
@@ -434,6 +449,7 @@ class NdjsonIngester:
                 successful_records,
                 'csv_upload',
             )
+            self._backfill_completed_trade_accounts(user_id)
 
         if verbose or validation_errors:
             logger.info(
