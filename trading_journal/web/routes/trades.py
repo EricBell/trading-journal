@@ -2,6 +2,7 @@
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from sqlalchemy import asc, desc
+from sqlalchemy.orm import joinedload
 
 from ..auth import login_required
 from ...authorization import AuthContext
@@ -87,7 +88,7 @@ def index():
         total = query.count()
         total_pages = max(1, (total + per_page - 1) // per_page)
         page = min(page, total_pages)
-        trades = query.offset((page - 1) * per_page).limit(per_page).all()
+        trades = query.options(joinedload(CompletedTrade.account)).offset((page - 1) * per_page).limit(per_page).all()
 
         # Fetch user patterns for filter dropdown
         patterns = (
@@ -133,7 +134,9 @@ def index():
 def detail(trade_id: int):
     user = AuthContext.require_user()
     with db_manager.get_session() as session:
-        trade = session.query(CompletedTrade).filter_by(
+        trade = session.query(CompletedTrade).options(
+            joinedload(CompletedTrade.account)
+        ).filter_by(
             completed_trade_id=trade_id, user_id=user.user_id
         ).one_or_none()
         if trade is None:

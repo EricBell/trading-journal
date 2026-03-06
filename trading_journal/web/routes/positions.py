@@ -2,6 +2,7 @@
 
 from flask import Blueprint, render_template, request, session
 from sqlalchemy import asc, desc
+from sqlalchemy.orm import joinedload
 
 from ..auth import login_required
 from ...authorization import AuthContext
@@ -74,7 +75,7 @@ def index():
         total = query.count()
         total_pages = max(1, (total + per_page - 1) // per_page)
         page = min(page, total_pages)
-        positions = query.offset((page - 1) * per_page).limit(per_page).all()
+        positions = query.options(joinedload(Position.account)).offset((page - 1) * per_page).limit(per_page).all()
 
         accounts = (
             db_session.query(Account)
