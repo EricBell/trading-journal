@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Trades — Trading Journal{% endblock %}
 
+{% block head %}
+<style>
+  .date-band-alt { background-color: #f2f4f6; }
+  .date-band-alt:hover { background-color: #e8ebee !important; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0">Completed Trades</h4>
@@ -67,8 +74,15 @@
       </tr>
     </thead>
     <tbody>
+      {% set ns = namespace(prev_date=none, band=0) %}
       {% for t in trades %}
-      <tr onclick="location.href='{{ url_for('trades.detail', trade_id=t.completed_trade_id) }}'" style="cursor:pointer">
+      {% set row_date = t.closed_at.strftime('%Y-%m-%d') if t.closed_at else '' %}
+      {% if row_date != ns.prev_date %}
+        {% if ns.prev_date is not none %}{% set ns.band = 1 - ns.band %}{% endif %}
+        {% set ns.prev_date = row_date %}
+      {% endif %}
+      <tr onclick="location.href='{{ url_for('trades.detail', trade_id=t.completed_trade_id) }}'"
+          style="cursor:pointer" class="{% if ns.band == 1 %}date-band-alt{% endif %}">
         <td>{{ t.completed_trade_id }}</td>
         <td><strong>{{ t.symbol }}</strong></td>
         <td><span class="badge bg-secondary">{{ t.trade_type or t.instrument_type }}</span></td>
