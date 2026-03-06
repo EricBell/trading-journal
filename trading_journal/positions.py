@@ -2,7 +2,7 @@
 
 import logging
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 
 from sqlalchemy.orm import Session
@@ -280,7 +280,63 @@ class PositionTracker:
                 self.update_positions_from_trade(trade)
                 processed_count += 1
 
+        expired_count = self._expire_worthless_options(user_id)
+
         return {
             "trades_processed": processed_count,
-            "message": f"Reprocessed {processed_count} trades"
+            "expired_options": expired_count,
+            "message": f"Reprocessed {processed_count} trades, expired {expired_count} worthless options"
         }
+
+    def _expire_worthless_options(self, user_id: int) -> int:
+        """Close out option positions whose expiration date is in the past (expired worthless)."""
+        today = date.today()
+        expired_count = 0
+
+        with self.db_manager.get_session() as session:
+            open_options = session.query(Position).filter(
+                Position.user_id == user_id,
+                Position.instrument_type == 'OPTION',
+                Position.current_qty != 0,
+                Position.closed_at.is_(None)
+            ).all()
+
+            for position in open_options:
+                if not position.option_details:
+                    continue
+                exp_date_str = position.option_details.get('exp_date')
+                if not exp_date_str:
+                    continue
+                try:
+                    exp_date = date.fromisoformat(exp_date_str)
+                except (ValueError, TypeError):
+                    continue
+
+                if exp_date >= today:
+                    continue
+
+                # Option has expired — compute P&L
+                qty = position.current_qty
+                avg_cost = position.avg_cost_basis
+                if qty > 0:
+                    # Long: lose the full premium paid
+                    realized_pnl = -(abs(qty) * avg_cost)
+                else:
+                    # Short: keep the full premium received
+                    realized_pnl = abs(qty) * avg_cost
+
+                position.realized_pnl += realized_pnl
+                position.current_qty = 0
+                position.total_cost = Decimal('0')
+                position.avg_cost_basis = Decimal('0')
+                position.closed_at = datetime.combine(exp_date, datetime.min.time().replace(hour=16))
+                position.updated_at = datetime.now()
+
+                logger.info(
+                    f"Expired option {position.symbol} {exp_date}: P&L ${float(realized_pnl):.2f}"
+                )
+                expired_count += 1
+
+            session.commit()
+
+        return expired_count
