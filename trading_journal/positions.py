@@ -6,7 +6,7 @@ from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, text
 from sqlalchemy.dialects.postgresql import insert
 
 from .database import db_manager
@@ -301,18 +301,34 @@ class PositionTracker:
                 Position.closed_at.is_(None)
             ).all()
 
+            logger.info(
+                f"_expire_worthless_options: found {len(open_options)} open OPTION positions "
+                f"for user {user_id}, today={today}"
+            )
+
             for position in open_options:
+                logger.info(
+                    f"  Checking {position.symbol} qty={position.current_qty} "
+                    f"option_details={position.option_details}"
+                )
+
                 if not position.option_details:
+                    logger.warning(f"  SKIP {position.symbol}: option_details is None/empty")
                     continue
+
                 exp_date_str = position.option_details.get('exp_date')
                 if not exp_date_str:
+                    logger.warning(f"  SKIP {position.symbol}: no exp_date in option_details")
                     continue
+
                 try:
-                    exp_date = date.fromisoformat(exp_date_str)
-                except (ValueError, TypeError):
+                    exp_date = date.fromisoformat(str(exp_date_str))
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"  SKIP {position.symbol}: cannot parse exp_date {exp_date_str!r}: {e}")
                     continue
 
                 if exp_date >= today:
+                    logger.info(f"  SKIP {position.symbol}: exp_date {exp_date} >= today {today} (still live)")
                     continue
 
                 # Option has expired — compute P&L
@@ -325,15 +341,28 @@ class PositionTracker:
                     # Short: keep the full premium received
                     realized_pnl = abs(qty) * avg_cost
 
-                position.realized_pnl += realized_pnl
-                position.current_qty = 0
-                position.total_cost = Decimal('0')
-                position.avg_cost_basis = Decimal('0')
-                position.closed_at = datetime.combine(exp_date, datetime.min.time().replace(hour=16))
-                position.updated_at = datetime.now()
+                new_realized = position.realized_pnl + realized_pnl
+                closed_at_dt = datetime.combine(exp_date, datetime.min.time().replace(hour=16))
+                now_dt = datetime.now()
+
+                # Use raw SQL UPDATE to avoid ORM change-tracking edge cases
+                session.execute(
+                    text(
+                        "UPDATE positions SET current_qty=0, total_cost=0, avg_cost_basis=0, "
+                        "realized_pnl=:pnl, closed_at=:closed_at, updated_at=:now "
+                        "WHERE position_id=:pid"
+                    ),
+                    {
+                        "pnl": float(new_realized),
+                        "closed_at": closed_at_dt,
+                        "now": now_dt,
+                        "pid": position.position_id,
+                    }
+                )
 
                 logger.info(
-                    f"Expired option {position.symbol} {exp_date}: P&L ${float(realized_pnl):.2f}"
+                    f"  Expired option {position.symbol} {exp_date}: "
+                    f"qty={qty} avg_cost={float(avg_cost):.4f} P&L=${float(realized_pnl):.2f}"
                 )
                 expired_count += 1
 
