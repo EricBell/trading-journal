@@ -1,5 +1,6 @@
 """Position tracking and P&L calculation engine."""
 
+import json
 import logging
 from decimal import Decimal
 from datetime import datetime, date
@@ -316,7 +317,16 @@ class PositionTracker:
                     logger.warning(f"  SKIP {position.symbol}: option_details is None/empty")
                     continue
 
-                exp_date_str = position.option_details.get('exp_date')
+                # option_details may be a dict (JSONB) or a raw JSON string
+                details = position.option_details
+                if isinstance(details, str):
+                    try:
+                        details = json.loads(details)
+                    except (ValueError, TypeError):
+                        logger.warning(f"  SKIP {position.symbol}: cannot JSON-parse option_details: {details!r}")
+                        continue
+
+                exp_date_str = details.get('exp_date')
                 if not exp_date_str:
                     logger.warning(f"  SKIP {position.symbol}: no exp_date in option_details")
                     continue
