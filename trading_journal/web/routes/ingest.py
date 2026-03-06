@@ -91,9 +91,10 @@ def upload():
                 include_rolling=include_rolling,
             )
 
-        # Process trades
+        # Reprocess all completed trades from scratch (idempotent on re-uploads)
+        user_id = AuthContext.require_user().user_id
         engine = TradeCompletionEngine()
-        proc = engine.process_completed_trades()
+        proc = engine.reprocess_all_completed_trades(user_id)
 
         flash(
             f"Imported {result['inserts']} new, updated {result['updates']}. "

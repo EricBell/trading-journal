@@ -22,6 +22,51 @@ class TradeCompletionEngine:
     def __init__(self):
         self.db_manager = db_manager
 
+    def reprocess_all_completed_trades(self, user_id: int) -> Dict[str, Any]:
+        """Clear and rebuild all completed trades for a user from scratch."""
+        with self.db_manager.get_session() as session:
+            # Unlink all executions from their completed trades
+            session.query(Trade).filter(Trade.user_id == user_id).update(
+                {Trade.completed_trade_id: None}, synchronize_session=False
+            )
+            # Delete all completed trades for this user
+            session.query(CompletedTrade).filter(
+                CompletedTrade.user_id == user_id
+            ).delete(synchronize_session=False)
+            session.commit()
+
+        # Now process from scratch (all trades are unlinked)
+        with self.db_manager.get_session() as session:
+            query = session.query(Trade).filter(
+                and_(
+                    Trade.user_id == user_id,
+                    Trade.event_type == 'fill',
+                    Trade.completed_trade_id.is_(None),
+                    Trade.symbol.isnot(None),
+                    Trade.qty.isnot(None),
+                    Trade.net_price.isnot(None)
+                )
+            )
+            unlinked_trades = query.order_by(Trade.exec_timestamp).all()
+
+            trade_groups: Dict[Any, List[Trade]] = {}
+            for trade in unlinked_trades:
+                key = (trade.symbol, trade.instrument_type)
+                if trade.option_data:
+                    key = key + (trade.exp_date, trade.strike_price, trade.option_type)
+                trade_groups.setdefault(key, []).append(trade)
+
+            completed_count = 0
+            for trades in trade_groups.values():
+                completed_count += self._process_trade_group(session, trades)
+
+            session.commit()
+
+        return {
+            "completed_trades": completed_count,
+            "message": f"Reprocessed {completed_count} completed trades"
+        }
+
     def process_completed_trades(self, symbol: Optional[str] = None) -> Dict[str, Any]:
         """Identify and process completed trades from unlinked executions."""
         user_id = AuthContext.require_user().user_id
@@ -167,14 +212,20 @@ class TradeCompletionEngine:
         gross_cost = total_open_cost
         gross_proceeds = total_close_proceeds
 
-        # Determine trade type (LONG/SHORT) from the first opening trade
+        # Determine trade type (LONG/SHORT) from the first opening trade.
+        # For options, the right (CALL/PUT) determines direction:
+        #   BUY CALL = LONG, BUY PUT = SHORT, SELL CALL = SHORT, SELL PUT = LONG
+        # For equities, side alone determines direction: BUY = LONG, SELL = SHORT.
         first_open = opens[0]
         if first_open.side == "BUY":
             net_pnl = gross_proceeds - gross_cost
-            trade_type = "LONG"
         else:
-            net_pnl = gross_cost - gross_proceeds # For shorts, P&L is cost - proceeds
-            trade_type = "SHORT"
+            net_pnl = gross_cost - gross_proceeds  # For shorts, P&L is cost - proceeds
+
+        if first_open.instrument_type == "OPTION" and first_open.option_type == "PUT":
+            trade_type = "SHORT" if first_open.side == "BUY" else "LONG"
+        else:
+            trade_type = "LONG" if first_open.side == "BUY" else "SHORT"
             
         # Timestamps and duration
         opened_at = min(t.exec_timestamp for t in opens if t.exec_timestamp)
