@@ -4,10 +4,11 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 from sqlalchemy import asc, desc
 from sqlalchemy.orm import joinedload
 
-from ..auth import login_required
+from ..auth import admin_required, login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Account, CompletedTrade, SetupPattern
+from ...models import Account, CompletedTrade, SetupPattern, Trade
+from ...positions import PositionTracker
 
 bp = Blueprint('trades', __name__)
 
@@ -160,6 +161,30 @@ def detail(trade_id: int):
         pattern_names=pattern_names,
         user=user,
     )
+
+
+@bp.route('/trades/<int:trade_id>/delete', methods=['POST'])
+@admin_required
+def delete(trade_id: int):
+    user = AuthContext.require_user()
+    with db_manager.get_session() as db_session:
+        trade = db_session.query(CompletedTrade).filter_by(
+            completed_trade_id=trade_id, user_id=user.user_id
+        ).one_or_none()
+        if trade is None:
+            flash('Trade not found.', 'warning')
+            return redirect(url_for('trades.index'))
+
+        # Delete underlying raw executions first, then the completed trade
+        db_session.query(Trade).filter_by(completed_trade_id=trade_id).delete()
+        db_session.delete(trade)
+        db_session.commit()
+
+    # Reprocess positions so P&L stays correct
+    PositionTracker().reprocess_all_positions(user.user_id)
+
+    flash(f'Trade #{trade_id} and its executions have been deleted.', 'success')
+    return redirect(url_for('trades.index'))
 
 
 @bp.route('/trades/<int:trade_id>/annotate', methods=['POST'])
