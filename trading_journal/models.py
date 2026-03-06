@@ -57,6 +57,7 @@ class User(Base):
     trades = relationship("Trade", back_populates="user")
     completed_trades = relationship("CompletedTrade", back_populates="user")
     positions = relationship("Position", back_populates="user")
+    accounts = relationship("Account", back_populates="user")
     setup_patterns = relationship("SetupPattern", back_populates="user")
     processing_logs = relationship("ProcessingLog", back_populates="user")
 
@@ -66,6 +67,26 @@ class User(Base):
             "auth_method IN ('api_key', 'jwt', 'oauth', 'session')",
             name="valid_auth_method"
         ),
+    )
+
+
+class Account(Base):
+    """Brokerage accounts table for multi-account support."""
+
+    __tablename__ = "accounts"
+
+    account_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+    account_number = Column(String(50), nullable=False)
+    account_name = Column(String(100))
+    account_type = Column(String(50))
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="accounts")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "account_number", name="unique_account_per_user"),
     )
 
 
@@ -79,6 +100,9 @@ class Trade(Base):
 
     # User relationship
     user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+
+    # Account relationship
+    account_id = Column(BigInteger, ForeignKey("accounts.account_id"), nullable=True)
 
     unique_key = Column(Text, nullable=False)
 
@@ -140,6 +164,7 @@ class Trade(Base):
 
     # Relationships
     user = relationship("User", back_populates="trades")
+    account = relationship("Account")
     completed_trade = relationship("CompletedTrade", back_populates="executions")
 
     @property
@@ -158,6 +183,9 @@ class CompletedTrade(Base):
 
     # User relationship
     user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+
+    # Account relationship
+    account_id = Column(BigInteger, ForeignKey("accounts.account_id"), nullable=True)
 
     symbol = Column(String(50), nullable=False)
     instrument_type = Column(String(10), nullable=False)
@@ -189,6 +217,7 @@ class CompletedTrade(Base):
 
     # Relationships
     user = relationship("User", back_populates="completed_trades")
+    account = relationship("Account")
     executions = relationship("Trade", back_populates="completed_trade")
 
 
@@ -202,6 +231,9 @@ class Position(Base):
 
     # User relationship
     user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+
+    # Account relationship
+    account_id = Column(BigInteger, ForeignKey("accounts.account_id"), nullable=True)
 
     symbol = Column(String(50), nullable=False)
     instrument_type = Column(String(10), nullable=False)
@@ -222,6 +254,7 @@ class Position(Base):
 
     # Relationships
     user = relationship("User", back_populates="positions")
+    account = relationship("Account")
 
     # Unique constraint
     __table_args__ = (

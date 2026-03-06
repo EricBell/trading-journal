@@ -184,6 +184,7 @@ class TradeCompletionEngine:
         # Create the single CompletedTrade object
         completed_trade = CompletedTrade(
             user_id=first_open.user_id,
+            account_id=first_open.account_id,
             symbol=first_open.symbol,
             instrument_type=first_open.instrument_type,
             option_details=first_open.option_data,

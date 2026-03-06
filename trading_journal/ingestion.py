@@ -9,10 +9,10 @@ from typing import List, Dict, Any, Optional, Tuple
 import click
 from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session  # noqa: F401 (used in type hint)
 
 from .database import db_manager
-from .models import Trade, ProcessingLog
+from .models import Account, Trade, ProcessingLog
 from .schemas import NdjsonRecord
 from .positions import PositionTracker
 from .authorization import AuthContext
@@ -234,6 +234,23 @@ class NdjsonIngester:
 
         return inserted_trade_ids
 
+    def _get_or_create_account(
+        self, session: Session, user_id: int, account_number: str, account_name: Optional[str]
+    ) -> int:
+        """Look up or create an Account record, returning its account_id."""
+        account = session.query(Account).filter_by(
+            user_id=user_id, account_number=account_number
+        ).first()
+        if not account:
+            account = Account(
+                user_id=user_id,
+                account_number=account_number,
+                account_name=account_name,
+            )
+            session.add(account)
+            session.flush()
+        return account.account_id
+
     def _insert_records_with_tracking(
         self,
         user_id: int,
@@ -251,9 +268,19 @@ class NdjsonIngester:
         inserted_trade_ids = []
 
         with self.db_manager.get_session() as session:
+            account_cache: Dict[str, int] = {}
+
             for record in records:
                 trade_data = self._convert_to_trade_data(record, source_file_path)
                 trade_data['user_id'] = user_id
+
+                # Resolve account
+                if record.account_number:
+                    if record.account_number not in account_cache:
+                        account_cache[record.account_number] = self._get_or_create_account(
+                            session, user_id, record.account_number, record.account_name
+                        )
+                    trade_data['account_id'] = account_cache[record.account_number]
 
                 # Check if exists first (for tracking)
                 existing = session.query(Trade).filter_by(
@@ -271,6 +298,7 @@ class NdjsonIngester:
                         exec_timestamp=stmt.excluded.exec_timestamp,
                         net_price=stmt.excluded.net_price,
                         realized_pnl=stmt.excluded.realized_pnl,
+                        account_id=stmt.excluded.account_id,
                         processing_timestamp=stmt.excluded.processing_timestamp
                     )
                 ).returning(Trade.trade_id)

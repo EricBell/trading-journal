@@ -6,7 +6,7 @@ from sqlalchemy import asc, desc
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Position
+from ...models import Account, Position
 
 bp = Blueprint('positions', __name__)
 
@@ -29,6 +29,7 @@ def index():
     user = AuthContext.require_user()
     open_only = request.args.get('open_only') == '1'
     symbol = (request.args.get('symbol', '').strip().upper()) or None
+    account_filter = request.args.get('account', '').strip() or None
 
     # Sorting
     sort_col = request.args.get('sort', DEFAULT_SORT)
@@ -60,6 +61,11 @@ def index():
             query = query.filter(Position.closed_at.is_(None), Position.current_qty != 0)
         if symbol:
             query = query.filter(Position.symbol == symbol)
+        if account_filter:
+            try:
+                query = query.filter(Position.account_id == int(account_filter))
+            except ValueError:
+                pass
 
         col = SORT_COLUMNS[sort_col]
         order_fn = asc if sort_dir == 'asc' else desc
@@ -70,12 +76,21 @@ def index():
         page = min(page, total_pages)
         positions = query.offset((page - 1) * per_page).limit(per_page).all()
 
+        accounts = (
+            db_session.query(Account)
+            .filter_by(user_id=user.user_id)
+            .order_by(Account.account_name)
+            .all()
+        )
+
     return render_template(
         'positions/index.html',
         positions=positions,
         user=user,
         open_only=open_only,
         symbol=symbol or '',
+        account_filter=account_filter or '',
+        accounts=accounts,
         sort_col=sort_col,
         sort_dir=sort_dir,
         page=page,

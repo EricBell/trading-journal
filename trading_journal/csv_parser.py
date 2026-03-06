@@ -75,6 +75,7 @@ COL_ALIASES = {
 }
 
 AMEND_REF_RE = re.compile(r'^RE\s*#\s*(\d+)', re.IGNORECASE)
+ACCOUNT_RE = re.compile(r'for\s+(\S+)\s+\(([^)]+)\)', re.IGNORECASE)
 MONTH_MAP = {
     'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
     'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
@@ -456,6 +457,8 @@ def _parse_single_file(
     in_data = False
     current_header_map: Optional[Dict[str, int]] = None
     row_index = 0
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
 
     # Buffering for empty section filtering
     buffered_section_header: Optional[Dict[str, Any]] = None
@@ -476,6 +479,14 @@ def _parse_single_file(
         for row in reader:
             row_index += 1
             cells = list(row)
+
+            # Row 1: try to extract account number and name
+            if row_index == 1:
+                row_str = ','.join(cells)
+                m = ACCOUNT_RE.search(row_str)
+                if m:
+                    account_number = m.group(1)
+                    account_name = m.group(2)
 
             detected = detect_section_from_row(cells, compiled_patterns)
 
@@ -568,6 +579,11 @@ def _parse_single_file(
             rec = build_order_record(section, current_header_map, cells, row_index)
             if rec is not None:
                 results.append(rec)
+
+    if account_number:
+        for rec in results:
+            rec['account_number'] = account_number
+            rec['account_name'] = account_name
 
     return results
 

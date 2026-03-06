@@ -26,6 +26,7 @@
       <div class="card-body">
         <table class="table table-sm mb-0">
           <tr><th>Trade ID</th><td>{{ trade.completed_trade_id }}</td></tr>
+          {% if trade.account %}<tr><th>Account</th><td>{{ trade.account.account_name or trade.account.account_number }}</td></tr>{% endif %}
           <tr><th>Qty</th><td>{{ trade.total_qty }}</td></tr>
           <tr><th>Entry Avg</th><td>${{ "%.4f"|format(trade.entry_avg_price|float) if trade.entry_avg_price else '—' }}</td></tr>
           <tr><th>Exit Avg</th><td>${{ "%.4f"|format(trade.exit_avg_price|float) if trade.exit_avg_price else '—' }}</td></tr>

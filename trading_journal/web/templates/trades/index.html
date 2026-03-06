@@ -18,6 +18,18 @@
       <option value="90d" {% if range_filter=='90d' %}selected{% endif %}>Last 90 days</option>
     </select>
   </div>
+  {% if accounts %}
+  <div class="col-auto">
+    <select name="account" class="form-select form-select-sm">
+      <option value="" {% if not account_filter %}selected{% endif %}>All accounts</option>
+      {% for a in accounts %}
+      <option value="{{ a.account_id }}" {% if account_filter == a.account_id|string %}selected{% endif %}>
+        {{ a.account_name or a.account_number }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
   <div class="col-auto">
     <button class="btn btn-sm btn-primary">Filter</button>
     <a href="{{ url_for('trades.index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
@@ -51,6 +63,7 @@
         {{ sort_th('Closed', 'closed') }}
         {{ sort_th('P&L', 'pnl', 'text-end') }}
         {{ sort_th('Pattern', 'pattern') }}
+        {% if accounts %}<th>Account</th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -68,6 +81,7 @@
           ${{ "%.2f"|format(t.net_pnl|float) if t.net_pnl else '0.00' }}
         </td>
         <td>{{ t.setup_pattern or '' }}{% if t.trade_notes %} <span title="Has notes" style="color:#6ea8fe;font-size:.85em">✎</span>{% endif %}</td>
+        {% if accounts %}<td class="text-muted small">{{ t.account.account_name if t.account else '—' }}</td>{% endif %}
       </tr>
       {% endfor %}
     </tbody>

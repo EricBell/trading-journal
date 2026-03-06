@@ -65,6 +65,7 @@ class PositionTracker:
         if not position:
             position = Position(
                 user_id=trade.user_id,
+                account_id=trade.account_id,
                 symbol=trade.symbol,
                 instrument_type=trade.instrument_type,
                 option_details=option_details,

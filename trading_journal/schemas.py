@@ -61,6 +61,10 @@ class NdjsonRecord(BaseModel):
     source_file: Optional[str] = None
     source_file_index: Optional[int] = None
 
+    # Account info (extracted from CSV row 1)
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+
     # Amendment details (for amendment records)
     amendment: Optional[Dict[str, Any]] = None
 

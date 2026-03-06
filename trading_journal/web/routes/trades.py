@@ -6,7 +6,7 @@ from sqlalchemy import asc, desc
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import CompletedTrade, SetupPattern
+from ...models import Account, CompletedTrade, SetupPattern
 
 bp = Blueprint('trades', __name__)
 
@@ -32,6 +32,7 @@ def index():
     user = AuthContext.require_user()
     symbol = (request.args.get('symbol', '').strip().upper()) or None
     range_filter = request.args.get('range', '').strip() or None
+    account_filter = request.args.get('account', '').strip() or None
 
     # Sorting
     sort_col = request.args.get('sort', DEFAULT_SORT)
@@ -61,6 +62,12 @@ def index():
 
         if symbol:
             query = query.filter(CompletedTrade.symbol == symbol)
+
+        if account_filter:
+            try:
+                query = query.filter(CompletedTrade.account_id == int(account_filter))
+            except ValueError:
+                pass
 
         if range_filter:
             from datetime import date, timedelta
@@ -94,12 +101,22 @@ def index():
         )
         pattern_names = sorted(p[0] for p in patterns if p[0])
 
+        # Fetch user accounts for filter dropdown
+        accounts = (
+            db_session.query(Account)
+            .filter_by(user_id=user.user_id)
+            .order_by(Account.account_name)
+            .all()
+        )
+
     return render_template(
         'trades/index.html',
         trades=trades,
         user=user,
         symbol=symbol or '',
         range_filter=range_filter or '',
+        account_filter=account_filter or '',
+        accounts=accounts,
         pattern_names=pattern_names,
         sort_col=sort_col,
         sort_dir=sort_dir,
