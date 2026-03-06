@@ -79,8 +79,8 @@ function buildBarChart(canvasId, existing, labels, values, label, colors, horizo
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { callback: v => typeof v === 'number' ? '$' + v.toLocaleString() : v } },
-        y: {},
+        x: horizontal ? { ticks: { callback: v => typeof v === 'number' ? '$' + v.toLocaleString() : v } } : {},
+        y: horizontal ? {} : { ticks: { callback: v => '$' + v.toLocaleString() } },
       },
     },
   });
