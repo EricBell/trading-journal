@@ -7,7 +7,7 @@
 
 {% block content %}
 <div class="mb-3">
-  <a href="{{ url_for('trades.index') }}" class="btn btn-sm btn-outline-secondary">&larr; Back to Trades</a>
+  <a href="{{ url_for('trades.index') }}" onclick="history.back(); return false;" class="btn btn-sm btn-outline-secondary">&larr; Back to Trades</a>
 </div>
 
 <div class="row g-3">

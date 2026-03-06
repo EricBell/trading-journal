@@ -64,8 +64,8 @@
         {{ sort_th('Symbol', 'symbol') }}
         {{ sort_th('Type', 'type') }}
         {{ sort_th('Qty', 'qty') }}
-        {{ sort_th('Entry', 'entry') }}
-        {{ sort_th('Exit', 'exit') }}
+        {{ sort_th('Entry', 'entry', 'text-end') }}
+        {{ sort_th('Exit', 'exit', 'text-end') }}
         {{ sort_th('Opened', 'opened') }}
         {{ sort_th('Closed', 'closed') }}
         {{ sort_th('P&L', 'pnl', 'text-end') }}
@@ -96,8 +96,8 @@
         </td>
         <td><span class="badge bg-secondary">{{ t.trade_type or t.instrument_type }}</span></td>
         <td>{{ t.total_qty }}</td>
-        <td>${{ "%.4f"|format(t.entry_avg_price|float) if t.entry_avg_price else '—' }}</td>
-        <td>${{ "%.4f"|format(t.exit_avg_price|float) if t.exit_avg_price else '—' }}</td>
+        <td class="text-end">${{ "%.4f"|format(t.entry_avg_price|float) if t.entry_avg_price else '—' }}</td>
+        <td class="text-end">${{ "%.4f"|format(t.exit_avg_price|float) if t.exit_avg_price else '—' }}</td>
         <td>{{ t.opened_at.strftime('%y-%m-%d %H:%M') if t.opened_at else '—' }}</td>
         <td>{{ t.closed_at.strftime('%y-%m-%d %H:%M') if t.closed_at else '—' }}</td>
         <td class="text-end fw-bold {% if t.net_pnl and t.net_pnl > 0 %}text-success{% elif t.net_pnl and t.net_pnl < 0 %}text-danger{% endif %}">
