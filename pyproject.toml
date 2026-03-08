@@ -16,6 +16,7 @@ dependencies = [
     "flask-session>=0.8.0",
     "werkzeug>=3.0.0",
     "gunicorn>=21.0.0",
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

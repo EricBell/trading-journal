@@ -11,8 +11,6 @@ from .config import db_config
 
 logger = logging.getLogger(__name__)
 
-_ET = ZoneInfo("US/Eastern")
-
 
 def _grail_engine():
     """Build a SQLAlchemy engine pointing at the grail_files database."""
@@ -35,13 +33,14 @@ def find_grail_match(symbol: str, opened_at) -> dict | None:
         return None
 
     try:
+        et = ZoneInfo("US/Eastern")
         # Normalize opened_at to ET naive datetime
         if isinstance(opened_at, datetime):
             if opened_at.tzinfo is not None:
-                opened_at_et = opened_at.astimezone(_ET).replace(tzinfo=None)
+                opened_at_et = opened_at.astimezone(et).replace(tzinfo=None)
             else:
                 # Assume UTC if naive
-                opened_at_et = opened_at.replace(tzinfo=timezone.utc).astimezone(_ET).replace(tzinfo=None)
+                opened_at_et = opened_at.replace(tzinfo=timezone.utc).astimezone(et).replace(tzinfo=None)
         else:
             return None
 
