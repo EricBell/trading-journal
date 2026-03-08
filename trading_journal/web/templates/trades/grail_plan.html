@@ -22,6 +22,13 @@
         <tr><th>Trade Action</th><td>{{ g.get('trade_action', '—') }}</td></tr>
         <tr><th>Entry Direction</th><td>{{ g.get('entry_direction', '—') }}</td></tr>
         <tr><th>Entry Price</th><td>{{ g.get('entry_price', '—') }}</td></tr>
+        {% set sl = g.get('json_content', {}).get('stop_loss', {}) if g.get('json_content') else {} %}
+        {% set sl_range = sl.get('price_range', []) if sl else [] %}
+        <tr><th>Stop Loss</th><td>
+          {% if sl_range and sl_range | length == 2 %}
+            ${{ "%.2f" | format(sl_range[0] | float) }} – ${{ "%.2f" | format(sl_range[1] | float) }}
+          {% else %}—{% endif %}
+        </td></tr>
         <tr><th>Trade Confidence</th><td>{{ g.get('trade_confidence_pct', '—') }}</td></tr>
         <tr><th>Technical Confidence</th><td>{{ g.get('technical_confidence', '—') }}</td></tr>
         <tr><th>Macro Confidence</th><td>{{ g.get('macro_confidence', '—') }}</td></tr>
