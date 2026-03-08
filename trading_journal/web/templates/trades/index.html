@@ -81,7 +81,7 @@
         {% if ns.prev_date is not none %}{% set ns.band = 1 - ns.band %}{% endif %}
         {% set ns.prev_date = row_date %}
       {% endif %}
-      <tr onclick="location.href='{{ url_for('trades.detail', trade_id=t.completed_trade_id) }}'"
+      <tr onclick="location.href='{{ url_for('trades.detail', trade_id=t.completed_trade_id, sort=sort_col, dir=sort_dir, symbol=symbol, range=range_filter, account=account_filter) }}'"
           style="cursor:pointer" class="{% if ns.band == 1 %}date-band-alt{% endif %}">
         <td>{{ t.completed_trade_id }}</td>
         <td>

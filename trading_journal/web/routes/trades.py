@@ -28,6 +28,43 @@ DEFAULT_SORT, DEFAULT_DIR = 'closed', 'desc'
 PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 
+def _build_trades_query(db_session, user_id, symbol, range_filter, account_filter, sort_col, sort_dir):
+    """Return a filtered+sorted CompletedTrade query with no pagination applied."""
+    from datetime import date, timedelta
+    query = db_session.query(CompletedTrade).filter_by(user_id=user_id)
+
+    if symbol:
+        query = query.filter(CompletedTrade.symbol == symbol)
+
+    if account_filter:
+        try:
+            query = query.filter(CompletedTrade.account_id == int(account_filter))
+        except ValueError:
+            pass
+
+    if range_filter and range_filter.endswith('d'):
+        today = date.today()
+        try:
+            days = int(range_filter[:-1])
+            cutoff = today - timedelta(days=days - 1)
+            query = query.filter(CompletedTrade.closed_at >= cutoff)
+        except ValueError:
+            pass
+
+    col = SORT_COLUMNS.get(sort_col, SORT_COLUMNS[DEFAULT_SORT])
+    order_fn = asc if sort_dir == 'asc' else desc
+
+    if sort_col == 'pattern':
+        query = query.outerjoin(
+            SetupPattern,
+            (SetupPattern.pattern_id == CompletedTrade.setup_pattern_id)
+        ).order_by(order_fn(SetupPattern.pattern_name))
+    else:
+        query = query.order_by(order_fn(col))
+
+    return query
+
+
 @bp.route('/trades')
 @login_required
 def index():
@@ -60,39 +97,9 @@ def index():
         page = 1
 
     with db_manager.get_session() as db_session:
-        query = db_session.query(CompletedTrade).filter_by(user_id=user.user_id)
-
-        if symbol:
-            query = query.filter(CompletedTrade.symbol == symbol)
-
-        if account_filter:
-            try:
-                query = query.filter(CompletedTrade.account_id == int(account_filter))
-            except ValueError:
-                pass
-
-        if range_filter:
-            from datetime import date, timedelta
-            today = date.today()
-            if range_filter.endswith('d'):
-                try:
-                    days = int(range_filter[:-1])
-                    cutoff = today - timedelta(days=days - 1)
-                    query = query.filter(CompletedTrade.closed_at >= cutoff)
-                except ValueError:
-                    pass
-
-        col = SORT_COLUMNS[sort_col]
-        order_fn = asc if sort_dir == 'asc' else desc
-
-        # For pattern sort we need a join; for others use the column directly
-        if sort_col == 'pattern':
-            query = query.outerjoin(
-                SetupPattern,
-                (SetupPattern.pattern_id == CompletedTrade.setup_pattern_id)
-            ).order_by(order_fn(SetupPattern.pattern_name))
-        else:
-            query = query.order_by(order_fn(col))
+        query = _build_trades_query(
+            db_session, user.user_id, symbol, range_filter, account_filter, sort_col, sort_dir
+        )
 
         total = query.count()
         total_pages = max(1, (total + per_page - 1) // per_page)
@@ -145,8 +152,20 @@ def index():
 @login_required
 def detail(trade_id: int):
     user = AuthContext.require_user()
-    with db_manager.get_session() as session:
-        trade = session.query(CompletedTrade).options(
+
+    # Read list-context params (passed from index page)
+    sort_col = request.args.get('sort', DEFAULT_SORT)
+    if sort_col not in SORT_COLUMNS:
+        sort_col = DEFAULT_SORT
+    sort_dir = request.args.get('dir', DEFAULT_DIR)
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = DEFAULT_DIR
+    symbol = (request.args.get('symbol', '').strip().upper()) or None
+    range_filter = request.args.get('range', '').strip() or None
+    account_filter = request.args.get('account', '').strip() or None
+
+    with db_manager.get_session() as db_session:
+        trade = db_session.query(CompletedTrade).options(
             joinedload(CompletedTrade.account)
         ).filter_by(
             completed_trade_id=trade_id, user_id=user.user_id
@@ -158,21 +177,68 @@ def detail(trade_id: int):
         executions = sorted(trade.executions, key=lambda e: e.exec_timestamp or '')
 
         patterns = (
-            session.query(SetupPattern)
+            db_session.query(SetupPattern)
             .filter_by(user_id=user.user_id, is_active=True)
             .order_by(SetupPattern.pattern_name)
             .all()
         )
 
         sources = (
-            session.query(SetupSource)
+            db_session.query(SetupSource)
             .filter_by(user_id=user.user_id, is_active=True)
             .order_by(SetupSource.source_name)
             .all()
         )
 
+        # Build navigation: fetch ordered IDs for the current filter/sort context
+        nav_query = _build_trades_query(
+            db_session, user.user_id, symbol, range_filter, account_filter, sort_col, sort_dir
+        )
+        all_ids = [
+            row[0]
+            for row in nav_query.with_entities(CompletedTrade.completed_trade_id).all()
+        ]
+
+    try:
+        pos = all_ids.index(trade_id)
+    except ValueError:
+        pos = None
+
+    # Params carried on every nav link
+    list_params = {'sort': sort_col, 'dir': sort_dir}
+    if symbol:
+        list_params['symbol'] = symbol
+    if range_filter:
+        list_params['range'] = range_filter
+    if account_filter:
+        list_params['account'] = account_filter
+
+    nav_total = len(all_ids)
+
+    def _nav_url(tid):
+        return url_for('trades.detail', trade_id=tid, **list_params)
+
+    if pos is not None and nav_total > 1:
+        nav = {
+            'total': nav_total,
+            'position': pos + 1,
+            'first_url': _nav_url(all_ids[0]) if pos > 0 else None,
+            'prev_url':  _nav_url(all_ids[pos - 1]) if pos > 0 else None,
+            'next_url':  _nav_url(all_ids[pos + 1]) if pos < nav_total - 1 else None,
+            'last_url':  _nav_url(all_ids[-1]) if pos < nav_total - 1 else None,
+        }
+    else:
+        nav = {
+            'total': nav_total,
+            'position': (pos + 1) if pos is not None else None,
+            'first_url': None, 'prev_url': None, 'next_url': None, 'last_url': None,
+        }
+
     from ...grail_connector import find_grail_match
     grail_record = find_grail_match(trade.symbol, trade.opened_at)
+
+    back_url = url_for('trades.index', **list_params)
+    annotate_url = url_for('trades.annotate', trade_id=trade_id, **list_params)
 
     return render_template(
         'trades/detail.html',
@@ -182,6 +248,9 @@ def detail(trade_id: int):
         sources=sources,
         user=user,
         grail_record=grail_record,
+        nav=nav,
+        back_url=back_url,
+        annotate_url=annotate_url,
     )
 
 
@@ -312,7 +381,19 @@ def annotate(trade_id: int):
         session.commit()
         flash('Trade updated.', 'success')
 
-    return redirect(url_for('trades.detail', trade_id=trade_id))
+    # Preserve list-context params so nav survives the POST/redirect
+    sort_col = request.args.get('sort', DEFAULT_SORT)
+    if sort_col not in SORT_COLUMNS:
+        sort_col = DEFAULT_SORT
+    sort_dir = request.args.get('dir', DEFAULT_DIR)
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = DEFAULT_DIR
+    detail_kwargs = {'trade_id': trade_id, 'sort': sort_col, 'dir': sort_dir}
+    for _p in ('symbol', 'range', 'account'):
+        _v = request.args.get(_p, '').strip()
+        if _v:
+            detail_kwargs[_p] = _v
+    return redirect(url_for('trades.detail', **detail_kwargs))
 
 
 @bp.route('/trades/<int:trade_id>/set-stop', methods=['POST'])
