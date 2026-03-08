@@ -2,7 +2,6 @@
 
 import logging
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine.url import make_url
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 def _grail_engine():
     """Build a SQLAlchemy engine pointing at the grail_files database."""
     url = make_url(db_config.url).set(database="grail_files")
-    return create_engine(str(url), pool_pre_ping=True, pool_recycle=3600)
+    return create_engine(url, pool_pre_ping=True, pool_recycle=3600)
 
 
 def find_grail_match(symbol: str, opened_at) -> dict | None:
@@ -33,18 +32,16 @@ def find_grail_match(symbol: str, opened_at) -> dict | None:
         return None
 
     try:
-        et = ZoneInfo("US/Eastern")
-        # Normalize opened_at to ET naive datetime
+        # Normalize opened_at to naive UTC — file_created_at is stored as naive UTC
         if isinstance(opened_at, datetime):
             if opened_at.tzinfo is not None:
-                opened_at_et = opened_at.astimezone(et).replace(tzinfo=None)
+                opened_at_utc = opened_at.astimezone(timezone.utc).replace(tzinfo=None)
             else:
-                # Assume UTC if naive
-                opened_at_et = opened_at.replace(tzinfo=timezone.utc).astimezone(et).replace(tzinfo=None)
+                opened_at_utc = opened_at
         else:
             return None
 
-        trade_date = opened_at_et.date()
+        trade_date = opened_at_utc.date()
 
         engine = _grail_engine()
         with engine.connect() as conn:
@@ -53,11 +50,11 @@ def find_grail_match(symbol: str, opened_at) -> dict | None:
                     "SELECT * FROM grail_files"
                     " WHERE ticker = :symbol"
                     "   AND DATE(file_created_at) = :trade_date"
-                    "   AND file_created_at < :opened_at_naive"
+                    "   AND file_created_at < :opened_at_utc"
                     " ORDER BY file_created_at DESC"
                     " LIMIT 1"
                 ),
-                {"symbol": symbol, "trade_date": trade_date, "opened_at_naive": opened_at_et},
+                {"symbol": symbol, "trade_date": trade_date, "opened_at_utc": opened_at_utc},
             )
             row = result.mappings().first()
             return dict(row) if row is not None else None
