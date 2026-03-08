@@ -278,17 +278,34 @@ def annotate(trade_id: int):
         else:
             trade.setup_source_id = None
 
+        trade.trade_notes = request.form.get('trade_notes', '').strip() or None
+        session.commit()
+        flash('Trade updated.', 'success')
+
+    return redirect(url_for('trades.detail', trade_id=trade_id))
+
+
+@bp.route('/trades/<int:trade_id>/set-stop', methods=['POST'])
+@login_required
+def set_stop(trade_id: int):
+    user = AuthContext.require_user()
+    with db_manager.get_session() as session:
+        trade = session.query(CompletedTrade).filter_by(
+            completed_trade_id=trade_id, user_id=user.user_id
+        ).one_or_none()
+        if trade is None:
+            flash('Trade not found.', 'warning')
+            return redirect(url_for('trades.index'))
+
         stop_raw = request.form.get('stop_price', '').strip()
         if stop_raw:
             try:
                 trade.stop_price = float(stop_raw)
             except ValueError:
                 flash('Invalid stop price — must be a number.', 'warning')
+                return redirect(url_for('trades.detail', trade_id=trade_id))
         else:
             trade.stop_price = None
-
-        trade.trade_notes = request.form.get('trade_notes', '').strip() or None
         session.commit()
-        flash('Trade updated.', 'success')
 
     return redirect(url_for('trades.detail', trade_id=trade_id))
