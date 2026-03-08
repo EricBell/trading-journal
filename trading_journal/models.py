@@ -229,6 +229,7 @@ class CompletedTrade(Base):
     # Trading analysis (setup_pattern text column dropped; now FK-based)
     setup_pattern_id = Column(BigInteger, ForeignKey("setup_patterns.pattern_id"), nullable=True)
     setup_source_id = Column(BigInteger, ForeignKey("setup_sources.source_id"), nullable=True)
+    stop_price = Column(Numeric(18, 8), nullable=True)
     trade_notes = Column(Text)
     strategy_category = Column(String(30))
 

@@ -62,6 +62,7 @@
           {% endif %}
           <tr><th>Qty</th><td>{{ trade.total_qty }}</td></tr>
           <tr><th>Entry Avg</th><td>${{ "%.4f"|format(trade.entry_avg_price|float) if trade.entry_avg_price else '—' }}</td></tr>
+          <tr><th>Stop</th><td>{{ "$%.4f"|format(trade.stop_price|float) if trade.stop_price else '—' }}</td></tr>
           <tr><th>Exit Avg</th><td>${{ "%.4f"|format(trade.exit_avg_price|float) if trade.exit_avg_price else '—' }}</td></tr>
           <tr><th>Opened</th><td>{{ trade.opened_at.strftime('%Y-%m-%d %H:%M:%S') if trade.opened_at else '—' }}</td></tr>
           <tr><th>Closed</th><td>{{ trade.closed_at.strftime('%Y-%m-%d %H:%M:%S') if trade.closed_at else '—' }}</td></tr>
@@ -139,6 +140,13 @@
               <input type="text" name="new_source_name" class="form-control form-control-sm"
                      placeholder="New source name">
             </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Stop Price</label>
+            <input type="number" name="stop_price" step="0.0001" class="form-control"
+                   value="{{ '%.4f'|format(trade.stop_price|float) if trade.stop_price else '' }}"
+                   placeholder="e.g. 12.5000">
           </div>
 
           <div class="mb-3">

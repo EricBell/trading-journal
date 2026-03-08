@@ -278,6 +278,15 @@ def annotate(trade_id: int):
         else:
             trade.setup_source_id = None
 
+        stop_raw = request.form.get('stop_price', '').strip()
+        if stop_raw:
+            try:
+                trade.stop_price = float(stop_raw)
+            except ValueError:
+                flash('Invalid stop price — must be a number.', 'warning')
+        else:
+            trade.stop_price = None
+
         trade.trade_notes = request.form.get('trade_notes', '').strip() or None
         session.commit()
         flash('Trade updated.', 'success')
