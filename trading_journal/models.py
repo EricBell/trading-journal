@@ -24,6 +24,27 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
+class SetupSource(Base):
+    """Setup sources management table (e.g. broker, scanner, alert service)."""
+
+    __tablename__ = "setup_sources"
+
+    # Primary key
+    source_id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    # User relationship
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+
+    source_name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="setup_sources")
+    # Unique index (case-insensitive) is managed by Alembic: uq_source_per_user
+
+
 class User(Base):
     """User accounts table for multi-user support."""
 
@@ -59,6 +80,7 @@ class User(Base):
     positions = relationship("Position", back_populates="user")
     accounts = relationship("Account", back_populates="user")
     setup_patterns = relationship("SetupPattern", back_populates="user")
+    setup_sources = relationship("SetupSource", back_populates="user")
     processing_logs = relationship("ProcessingLog", back_populates="user")
 
     # Constraints
@@ -204,8 +226,9 @@ class CompletedTrade(Base):
     closed_at = Column(TIMESTAMP(timezone=True))
     hold_duration = Column(Interval)
 
-    # Trading analysis
-    setup_pattern = Column(Text)
+    # Trading analysis (setup_pattern text column dropped; now FK-based)
+    setup_pattern_id = Column(BigInteger, ForeignKey("setup_patterns.pattern_id"), nullable=True)
+    setup_source_id = Column(BigInteger, ForeignKey("setup_sources.source_id"), nullable=True)
     trade_notes = Column(Text)
     strategy_category = Column(String(30))
 
@@ -219,6 +242,8 @@ class CompletedTrade(Base):
     user = relationship("User", back_populates="completed_trades")
     account = relationship("Account")
     executions = relationship("Trade", back_populates="completed_trade")
+    setup_pattern_rel = relationship("SetupPattern", foreign_keys=[setup_pattern_id], lazy="joined")
+    setup_source_rel = relationship("SetupSource", foreign_keys=[setup_source_id], lazy="joined")
 
     @property
     def option_details_dict(self) -> Optional[Dict[str, Any]]:
@@ -286,9 +311,7 @@ class SetupPattern(Base):
     # User relationship
     user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
 
-    pattern_name = Column(String(50), nullable=False)
-    pattern_description = Column(Text)
-    pattern_category = Column(String(30))
+    pattern_name = Column(String(100), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP(timezone=True), default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
@@ -296,10 +319,7 @@ class SetupPattern(Base):
     # Relationships
     user = relationship("User", back_populates="setup_patterns")
 
-    # Unique constraint - pattern names are unique per user
-    __table_args__ = (
-        UniqueConstraint("user_id", "pattern_name", name="unique_pattern_per_user"),
-    )
+    # Unique index (case-insensitive) is managed by Alembic: uq_pattern_per_user
 
 
 class ProcessingLog(Base):

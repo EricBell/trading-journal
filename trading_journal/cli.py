@@ -505,7 +505,7 @@ def show_trade(id: int) -> None:
             click.echo(f"   Opened: {trade.opened_at}")
             click.echo(f"   Closed: {trade.closed_at}")
             click.echo(f"   Duration: {trade.hold_duration}")
-            click.echo(f"   Pattern: {trade.setup_pattern or 'N/A'}")
+            click.echo(f"   Pattern: {trade.setup_pattern_rel.pattern_name if trade.setup_pattern_rel else 'N/A'}")
             click.echo(f"   Notes: {trade.trade_notes or 'N/A'}")
             
             click.echo("\n   Executions:")
@@ -744,7 +744,7 @@ def trades(report_name: str, symbol: str, date_range: str) -> None:
                 if key == "result":
                     return (trade.get("pnl") or 0.0) > 0
                 if key == "pattern":
-                    return (trade.get("setup_pattern") or "").lower()
+                    return (trade.get("setup_pattern") or "").lower()  # setup_pattern from summary dict
                 return 0
 
             sort_key_list = [k.lower() for k in layout_sort]
@@ -792,7 +792,7 @@ def trades(report_name: str, symbol: str, date_range: str) -> None:
         for trade in trades_list:
             status_emoji = "🟢" if trade['pnl'] > 0 else "🔴"
             result_label = "WIN" if trade['pnl'] > 0 else "LOSS"
-            pattern = (trade.get('setup_pattern') or "")[:20]
+            pattern = (trade.get('setup_pattern') or "")[:20]  # setup_pattern from summary dict
 
             open_date, open_time = _format_ts(trade.get('opened_at'))
             close_date, close_time = _format_ts(trade.get('closed_at'))

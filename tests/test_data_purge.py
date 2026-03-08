@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from trading_journal.user_management import UserManager
 from trading_journal.models import (
-    User, Trade, CompletedTrade, Position, SetupPattern, ProcessingLog
+    User, Trade, CompletedTrade, Position, SetupPattern, SetupSource, ProcessingLog
 )
 from trading_journal.authorization.context import AuthContext
 from trading_journal.auth.base import AuthUser
@@ -160,6 +160,16 @@ def create_sample_data(db_session, user_id):
     ]
     db_session.add_all(patterns)
 
+    # Create setup sources
+    sources = [
+        SetupSource(
+            user_id=user_id,
+            source_name=f'Source_{i}',
+        )
+        for i in range(2)
+    ]
+    db_session.add_all(sources)
+
     # Create processing logs
     logs = [
         ProcessingLog(
@@ -182,8 +192,9 @@ def create_sample_data(db_session, user_id):
         'completed_trades': len(completed_trades),
         'positions': len(positions),
         'setup_patterns': len(patterns),
+        'setup_sources': len(sources),
         'processing_log': len(logs),
-        'total': len(trades) + len(completed_trades) + len(positions) + len(patterns) + len(logs)
+        'total': len(trades) + len(completed_trades) + len(positions) + len(patterns) + len(sources) + len(logs)
     }
 
 
@@ -203,6 +214,7 @@ class TestDataPurgeDryRun:
         assert counts['completed_trades'] == expected_counts['completed_trades']
         assert counts['positions'] == expected_counts['positions']
         assert counts['setup_patterns'] == expected_counts['setup_patterns']
+        assert counts['setup_sources'] == expected_counts['setup_sources']
         assert counts['processing_log'] == expected_counts['processing_log']
         assert counts['total'] == expected_counts['total']
 
@@ -211,6 +223,7 @@ class TestDataPurgeDryRun:
         assert db_session.query(CompletedTrade).filter(CompletedTrade.user_id == target_user.user_id).count() == expected_counts['completed_trades']
         assert db_session.query(Position).filter(Position.user_id == target_user.user_id).count() == expected_counts['positions']
         assert db_session.query(SetupPattern).filter(SetupPattern.user_id == target_user.user_id).count() == expected_counts['setup_patterns']
+        assert db_session.query(SetupSource).filter(SetupSource.user_id == target_user.user_id).count() == expected_counts['setup_sources']
         assert db_session.query(ProcessingLog).filter(ProcessingLog.user_id == target_user.user_id).count() == expected_counts['processing_log']
 
     def test_dry_run_empty_user(self, db_session, admin_user, target_user):
@@ -222,6 +235,7 @@ class TestDataPurgeDryRun:
         assert counts['completed_trades'] == 0
         assert counts['positions'] == 0
         assert counts['setup_patterns'] == 0
+        assert counts['setup_sources'] == 0
         assert counts['processing_log'] == 0
         assert counts['total'] == 0
 
@@ -245,6 +259,7 @@ class TestDataPurgeActual:
         assert db_session.query(CompletedTrade).filter(CompletedTrade.user_id == target_user.user_id).count() == 0
         assert db_session.query(Position).filter(Position.user_id == target_user.user_id).count() == 0
         assert db_session.query(SetupPattern).filter(SetupPattern.user_id == target_user.user_id).count() == 0
+        assert db_session.query(SetupSource).filter(SetupSource.user_id == target_user.user_id).count() == 0
         assert db_session.query(ProcessingLog).filter(ProcessingLog.user_id == target_user.user_id).count() == 0
 
     def test_purge_preserves_user_account(self, db_session, admin_user, target_user):
@@ -290,6 +305,7 @@ class TestDataPurgeActual:
         assert counts['completed_trades'] == 0
         assert counts['positions'] == 0
         assert counts['setup_patterns'] == 0
+        assert counts['setup_sources'] == 0
         assert counts['processing_log'] == 0
 
 
@@ -459,6 +475,7 @@ class TestDataPurgeEdgeCases:
         assert counts2['completed_trades'] == 0
         assert counts2['positions'] == 0
         assert counts2['setup_patterns'] == 0
+        assert counts2['setup_sources'] == 0
         assert counts2['processing_log'] == 0
 
 

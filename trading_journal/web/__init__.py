@@ -35,6 +35,7 @@ def create_app() -> Flask:
     from .routes.ingest import bp as ingest_bp
     from .routes.admin import bp as admin_bp
     from .routes.api import bp as api_bp
+    from .routes.settings import bp as settings_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -43,5 +44,6 @@ def create_app() -> Flask:
     app.register_blueprint(ingest_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(settings_bp)
 
     return app

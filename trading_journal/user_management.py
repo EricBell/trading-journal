@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .models import User, CompletedTrade, Trade, Position, SetupPattern, ProcessingLog
+from .models import User, CompletedTrade, Trade, Position, SetupPattern, SetupSource, ProcessingLog
 from .auth.utils import generate_api_key, hash_api_key
 from .authorization.context import AuthContext
 
@@ -350,6 +350,9 @@ class UserManager:
             'setup_patterns': self.session.query(func.count(SetupPattern.pattern_id)).filter(
                 SetupPattern.user_id == user_id
             ).scalar() or 0,
+            'setup_sources': self.session.query(func.count(SetupSource.source_id)).filter(
+                SetupSource.user_id == user_id
+            ).scalar() or 0,
             'processing_log': self.session.query(func.count(ProcessingLog.log_id)).filter(
                 ProcessingLog.user_id == user_id
             ).scalar() or 0
@@ -374,7 +377,10 @@ class UserManager:
         # 4. Setup patterns
         self.session.query(SetupPattern).filter(SetupPattern.user_id == user_id).delete(synchronize_session=False)
 
-        # 5. Processing log
+        # 5. Setup sources
+        self.session.query(SetupSource).filter(SetupSource.user_id == user_id).delete(synchronize_session=False)
+
+        # 6. Processing log
         self.session.query(ProcessingLog).filter(ProcessingLog.user_id == user_id).delete(synchronize_session=False)
 
         # Note: User account is preserved, only data is deleted

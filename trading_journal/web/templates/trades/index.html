@@ -103,7 +103,7 @@
         <td class="text-end fw-bold {% if t.net_pnl and t.net_pnl > 0 %}text-success{% elif t.net_pnl and t.net_pnl < 0 %}text-danger{% endif %}">
           ${{ "%.2f"|format(t.net_pnl|float) if t.net_pnl else '0.00' }}
         </td>
-        <td>{{ t.setup_pattern or '' }}{% if t.trade_notes %} <span title="Has notes" style="color:#6ea8fe;font-size:.85em">✎</span>{% endif %}</td>
+        <td>{{ t.setup_pattern_rel.pattern_name if t.setup_pattern_rel else '' }}{% if t.trade_notes %} <span title="Has notes" style="color:#6ea8fe;font-size:.85em">✎</span>{% endif %}</td>
         {% if accounts %}<td class="text-muted small">{{ t.account.account_name if t.account else '—' }}</td>{% endif %}
       </tr>
       {% endfor %}

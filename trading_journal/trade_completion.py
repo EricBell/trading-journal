@@ -327,7 +327,7 @@ class TradeCompletionEngine:
                         "pnl": t.net_pnl,
                         "opened_at": t.opened_at.isoformat() if t.opened_at else None,
                         "closed_at": t.closed_at.isoformat() if t.closed_at else None,
-                        "setup_pattern": t.setup_pattern,
+                        "setup_pattern": t.setup_pattern_rel.pattern_name if t.setup_pattern_rel else None,
                         "notes": t.trade_notes
                     }
                     for t in completed_trades

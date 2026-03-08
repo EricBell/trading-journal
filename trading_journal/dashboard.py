@@ -153,7 +153,7 @@ class DashboardEngine:
 
         # Group trades by pattern
         for trade in trades:
-            pattern = trade.setup_pattern or "No Pattern"
+            pattern = (trade.setup_pattern_rel.pattern_name if trade.setup_pattern_rel else None) or "No Pattern"
 
             if pattern not in pattern_stats:
                 pattern_stats[pattern] = {

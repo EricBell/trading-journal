@@ -49,6 +49,15 @@ def test_completed_trade_model_creation(db_session):
     db_session.add(user)
     db_session.commit()
 
+    from trading_journal.models import SetupPattern
+    pattern = SetupPattern(
+        user_id=user.user_id,
+        pattern_name="5min ORB",
+        is_active=True,
+    )
+    db_session.add(pattern)
+    db_session.flush()
+
     completed_trade = CompletedTrade(
         user_id=user.user_id,
         symbol="AAPL",
@@ -57,7 +66,7 @@ def test_completed_trade_model_creation(db_session):
         entry_avg_price=150.00,
         exit_avg_price=155.00,
         net_pnl=500.00,
-        setup_pattern="5min ORB",
+        setup_pattern_id=pattern.pattern_id,
         trade_notes="Good entry timing",
         is_winning_trade=True
     )
@@ -66,7 +75,7 @@ def test_completed_trade_model_creation(db_session):
     db_session.commit()
 
     assert completed_trade.completed_trade_id is not None
-    assert completed_trade.setup_pattern == "5min ORB"
+    assert completed_trade.setup_pattern_rel.pattern_name == "5min ORB"
     assert completed_trade.is_winning_trade is True
 
 

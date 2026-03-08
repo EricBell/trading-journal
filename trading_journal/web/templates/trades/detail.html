@@ -107,28 +107,44 @@
         <form method="post" action="{{ url_for('trades.annotate', trade_id=trade.completed_trade_id) }}">
           <div class="mb-3">
             <label class="form-label">Setup Pattern</label>
-            {% if pattern_names %}
-            <select name="setup_pattern" class="form-select">
+            <select name="setup_pattern_id" class="form-select" id="patternSelect">
               <option value="">— none —</option>
-              {% for p in pattern_names %}
-              <option value="{{ p }}" {% if trade.setup_pattern == p %}selected{% endif %}>{{ p }}</option>
+              {% for p in patterns %}
+              <option value="{{ p.pattern_id }}"
+                {% if trade.setup_pattern_id == p.pattern_id %}selected{% endif %}>
+                {{ p.pattern_name }}
+              </option>
               {% endfor %}
+              <option value="__new__">+ Add new pattern...</option>
             </select>
-            <div class="form-text">
-              Or type a new pattern:
-              <input type="text" name="setup_pattern_custom" class="form-control form-control-sm mt-1"
-                     placeholder="New pattern name"
-                     id="customPattern">
+            <div id="newPatternInput" style="display:none" class="mt-2">
+              <input type="text" name="new_pattern_name" class="form-control form-control-sm"
+                     placeholder="New pattern name">
             </div>
-            {% else %}
-            <input type="text" name="setup_pattern" class="form-control"
-                   value="{{ trade.setup_pattern or '' }}" placeholder="e.g. MACD Scalp">
-            {% endif %}
           </div>
+
+          <div class="mb-3">
+            <label class="form-label">Setup Source</label>
+            <select name="setup_source_id" class="form-select" id="sourceSelect">
+              <option value="">— none —</option>
+              {% for s in sources %}
+              <option value="{{ s.source_id }}"
+                {% if trade.setup_source_id == s.source_id %}selected{% endif %}>
+                {{ s.source_name }}
+              </option>
+              {% endfor %}
+              <option value="__new__">+ Add new source...</option>
+            </select>
+            <div id="newSourceInput" style="display:none" class="mt-2">
+              <input type="text" name="new_source_name" class="form-control form-control-sm"
+                     placeholder="New source name">
+            </div>
+          </div>
+
           <div class="mb-3">
             <label class="form-label">Notes</label>
             <textarea id="trade_notes" name="trade_notes" rows="6"
-                      placeholder="Trade notes…">{{ trade.trade_notes or '' }}</textarea>
+                      placeholder="Trade notes...">{{ trade.trade_notes or '' }}</textarea>
           </div>
           <button type="submit" class="btn btn-primary">Save</button>
         </form>
@@ -150,17 +166,21 @@ const easyMDE = new EasyMDE({
 });
 </script>
 <script>
-// If custom pattern is filled in, use it instead of the select
-const form = document.querySelector('form[action*="annotate"]');
-if (form) {
-  form.addEventListener('submit', function() {
-    const custom = document.getElementById('customPattern');
-    if (custom && custom.value.trim()) {
-      const sel = form.querySelector('select[name="setup_pattern"]');
-      if (sel) sel.value = '';
-      // rename custom to setup_pattern
-      custom.name = 'setup_pattern';
-    }
+// Show/hide new pattern input when "__new__" is selected
+const patternSelect = document.getElementById('patternSelect');
+const newPatternInput = document.getElementById('newPatternInput');
+if (patternSelect) {
+  patternSelect.addEventListener('change', function() {
+    newPatternInput.style.display = this.value === '__new__' ? 'block' : 'none';
+  });
+}
+
+// Show/hide new source input when "__new__" is selected
+const sourceSelect = document.getElementById('sourceSelect');
+const newSourceInput = document.getElementById('newSourceInput');
+if (sourceSelect) {
+  sourceSelect.addEventListener('change', function() {
+    newSourceInput.style.display = this.value === '__new__' ? 'block' : 'none';
   });
 }
 </script>

@@ -35,6 +35,10 @@
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('ingest.') %}active{% endif %}"
              href="{{ url_for('ingest.upload_form') }}">Upload CSV</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('settings.') %}active{% endif %}"
+             href="{{ url_for('settings.index') }}">Settings</a>
+        </li>
         {% if user.is_admin %}
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}"

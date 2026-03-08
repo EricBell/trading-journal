@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from ..auth import admin_required, login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Account, CompletedTrade, SetupPattern, Trade
+from ...models import Account, CompletedTrade, SetupPattern, SetupSource, Trade
 from ...positions import PositionTracker
 
 bp = Blueprint('trades', __name__)
@@ -22,7 +22,7 @@ SORT_COLUMNS = {
     'opened':  CompletedTrade.opened_at,
     'closed':  CompletedTrade.closed_at,
     'pnl':     CompletedTrade.net_pnl,
-    'pattern': CompletedTrade.setup_pattern,
+    'pattern': SetupPattern.pattern_name,
 }
 DEFAULT_SORT, DEFAULT_DIR = 'closed', 'desc'
 PER_PAGE_OPTIONS = [10, 25, 50, 100]
@@ -84,24 +84,35 @@ def index():
 
         col = SORT_COLUMNS[sort_col]
         order_fn = asc if sort_dir == 'asc' else desc
-        query = query.order_by(order_fn(col))
+
+        # For pattern sort we need a join; for others use the column directly
+        if sort_col == 'pattern':
+            query = query.outerjoin(
+                SetupPattern,
+                (SetupPattern.pattern_id == CompletedTrade.setup_pattern_id)
+            ).order_by(order_fn(SetupPattern.pattern_name))
+        else:
+            query = query.order_by(order_fn(col))
 
         total = query.count()
         total_pages = max(1, (total + per_page - 1) // per_page)
         page = min(page, total_pages)
-        trades = query.options(joinedload(CompletedTrade.account)).offset((page - 1) * per_page).limit(per_page).all()
-
-        # Fetch user patterns for filter dropdown
-        patterns = (
-            db_session.query(CompletedTrade.setup_pattern)
-            .filter(
-                CompletedTrade.user_id == user.user_id,
-                CompletedTrade.setup_pattern.isnot(None),
-            )
-            .distinct()
+        trades = (
+            query
+            .options(joinedload(CompletedTrade.account))
+            .offset((page - 1) * per_page)
+            .limit(per_page)
             .all()
         )
-        pattern_names = sorted(p[0] for p in patterns if p[0])
+
+        # Fetch user patterns for filter dropdown (from setup_patterns table)
+        pattern_names_rows = (
+            db_session.query(SetupPattern.pattern_name)
+            .filter_by(user_id=user.user_id, is_active=True)
+            .order_by(SetupPattern.pattern_name)
+            .all()
+        )
+        pattern_names = [p[0] for p in pattern_names_rows]
 
         # Fetch user accounts for filter dropdown
         accounts = (
@@ -152,13 +163,20 @@ def detail(trade_id: int):
             .order_by(SetupPattern.pattern_name)
             .all()
         )
-        pattern_names = [p.pattern_name for p in patterns]
+
+        sources = (
+            session.query(SetupSource)
+            .filter_by(user_id=user.user_id, is_active=True)
+            .order_by(SetupSource.source_name)
+            .all()
+        )
 
     return render_template(
         'trades/detail.html',
         trade=trade,
         executions=executions,
-        pattern_names=pattern_names,
+        patterns=patterns,
+        sources=sources,
         user=user,
     )
 
@@ -190,6 +208,7 @@ def delete(trade_id: int):
 @bp.route('/trades/<int:trade_id>/annotate', methods=['POST'])
 @login_required
 def annotate(trade_id: int):
+    from sqlalchemy import func as sa_func
     user = AuthContext.require_user()
     with db_manager.get_session() as session:
         trade = session.query(CompletedTrade).filter_by(
@@ -199,7 +218,66 @@ def annotate(trade_id: int):
             flash('Trade not found.', 'warning')
             return redirect(url_for('trades.index'))
 
-        trade.setup_pattern = request.form.get('setup_pattern') or None
+        # Resolve setup_pattern_id
+        pattern_id_raw = request.form.get('setup_pattern_id', '').strip()
+        if pattern_id_raw == '__new__':
+            new_name = request.form.get('new_pattern_name', '').strip()
+            if new_name:
+                existing = session.query(SetupPattern).filter(
+                    SetupPattern.user_id == user.user_id,
+                    sa_func.lower(SetupPattern.pattern_name) == new_name.lower()
+                ).first()
+                if existing:
+                    trade.setup_pattern_id = existing.pattern_id
+                else:
+                    new_pattern = SetupPattern(
+                        user_id=user.user_id,
+                        pattern_name=new_name,
+                        is_active=True,
+                    )
+                    session.add(new_pattern)
+                    session.flush()
+                    trade.setup_pattern_id = new_pattern.pattern_id
+            else:
+                trade.setup_pattern_id = None
+        elif pattern_id_raw:
+            try:
+                trade.setup_pattern_id = int(pattern_id_raw)
+            except ValueError:
+                trade.setup_pattern_id = None
+        else:
+            trade.setup_pattern_id = None
+
+        # Resolve setup_source_id
+        source_id_raw = request.form.get('setup_source_id', '').strip()
+        if source_id_raw == '__new__':
+            new_name = request.form.get('new_source_name', '').strip()
+            if new_name:
+                existing = session.query(SetupSource).filter(
+                    SetupSource.user_id == user.user_id,
+                    sa_func.lower(SetupSource.source_name) == new_name.lower()
+                ).first()
+                if existing:
+                    trade.setup_source_id = existing.source_id
+                else:
+                    new_source = SetupSource(
+                        user_id=user.user_id,
+                        source_name=new_name,
+                        is_active=True,
+                    )
+                    session.add(new_source)
+                    session.flush()
+                    trade.setup_source_id = new_source.source_id
+            else:
+                trade.setup_source_id = None
+        elif source_id_raw:
+            try:
+                trade.setup_source_id = int(source_id_raw)
+            except ValueError:
+                trade.setup_source_id = None
+        else:
+            trade.setup_source_id = None
+
         trade.trade_notes = request.form.get('trade_notes', '').strip() or None
         session.commit()
         flash('Trade updated.', 'success')

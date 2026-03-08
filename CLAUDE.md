@@ -410,21 +410,4 @@ When in plan mode, plans must NOT include code. Present strategy, approach, trad
 
 The application depends on output from the **Schwab CSV to JSON Converter** located at `../schwab-csv-to-json` for NDJSON input data.
 
-## Next Work: Multi-Account Support
-
-User trades in multiple brokerage accounts. The Schwab CSV file identifies the account on
-**row 1**, e.g.: `"for 79967586SCHW (Contributory IRA)"`
-
-**Current gap:** Schema has no account concept. `csv_parser.py:_parse_single_file()` silently
-skips row 1 (treated as noise). No account_id on any table.
-
-**Decision needed first:** Normalized `accounts` table (preferred for filtering/reporting) vs.
-plain string columns on trades/completed_trades (simpler). Ask user before implementing.
-
-**Files to change (full chain):**
-1. `trading_journal/models.py` — Add `Account` model (`account_id`, `user_id`, `account_number`, `account_name`, `account_type`); add nullable `account_id` FK to `Trade`, `CompletedTrade`, `Position`
-2. `alembic/versions/` — New migration for accounts table + FK columns
-3. `trading_journal/csv_parser.py` — Extract account line before section-detection loop; parse account number + name from `"for XXXXXSCHW (Account Type)"` pattern; attach to each record
-4. `trading_journal/schemas.py` — Add `account_number`/`account_name` fields to `NdjsonRecord`
-5. `trading_journal/ingestion.py` — Pass account info through `_convert_to_trade_data()`; look up or create `Account` record per user
-6. Web UI — Account filter on `/trades` and `/positions`; account display on trade detail; account shown on upload
+## Next Work: 

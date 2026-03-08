@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, date
 from decimal import Decimal
 
-from trading_journal.models import CompletedTrade, Position, User
+from trading_journal.models import CompletedTrade, Position, SetupPattern, User
 from trading_journal.dashboard import DashboardEngine
 from trading_journal.authorization import AuthContext
 from trading_journal.database import db_manager
@@ -43,6 +43,20 @@ def test_user(db_session):
 @pytest.fixture
 def sample_trades(db_session, test_user):
     """Create sample completed trades for testing."""
+    # Create setup patterns first
+    macd_pattern = SetupPattern(
+        user_id=test_user.user_id,
+        pattern_name="MACD Scalp",
+        is_active=True,
+    )
+    orb_pattern = SetupPattern(
+        user_id=test_user.user_id,
+        pattern_name="5min ORB",
+        is_active=True,
+    )
+    db_session.add_all([macd_pattern, orb_pattern])
+    db_session.flush()
+
     trades = [
         CompletedTrade(
             user_id=test_user.user_id,
@@ -58,7 +72,7 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 10, 15, 0, 0),
             is_winning_trade=True,
             trade_type="LONG",
-            setup_pattern="MACD Scalp"
+            setup_pattern_id=macd_pattern.pattern_id,
         ),
         CompletedTrade(
             user_id=test_user.user_id,
@@ -74,7 +88,7 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 11, 15, 0, 0),
             is_winning_trade=False,
             trade_type="LONG",
-            setup_pattern="MACD Scalp"
+            setup_pattern_id=macd_pattern.pattern_id,
         ),
         CompletedTrade(
             user_id=test_user.user_id,
@@ -90,7 +104,7 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 12, 15, 0, 0),
             is_winning_trade=True,
             trade_type="LONG",
-            setup_pattern="5min ORB"
+            setup_pattern_id=orb_pattern.pattern_id,
         ),
         CompletedTrade(
             user_id=test_user.user_id,
@@ -106,7 +120,7 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 13, 15, 0, 0),
             is_winning_trade=False,
             trade_type="LONG",
-            setup_pattern="5min ORB"
+            setup_pattern_id=orb_pattern.pattern_id,
         ),
         CompletedTrade(
             user_id=test_user.user_id,
@@ -122,8 +136,8 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 14, 15, 0, 0),
             is_winning_trade=True,
             trade_type="LONG",
-            setup_pattern="MACD Scalp"
-        )
+            setup_pattern_id=macd_pattern.pattern_id,
+        ),
     ]
 
     for trade in trades:
