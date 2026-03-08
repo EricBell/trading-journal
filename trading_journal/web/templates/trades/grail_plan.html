@@ -22,10 +22,13 @@
         <tr><th>Trade Action</th><td>{{ g.get('trade_action', '—') }}</td></tr>
         <tr><th>Entry Direction</th><td>{{ g.get('entry_direction', '—') }}</td></tr>
         <tr><th>Entry Price</th><td>{{ g.get('entry_price', '—') }}</td></tr>
-        {% set sl = g.get('json_content', {}).get('stop_loss', {}) if g.get('json_content') else {} %}
-        {% set sl_range = sl.get('price_range', []) if sl else [] %}
+        {% set _jc = g.get('json_content') or {} %}
+        {% set _tp = _jc.get('trade_plan') or {} %}
+        {% set _exits = _tp.get('exits') or {} %}
+        {% set _sl = _exits.get('stop_loss') or {} %}
+        {% set sl_range = _sl.get('price_range') or [] %}
         <tr><th>Stop Loss</th><td>
-          {% if sl_range and sl_range | length == 2 %}
+          {% if sl_range | length == 2 %}
             ${{ "%.2f" | format(sl_range[0] | float) }} – ${{ "%.2f" | format(sl_range[1] | float) }}
           {% else %}—{% endif %}
         </td></tr>
