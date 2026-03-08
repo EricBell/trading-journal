@@ -50,6 +50,10 @@
         {% else %}
           <span class="badge bg-danger ms-1">LOSS</span>
         {% endif %}
+        {% if grail_record %}
+        <a href="{{ url_for('trades.grail_plan', trade_id=trade.completed_trade_id) }}"
+           class="btn btn-sm btn-outline-info ms-2">View Trade Plan</a>
+        {% endif %}
       </div>
       <div class="card-body">
         <table class="table table-sm mb-0">

@@ -171,12 +171,42 @@ def detail(trade_id: int):
             .all()
         )
 
+    from ...grail_connector import find_grail_match
+    grail_record = find_grail_match(trade.symbol, trade.opened_at)
+
     return render_template(
         'trades/detail.html',
         trade=trade,
         executions=executions,
         patterns=patterns,
         sources=sources,
+        user=user,
+        grail_record=grail_record,
+    )
+
+
+@bp.route('/trades/<int:trade_id>/grail-plan')
+@login_required
+def grail_plan(trade_id: int):
+    user = AuthContext.require_user()
+    with db_manager.get_session() as session:
+        trade = session.query(CompletedTrade).filter_by(
+            completed_trade_id=trade_id, user_id=user.user_id
+        ).one_or_none()
+        if trade is None:
+            flash('Trade not found.', 'warning')
+            return redirect(url_for('trades.index'))
+
+    from ...grail_connector import find_grail_match
+    grail_record = find_grail_match(trade.symbol, trade.opened_at)
+    if grail_record is None:
+        flash('No trade plan found for this trade.', 'warning')
+        return redirect(url_for('trades.detail', trade_id=trade_id))
+
+    return render_template(
+        'trades/grail_plan.html',
+        trade=trade,
+        grail_record=grail_record,
         user=user,
     )
 

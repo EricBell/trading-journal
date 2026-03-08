@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Trade Plan — {{ trade.symbol }} — Trading Journal{% endblock %}
+
+{% block content %}
+<div class="mb-3 d-flex justify-content-between align-items-center">
+  <a href="{{ url_for('trades.detail', trade_id=trade.completed_trade_id) }}"
+     class="btn btn-sm btn-outline-secondary">&larr; Back to Trade</a>
+  <span class="text-muted small">
+    Plan created: {{ grail_record.file_created_at.strftime('%Y-%m-%d %H:%M:%S') if grail_record.file_created_at else '—' }}
+  </span>
+</div>
+
+<h5 class="mb-3">{{ trade.symbol }} — Pre-Trade Plan</h5>
+
+<div class="card mb-4">
+  <div class="card-header fw-bold">Summary</div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <tbody>
+        {% set g = grail_record %}
+        <tr><th style="width:35%">Should Trade</th><td>{{ g.get('should_trade', '—') }}</td></tr>
+        <tr><th>Trade Action</th><td>{{ g.get('trade_action', '—') }}</td></tr>
+        <tr><th>Entry Direction</th><td>{{ g.get('entry_direction', '—') }}</td></tr>
+        <tr><th>Entry Price</th><td>{{ g.get('entry_price', '—') }}</td></tr>
+        <tr><th>Trade Confidence</th><td>{{ g.get('trade_confidence_pct', '—') }}</td></tr>
+        <tr><th>Technical Confidence</th><td>{{ g.get('technical_confidence', '—') }}</td></tr>
+        <tr><th>Macro Confidence</th><td>{{ g.get('macro_confidence', '—') }}</td></tr>
+        <tr><th>Wild Card Risk</th><td>{{ g.get('wild_card_risk', '—') }}</td></tr>
+        <tr><th>Agent Agreement</th><td>{{ g.get('agent_agreement', '—') }}</td></tr>
+        <tr><th>Trade Style</th><td>{{ g.get('trade_style', '—') }}</td></tr>
+        <tr><th>Position Quantity</th><td>{{ g.get('position_quantity', '—') }}</td></tr>
+        <tr><th>Position Unit Type</th><td>{{ g.get('position_unit_type', '—') }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header fw-bold">Full JSON</div>
+  <div class="card-body p-0">
+    <pre class="m-0 p-3" style="font-size:0.8rem;overflow-x:auto;">{{ grail_record.get('json_content') | tojson(indent=2) if grail_record.get('json_content') is not none else '—' }}</pre>
+  </div>
+</div>
+{% endblock %}
