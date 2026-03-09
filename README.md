@@ -71,10 +71,10 @@ uv run python main.py report positions
 
 ## Documentation
 
-- **[PRD.md](PRD.md)** - Complete product requirements and technical specifications
+- **[docs/OVERVIEW.md](docs/OVERVIEW.md)** - Authoritative system overview (architecture, design decisions, feature inventory)
 - **[CLAUDE.md](CLAUDE.md)** - Development guidance for AI assistants
-- **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** - Current implementation status
-- **[tasks.md](tasks.md)** - Detailed task tracking
+- **[docs/PRD.md](docs/PRD.md)** - Original product requirements (historical)
+- **[docs/](docs/)** - Additional planning and implementation history
 
 ## Current Status
 
