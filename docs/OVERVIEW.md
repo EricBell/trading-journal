@@ -250,7 +250,7 @@ fire-and-forget: if `grail_files` is unreachable the page renders normally with 
 ### Web UI
 | Feature | Route | Notes |
 |---|---|---|
-| Dashboard | `/` | Win rate, avg P&L, total realized P&L, trade counts, equity curve |
+| Dashboard | `/` | Total P&L, win rate, profit factor, avg win/loss, avg trade, largest win/loss, max win/loss streak, trade counts, equity curve. Profit factor = total winning P&L ÷ \|total losing P&L\|; null when no losers. |
 | Trades list | `/trades` | Sort by any column, filter by symbol/date range/account, pagination (per_page persisted in session) |
 | Trade detail | `/trades/<id>` | Execution breakdown, annotation form, prev/next navigation, Grail plan link |
 | Trade annotation | `/trades/<id>/annotate` | Pattern (managed dropdown + inline create), source, stop price, notes |
