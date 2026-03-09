@@ -309,6 +309,7 @@ def grail_plan(trade_id: int):
 @admin_required
 def delete(trade_id: int):
     user = AuthContext.require_user()
+    symbol = None
     with db_manager.get_session() as db_session:
         trade = db_session.query(CompletedTrade).filter_by(
             completed_trade_id=trade_id, user_id=user.user_id
@@ -317,13 +318,15 @@ def delete(trade_id: int):
             flash('Trade not found.', 'warning')
             return redirect(url_for('trades.index'))
 
+        symbol = trade.symbol  # capture before delete
+
         # Delete underlying raw executions first, then the completed trade
         db_session.query(Trade).filter_by(completed_trade_id=trade_id).delete()
         db_session.delete(trade)
         db_session.commit()
 
-    # Reprocess positions so P&L stays correct
-    PositionTracker().reprocess_all_positions(user.user_id)
+    # Reprocess positions for only the affected symbol so P&L stays correct
+    PositionTracker().reprocess_positions_for_symbols(user.user_id, {symbol})
 
     flash(f'Trade #{trade_id} and its executions have been deleted.', 'success')
     return redirect(url_for('trades.index'))

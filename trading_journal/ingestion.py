@@ -331,10 +331,11 @@ class NdjsonIngester:
             # Commit the transaction
             session.commit()
 
-        # Reprocess all positions from scratch to ensure idempotency on re-uploads.
-        # Per-trade updates corrupt positions when the same records are uploaded again,
-        # because closed positions get re-opened and then can't be re-closed.
-        self.position_tracker.reprocess_all_positions(user_id)
+        # Reprocess positions only for symbols present in this batch.
+        # Scoping to affected symbols avoids rebuilding the entire position history
+        # on every upload (which caused worker timeouts with remote PostgreSQL).
+        affected_symbols = {r.symbol for r in records if r.symbol}
+        self.position_tracker.reprocess_positions_for_symbols(user_id, affected_symbols)
 
         return insert_count, update_count
 

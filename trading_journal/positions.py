@@ -259,33 +259,119 @@ class PositionTracker:
                 ]
             }
 
+    def _rebuild_positions_in_session(self, session: Session, user_id: int, trades: List[Trade]) -> int:
+        """Rebuild positions from a pre-loaded, time-ordered list of trades.
+
+        Keeps an in-memory position cache and issues a single bulk UPSERT at the end.
+        Returns the number of distinct positions rebuilt.
+        """
+        position_cache: Dict[tuple, Position] = {}
+
+        for trade in trades:
+            if not (trade.symbol and trade.net_price and trade.qty):
+                continue
+
+            option_details = None
+            if trade.instrument_type == "OPTION" and trade.option_data:
+                option_details = trade.option_data
+
+            # Dict key must be hashable; serialise option_details to a stable string.
+            option_key = json.dumps(option_details, sort_keys=True) if option_details else None
+            cache_key = (trade.symbol, trade.instrument_type, option_key)
+
+            if cache_key not in position_cache:
+                position_cache[cache_key] = Position(
+                    user_id=user_id,
+                    account_id=trade.account_id,
+                    symbol=trade.symbol,
+                    instrument_type=trade.instrument_type,
+                    option_details=option_details,
+                    current_qty=0,
+                    avg_cost_basis=Decimal('0'),
+                    total_cost=Decimal('0'),
+                    opened_at=trade.exec_timestamp or datetime.now(),
+                    realized_pnl=Decimal('0'),
+                )
+
+            position = position_cache[cache_key]
+
+            if trade.pos_effect == "TO OPEN":
+                self._handle_position_open(position, trade)
+            elif trade.pos_effect == "TO CLOSE":
+                self._handle_position_close(position, trade)
+
+        if not position_cache:
+            return 0
+
+        rows = [
+            {
+                'user_id': p.user_id,
+                'symbol': p.symbol,
+                'instrument_type': p.instrument_type,
+                'option_details': p.option_details,
+                'current_qty': p.current_qty,
+                'avg_cost_basis': p.avg_cost_basis,
+                'total_cost': p.total_cost,
+                'opened_at': p.opened_at,
+                'updated_at': p.updated_at or datetime.now(),
+                'closed_at': p.closed_at,
+                'realized_pnl': p.realized_pnl,
+            }
+            for p in position_cache.values()
+        ]
+
+        stmt = insert(Position).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['user_id', 'symbol', 'instrument_type', 'option_details'],
+            set_=dict(
+                current_qty=stmt.excluded.current_qty,
+                avg_cost_basis=stmt.excluded.avg_cost_basis,
+                total_cost=stmt.excluded.total_cost,
+                updated_at=stmt.excluded.updated_at,
+                closed_at=stmt.excluded.closed_at,
+                realized_pnl=stmt.excluded.realized_pnl,
+            )
+        )
+        session.execute(stmt)
+        return len(position_cache)
+
+    def reprocess_positions_for_symbols(self, user_id: int, symbols: set) -> Dict[str, Any]:
+        """Reprocess positions for a specific set of symbols, leaving all others untouched."""
+        with self.db_manager.get_session() as session:
+            session.query(Position).filter(
+                Position.user_id == user_id,
+                Position.symbol.in_(symbols)
+            ).delete(synchronize_session=False)
+
+            trades = session.query(Trade).filter(
+                Trade.user_id == user_id,
+                Trade.event_type == 'fill',
+                Trade.symbol.in_(symbols)
+            ).order_by(Trade.exec_timestamp).all()
+
+            processed_count = self._rebuild_positions_in_session(session, user_id, trades)
+            session.commit()
+
+        expired_count = self._expire_worthless_options(user_id)
+
+        return {
+            "trades_processed": processed_count,
+            "expired_options": expired_count,
+            "message": f"Reprocessed {processed_count} positions for {len(symbols)} symbol(s), expired {expired_count} worthless options"
+        }
+
     def reprocess_all_positions(self, user_id: int) -> Dict[str, Any]:
         """Reprocess all positions from scratch based on trade history for a specific user."""
-        # Do everything in a single session to avoid N+2 connection overhead.
         with self.db_manager.get_session() as session:
             session.query(Position).filter(Position.user_id == user_id).delete()
-            session.commit()
 
             trades = session.query(Trade).filter(
                 Trade.user_id == user_id,
                 Trade.event_type == 'fill'
             ).order_by(Trade.exec_timestamp).all()
 
-            processed_count = 0
-            for trade in trades:
-                if not (trade.symbol and trade.net_price and trade.qty):
-                    continue
-
-                position = self._get_or_create_position(session, trade)
-
-                if trade.pos_effect == "TO OPEN":
-                    self._handle_position_open(position, trade)
-                elif trade.pos_effect == "TO CLOSE":
-                    self._handle_position_close(position, trade)
-
-                self._save_position(session, position, trade)
-                logger.info(f"Updated position for {trade.symbol}: {position.current_qty} @ {position.avg_cost_basis}")
-                processed_count += 1
+            processed_count = self._rebuild_positions_in_session(session, user_id, trades)
+            session.commit()
 
         expired_count = self._expire_worthless_options(user_id)
 
