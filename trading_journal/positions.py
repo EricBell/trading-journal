@@ -261,24 +261,30 @@ class PositionTracker:
 
     def reprocess_all_positions(self, user_id: int) -> Dict[str, Any]:
         """Reprocess all positions from scratch based on trade history for a specific user."""
-        # Clear existing positions for this user in a committed transaction first,
-        # so subsequent per-trade sessions see a clean slate.
+        # Do everything in a single session to avoid N+2 connection overhead.
         with self.db_manager.get_session() as session:
             session.query(Position).filter(Position.user_id == user_id).delete()
             session.commit()
 
-        # Fetch all fill trades for this user in chronological order.
-        # Load into memory before closing the session so objects aren't detached mid-loop.
-        with self.db_manager.get_session() as session:
             trades = session.query(Trade).filter(
                 Trade.user_id == user_id,
                 Trade.event_type == 'fill'
             ).order_by(Trade.exec_timestamp).all()
 
-        processed_count = 0
-        for trade in trades:
-            if trade.symbol and trade.net_price and trade.qty:
-                self.update_positions_from_trade(trade)
+            processed_count = 0
+            for trade in trades:
+                if not (trade.symbol and trade.net_price and trade.qty):
+                    continue
+
+                position = self._get_or_create_position(session, trade)
+
+                if trade.pos_effect == "TO OPEN":
+                    self._handle_position_open(position, trade)
+                elif trade.pos_effect == "TO CLOSE":
+                    self._handle_position_close(position, trade)
+
+                self._save_position(session, position, trade)
+                logger.info(f"Updated position for {trade.symbol}: {position.current_qty} @ {position.avg_cost_basis}")
                 processed_count += 1
 
         expired_count = self._expire_worthless_options(user_id)
