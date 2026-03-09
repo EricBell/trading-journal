@@ -7,10 +7,26 @@ from sqlalchemy.orm import joinedload
 from ..auth import admin_required, login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Account, CompletedTrade, SetupPattern, SetupSource, Trade
+from ...models import Account, CompletedTrade, SetupPattern, SetupSource, Trade, TradeAnnotation
 from ...positions import PositionTracker
 
 bp = Blueprint('trades', __name__)
+
+
+def _get_or_create_annotation(session, trade):
+    """Load the TradeAnnotation for a trade, creating one if it doesn't exist yet."""
+    ann = session.query(TradeAnnotation).filter_by(
+        completed_trade_id=trade.completed_trade_id
+    ).one_or_none()
+    if ann is None:
+        ann = TradeAnnotation(
+            completed_trade_id=trade.completed_trade_id,
+            user_id=trade.user_id,
+            symbol=trade.symbol,
+            opened_at=trade.opened_at,
+        )
+        session.add(ann)
+    return ann
 
 SORT_COLUMNS = {
     'id':      CompletedTrade.completed_trade_id,
@@ -55,10 +71,14 @@ def _build_trades_query(db_session, user_id, symbol, range_filter, account_filte
     order_fn = asc if sort_dir == 'asc' else desc
 
     if sort_col == 'pattern':
-        query = query.outerjoin(
-            SetupPattern,
-            (SetupPattern.pattern_id == CompletedTrade.setup_pattern_id)
-        ).order_by(order_fn(SetupPattern.pattern_name))
+        query = (
+            query
+            .outerjoin(TradeAnnotation,
+                       TradeAnnotation.completed_trade_id == CompletedTrade.completed_trade_id)
+            .outerjoin(SetupPattern,
+                       SetupPattern.pattern_id == TradeAnnotation.setup_pattern_id)
+            .order_by(order_fn(SetupPattern.pattern_name))
+        )
     else:
         query = query.order_by(order_fn(col))
 
@@ -176,6 +196,10 @@ def detail(trade_id: int):
 
         executions = sorted(trade.executions, key=lambda e: e.exec_timestamp or '')
 
+        annotation = db_session.query(TradeAnnotation).filter_by(
+            completed_trade_id=trade_id
+        ).one_or_none()
+
         patterns = (
             db_session.query(SetupPattern)
             .filter_by(user_id=user.user_id, is_active=True)
@@ -243,6 +267,7 @@ def detail(trade_id: int):
     return render_template(
         'trades/detail.html',
         trade=trade,
+        annotation=annotation,
         executions=executions,
         patterns=patterns,
         sources=sources,
@@ -317,6 +342,8 @@ def annotate(trade_id: int):
             flash('Trade not found.', 'warning')
             return redirect(url_for('trades.index'))
 
+        ann = _get_or_create_annotation(session, trade)
+
         # Resolve setup_pattern_id
         pattern_id_raw = request.form.get('setup_pattern_id', '').strip()
         if pattern_id_raw == '__new__':
@@ -327,7 +354,7 @@ def annotate(trade_id: int):
                     sa_func.lower(SetupPattern.pattern_name) == new_name.lower()
                 ).first()
                 if existing:
-                    trade.setup_pattern_id = existing.pattern_id
+                    ann.setup_pattern_id = existing.pattern_id
                 else:
                     new_pattern = SetupPattern(
                         user_id=user.user_id,
@@ -336,16 +363,16 @@ def annotate(trade_id: int):
                     )
                     session.add(new_pattern)
                     session.flush()
-                    trade.setup_pattern_id = new_pattern.pattern_id
+                    ann.setup_pattern_id = new_pattern.pattern_id
             else:
-                trade.setup_pattern_id = None
+                ann.setup_pattern_id = None
         elif pattern_id_raw:
             try:
-                trade.setup_pattern_id = int(pattern_id_raw)
+                ann.setup_pattern_id = int(pattern_id_raw)
             except ValueError:
-                trade.setup_pattern_id = None
+                ann.setup_pattern_id = None
         else:
-            trade.setup_pattern_id = None
+            ann.setup_pattern_id = None
 
         # Resolve setup_source_id
         source_id_raw = request.form.get('setup_source_id', '').strip()
@@ -357,7 +384,7 @@ def annotate(trade_id: int):
                     sa_func.lower(SetupSource.source_name) == new_name.lower()
                 ).first()
                 if existing:
-                    trade.setup_source_id = existing.source_id
+                    ann.setup_source_id = existing.source_id
                 else:
                     new_source = SetupSource(
                         user_id=user.user_id,
@@ -366,18 +393,18 @@ def annotate(trade_id: int):
                     )
                     session.add(new_source)
                     session.flush()
-                    trade.setup_source_id = new_source.source_id
+                    ann.setup_source_id = new_source.source_id
             else:
-                trade.setup_source_id = None
+                ann.setup_source_id = None
         elif source_id_raw:
             try:
-                trade.setup_source_id = int(source_id_raw)
+                ann.setup_source_id = int(source_id_raw)
             except ValueError:
-                trade.setup_source_id = None
+                ann.setup_source_id = None
         else:
-            trade.setup_source_id = None
+            ann.setup_source_id = None
 
-        trade.trade_notes = request.form.get('trade_notes', '').strip() or None
+        ann.trade_notes = request.form.get('trade_notes', '').strip() or None
         session.commit()
         flash('Trade updated.', 'success')
 
@@ -409,14 +436,15 @@ def set_stop(trade_id: int):
             return redirect(url_for('trades.index'))
 
         stop_raw = request.form.get('stop_price', '').strip()
+        ann = _get_or_create_annotation(session, trade)
         if stop_raw:
             try:
-                trade.stop_price = float(stop_raw)
+                ann.stop_price = float(stop_raw)
             except ValueError:
                 flash('Invalid stop price — must be a number.', 'warning')
                 return redirect(url_for('trades.detail', trade_id=trade_id))
         else:
-            trade.stop_price = None
+            ann.stop_price = None
         session.commit()
 
     return redirect(url_for('trades.detail', trade_id=trade_id))

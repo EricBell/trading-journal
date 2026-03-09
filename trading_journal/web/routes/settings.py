@@ -6,7 +6,7 @@ from sqlalchemy import func
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import CompletedTrade, SetupPattern, SetupSource
+from ...models import TradeAnnotation, SetupPattern, SetupSource
 
 bp = Blueprint('settings', __name__, url_prefix='/settings')
 
@@ -20,12 +20,12 @@ def index():
         pattern_rows = (
             db_session.query(
                 SetupPattern,
-                func.count(CompletedTrade.completed_trade_id).label('trade_count')
+                func.count(TradeAnnotation.annotation_id).label('trade_count')
             )
             .outerjoin(
-                CompletedTrade,
-                (CompletedTrade.setup_pattern_id == SetupPattern.pattern_id) &
-                (CompletedTrade.user_id == user.user_id)
+                TradeAnnotation,
+                (TradeAnnotation.setup_pattern_id == SetupPattern.pattern_id) &
+                (TradeAnnotation.user_id == user.user_id)
             )
             .filter(SetupPattern.user_id == user.user_id)
             .group_by(SetupPattern.pattern_id)
@@ -37,12 +37,12 @@ def index():
         source_rows = (
             db_session.query(
                 SetupSource,
-                func.count(CompletedTrade.completed_trade_id).label('trade_count')
+                func.count(TradeAnnotation.annotation_id).label('trade_count')
             )
             .outerjoin(
-                CompletedTrade,
-                (CompletedTrade.setup_source_id == SetupSource.source_id) &
-                (CompletedTrade.user_id == user.user_id)
+                TradeAnnotation,
+                (TradeAnnotation.setup_source_id == SetupSource.source_id) &
+                (TradeAnnotation.user_id == user.user_id)
             )
             .filter(SetupSource.user_id == user.user_id)
             .group_by(SetupSource.source_id)
@@ -148,10 +148,10 @@ def deactivate_pattern(pattern_id: int):
             return redirect(url_for('settings.index'))
 
         trade_count = (
-            db_session.query(func.count(CompletedTrade.completed_trade_id))
+            db_session.query(func.count(TradeAnnotation.annotation_id))
             .filter(
-                CompletedTrade.user_id == user.user_id,
-                CompletedTrade.setup_pattern_id == pattern_id
+                TradeAnnotation.user_id == user.user_id,
+                TradeAnnotation.setup_pattern_id == pattern_id
             )
             .scalar() or 0
         )
@@ -258,10 +258,10 @@ def deactivate_source(source_id: int):
             return redirect(url_for('settings.index'))
 
         trade_count = (
-            db_session.query(func.count(CompletedTrade.completed_trade_id))
+            db_session.query(func.count(TradeAnnotation.annotation_id))
             .filter(
-                CompletedTrade.user_id == user.user_id,
-                CompletedTrade.setup_source_id == source_id
+                TradeAnnotation.user_id == user.user_id,
+                TradeAnnotation.setup_source_id == source_id
             )
             .scalar() or 0
         )

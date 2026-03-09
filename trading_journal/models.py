@@ -82,6 +82,7 @@ class User(Base):
     setup_patterns = relationship("SetupPattern", back_populates="user")
     setup_sources = relationship("SetupSource", back_populates="user")
     processing_logs = relationship("ProcessingLog", back_populates="user")
+    trade_annotations = relationship("TradeAnnotation", back_populates="user")
 
     # Constraints
     __table_args__ = (
@@ -226,13 +227,6 @@ class CompletedTrade(Base):
     closed_at = Column(TIMESTAMP(timezone=True))
     hold_duration = Column(Interval)
 
-    # Trading analysis (setup_pattern text column dropped; now FK-based)
-    setup_pattern_id = Column(BigInteger, ForeignKey("setup_patterns.pattern_id"), nullable=True)
-    setup_source_id = Column(BigInteger, ForeignKey("setup_sources.source_id"), nullable=True)
-    stop_price = Column(Numeric(18, 8), nullable=True)
-    trade_notes = Column(Text)
-    strategy_category = Column(String(30))
-
     # Trade classification
     is_winning_trade = Column(Boolean)
     trade_type = Column(String(20))
@@ -243,8 +237,7 @@ class CompletedTrade(Base):
     user = relationship("User", back_populates="completed_trades")
     account = relationship("Account")
     executions = relationship("Trade", back_populates="completed_trade")
-    setup_pattern_rel = relationship("SetupPattern", foreign_keys=[setup_pattern_id], lazy="joined")
-    setup_source_rel = relationship("SetupSource", foreign_keys=[setup_source_id], lazy="joined")
+    trade_annotation = relationship("TradeAnnotation", uselist=False, back_populates="trade")
 
     @property
     def option_details_dict(self) -> Optional[Dict[str, Any]]:
@@ -258,6 +251,47 @@ class CompletedTrade(Base):
             except (ValueError, TypeError):
                 return None
         return self.option_details
+
+
+class TradeAnnotation(Base):
+    """Manually entered trade annotation data — survives completed_trades resets."""
+
+    __tablename__ = "trade_annotations"
+
+    annotation_id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    # FK to completed_trades — nullable so annotations survive table drops
+    completed_trade_id = Column(
+        BigInteger,
+        ForeignKey("completed_trades.completed_trade_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    # Natural key — used to re-link after a completed_trades reset
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+    symbol = Column(String(50), nullable=False)
+    opened_at = Column(TIMESTAMP(timezone=True), nullable=False)
+
+    # Annotation fields
+    setup_pattern_id = Column(BigInteger, ForeignKey("setup_patterns.pattern_id"), nullable=True)
+    setup_source_id = Column(BigInteger, ForeignKey("setup_sources.source_id"), nullable=True)
+    stop_price = Column(Numeric(18, 8), nullable=True)
+    trade_notes = Column(Text, nullable=True)
+    strategy_category = Column(String(30), nullable=True)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    # Relationships
+    trade = relationship("CompletedTrade", back_populates="trade_annotation")
+    user = relationship("User", back_populates="trade_annotations")
+    setup_pattern_rel = relationship("SetupPattern", foreign_keys=[setup_pattern_id])
+    setup_source_rel = relationship("SetupSource", foreign_keys=[setup_source_id])
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "symbol", "opened_at", name="uq_annotation_per_trade"),
+    )
 
 
 class Position(Base):

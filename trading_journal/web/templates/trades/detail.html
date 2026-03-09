@@ -83,8 +83,9 @@
           <tr>
             <th>Stop</th>
             <td>
+              {% set _saved_stop = annotation.stop_price if annotation else none %}
               {% set _grail_stop = '' %}
-              {% if not trade.stop_price and grail_record %}
+              {% if not _saved_stop and grail_record %}
                 {% set _jc = grail_record.get('json_content') or {} %}
                 {% set _sl_range = ((_jc.get('trade_plan') or {}).get('exits') or {}).get('stop_loss', {}).get('price_range') or [] %}
                 {% if _sl_range | length >= 1 %}
@@ -93,7 +94,7 @@
               {% endif %}
               <form method="post" action="{{ url_for('trades.set_stop', trade_id=trade.completed_trade_id) }}" class="d-flex align-items-center gap-1">
                 <input type="number" name="stop_price" step="0.0001"
-                       value="{{ '%.4f'|format(trade.stop_price|float) if trade.stop_price else _grail_stop }}"
+                       value="{{ '%.4f'|format(_saved_stop|float) if _saved_stop else _grail_stop }}"
                        placeholder="—" class="form-control form-control-sm" style="width:9ch">
                 <button type="submit" class="btn btn-sm btn-outline-secondary">✓</button>
               </form>
@@ -148,7 +149,7 @@
               <option value="">— none —</option>
               {% for p in patterns %}
               <option value="{{ p.pattern_id }}"
-                {% if trade.setup_pattern_id == p.pattern_id %}selected{% endif %}>
+                {% if annotation and annotation.setup_pattern_id == p.pattern_id %}selected{% endif %}>
                 {{ p.pattern_name }}
               </option>
               {% endfor %}
@@ -166,7 +167,7 @@
               <option value="">— none —</option>
               {% for s in sources %}
               <option value="{{ s.source_id }}"
-                {% if trade.setup_source_id == s.source_id %}selected{% endif %}>
+                {% if annotation and annotation.setup_source_id == s.source_id %}selected{% endif %}>
                 {{ s.source_name }}
               </option>
               {% endfor %}
@@ -181,7 +182,7 @@
           <div class="mb-3">
             <label class="form-label">Notes</label>
             <textarea id="trade_notes" name="trade_notes" rows="6"
-                      placeholder="Trade notes...">{{ trade.trade_notes or '' }}</textarea>
+                      placeholder="Trade notes...">{{ (annotation.trade_notes if annotation else '') or '' }}</textarea>
           </div>
           <button type="submit" class="btn btn-primary">Save</button>
         </form>

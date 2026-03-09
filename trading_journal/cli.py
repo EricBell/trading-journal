@@ -505,8 +505,9 @@ def show_trade(id: int) -> None:
             click.echo(f"   Opened: {trade.opened_at}")
             click.echo(f"   Closed: {trade.closed_at}")
             click.echo(f"   Duration: {trade.hold_duration}")
-            click.echo(f"   Pattern: {trade.setup_pattern_rel.pattern_name if trade.setup_pattern_rel else 'N/A'}")
-            click.echo(f"   Notes: {trade.trade_notes or 'N/A'}")
+            _ann = trade.trade_annotation
+            click.echo(f"   Pattern: {_ann.setup_pattern_rel.pattern_name if _ann and _ann.setup_pattern_rel else 'N/A'}")
+            click.echo(f"   Notes: {(_ann.trade_notes if _ann else None) or 'N/A'}")
             
             click.echo("\n   Executions:")
             for exec in sorted(trade.executions, key=lambda e: e.exec_timestamp):
