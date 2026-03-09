@@ -390,13 +390,20 @@ def verify_schema() -> None:
 
 @db.command()
 @click.option('--symbol', help='Process only specific symbol')
+@click.option('--reprocess', is_flag=True, default=False,
+              help='Clear and rebuild all completed trades from scratch (use after schema changes).')
 @require_authentication
-def process_trades(symbol: str) -> None:
+def process_trades(symbol: str, reprocess: bool) -> None:
     """Process completed trades from executions."""
     try:
         from .trade_completion import TradeCompletionEngine
+        from .authorization import AuthContext
         engine = TradeCompletionEngine()
-        result = engine.process_completed_trades(symbol)
+        if reprocess:
+            user_id = AuthContext.require_user().user_id
+            result = engine.reprocess_all_completed_trades(user_id)
+        else:
+            result = engine.process_completed_trades(symbol)
         click.echo(f"🔄 Trade Processing Results:")
         click.echo(f"✅ Completed trades created: {result['completed_trades']}")
         click.echo(f"📝 {result['message']}")

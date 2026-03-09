@@ -1,8 +1,8 @@
 # Trading Journal — System Overview
 
-**Version:** 1.4.9
+**Version:** 1.5.0
 **Last Updated:** 2026-03-09
-**Status:** Production (Phase 4 complete; multi-account support in progress)
+**Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
 is built, why key decisions were made, and what remains open. It is intended to be shared
@@ -127,7 +127,7 @@ restores them exactly.
 | `trades` | Individual fills (Tier 1) | (user_id, unique_key) UNIQUE |
 | `completed_trades` | Round-trip trades (Tier 2) | user_id FK |
 | `trade_annotations` | Manual annotations (pattern, notes, stop) | (user_id, symbol, opened_at) UNIQUE |
-| `positions` | Running position aggregate (Tier 3) | (user_id, symbol, instrument_type, option_details) UNIQUE |
+| `positions` | Running position aggregate (Tier 3) | (user_id, symbol, instrument_type, option_details, account_id) UNIQUE |
 | `setup_patterns` | User-managed dropdown: pattern names | case-insensitive UNIQUE per user |
 | `setup_sources` | User-managed dropdown: signal sources | case-insensitive UNIQUE per user |
 | `processing_log` | Ingest audit trail | (user_id, file_path, processing_started_at) UNIQUE |
@@ -188,16 +188,17 @@ and issues a single bulk UPSERT at the end — no per-trade commits, no per-trad
 
 ### 5.4 TradeCompletionEngine grouping algorithm
 
-Executions are grouped by `(symbol, instrument_type)` for equities, or by
-`(symbol, instrument_type, exp_date, strike_price, option_type)` for options.
+Executions are grouped by `(account_id, symbol, instrument_type)` for equities, or by
+`(account_id, symbol, instrument_type, exp_date, strike_price, option_type)` for options.
+`account_id` is the outermost key, ensuring fills from different brokerage accounts for
+the same symbol are never merged into a single `CompletedTrade`.
+
 Within each group, fills are processed chronologically. A running `open_qty` tracks
 the net position. When `open_qty` returns to zero, the group is sealed as a
 `CompletedTrade`.
 
-**Known limitation:** the algorithm does not group by account. A user trading the same
-symbol in two accounts simultaneously will have their fills merged into one
-`CompletedTrade`. This is a consequence of the schema having no account scope on
-`completed_trades` grouping logic (see §7 — multi-account is the current open problem).
+Fills with no account (NDJSON uploads without account info) have `account_id=None` and
+group together correctly — Python treats `None` as a valid, comparable dict key.
 
 ### 5.5 Grail integration (read-only external DB)
 
@@ -263,7 +264,7 @@ fire-and-forget: if `grail_files` is unreachable the page renders normally with 
 | Command group | Key commands |
 |---|---|
 | `ingest` | `file`, `batch` (glob), `--dry-run` |
-| `db` | `migrate`, `status`, `reset`, `process-trades [--symbol]` |
+| `db` | `migrate`, `status`, `reset`, `process-trades [--symbol] [--reprocess]` |
 | `report` | `trades`, `positions`, `dashboard [--date-range] [--format json]` |
 | `pattern` | `annotate`, `list`, `performance` |
 | `notes` | `add`, `show`, `edit` |
@@ -298,7 +299,7 @@ The legacy `.env` file still works but prints a deprecation warning. Run
 ## 9. Infrastructure
 
 - **Web server:** gunicorn (30s worker timeout) behind Nginx, managed by Dokploy
-- **Container:** `Dockerfile` + `docker-compose.prod.yml`; `gunicorn.ctl` for local process control
+- **Container:** `Dockerfile` + `docker-compose.yml` (bind-mounts source, connects to remote DB); `gunicorn.ctl` socket for graceful reloads
 - **Database:** PostgreSQL 14+ on remote server (`192.168.1.249:32768`)
 - **Migrations:** Alembic (`alembic/versions/`)
 - **Dependency management:** `uv` (`pyproject.toml` + `uv.lock`)
@@ -308,13 +309,13 @@ The legacy `.env` file still works but prints a deprecation warning. Run
 
 ## 10. Known Limitations and Open Problems
 
-### Multi-account support (in progress)
-The `accounts` table exists and `CsvParser` extracts the account number from CSV row 1.
-Ingestion resolves/creates `Account` records and sets `account_id` on `trades`. However:
-- `completed_trades` grouping does not account-scope: two accounts trading the same symbol
-  simultaneously produce one merged `CompletedTrade` instead of two
-- Web UI account filter exists on `/trades` but not on `/positions`
-- No decision yet on whether to account-scope position tracking
+### Multi-account support (complete)
+The `accounts` table, `CsvParser` account-line parsing, `account_id` FKs on all three
+tiers, and web UI account filters on both `/trades` and `/positions` are all implemented.
+Trade grouping and position tracking are both account-scoped: fills from different accounts
+for the same symbol produce separate `CompletedTrade` and `Position` rows.
+The `unique_position_per_user` constraint now includes `account_id`. Null-account positions
+(NDJSON uploads without account info) continue to group together correctly via code logic.
 
 ### Trade completion is a full rebuild
 `TradeCompletionEngine.reprocess_all_completed_trades` always rebuilds all completed trades

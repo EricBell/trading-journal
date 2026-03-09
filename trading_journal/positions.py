@@ -54,12 +54,19 @@ class PositionTracker:
         if trade.instrument_type == "OPTION" and trade.option_data:
             option_details = trade.option_data
 
+        account_filter = (
+            Position.account_id == trade.account_id
+            if trade.account_id is not None
+            else Position.account_id.is_(None)
+        )
+
         position = session.query(Position).filter(
             and_(
                 Position.user_id == trade.user_id,
                 Position.symbol == trade.symbol,
                 Position.instrument_type == trade.instrument_type,
-                Position.option_details == option_details
+                Position.option_details == option_details,
+                account_filter,
             )
         ).first()
 
@@ -98,7 +105,7 @@ class PositionTracker:
         # Use PostgreSQL UPSERT
         stmt = insert(Position).values(**position_data)
         stmt = stmt.on_conflict_do_update(
-            index_elements=['user_id', 'symbol', 'instrument_type', 'option_details'],
+            constraint='unique_position_per_user',
             set_=dict(
                 current_qty=stmt.excluded.current_qty,
                 avg_cost_basis=stmt.excluded.avg_cost_basis,
@@ -277,7 +284,8 @@ class PositionTracker:
 
             # Dict key must be hashable; serialise option_details to a stable string.
             option_key = json.dumps(option_details, sort_keys=True) if option_details else None
-            cache_key = (trade.symbol, trade.instrument_type, option_key)
+            # Include account_id so fills from different accounts never merge.
+            cache_key = (trade.symbol, trade.instrument_type, option_key, trade.account_id)
 
             if cache_key not in position_cache:
                 position_cache[cache_key] = Position(
@@ -322,7 +330,7 @@ class PositionTracker:
 
         stmt = insert(Position).values(rows)
         stmt = stmt.on_conflict_do_update(
-            index_elements=['user_id', 'symbol', 'instrument_type', 'option_details'],
+            constraint='unique_position_per_user',
             set_=dict(
                 current_qty=stmt.excluded.current_qty,
                 avg_cost_basis=stmt.excluded.avg_cost_basis,

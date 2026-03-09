@@ -51,7 +51,7 @@ class TradeCompletionEngine:
 
             trade_groups: Dict[Any, List[Trade]] = {}
             for trade in unlinked_trades:
-                key = (trade.symbol, trade.instrument_type)
+                key = (trade.symbol, trade.instrument_type, trade.account_id)
                 if trade.option_data:
                     key = key + (trade.exp_date, trade.strike_price, trade.option_type)
                 trade_groups.setdefault(key, []).append(trade)
@@ -92,10 +92,11 @@ class TradeCompletionEngine:
             if not unlinked_trades:
                 return {"completed_trades": 0, "message": "No unlinked trades to process"}
 
-            # Group by symbol and instrument type
+            # Group by account, symbol, and instrument type so fills from different
+            # accounts for the same symbol are never merged into one completed trade.
             trade_groups = {}
             for trade in unlinked_trades:
-                key = (trade.symbol, trade.instrument_type)
+                key = (trade.symbol, trade.instrument_type, trade.account_id)
                 if trade.option_data:
                     # For options, include expiration and strike in key
                     option_key = (trade.exp_date, trade.strike_price, trade.option_type)

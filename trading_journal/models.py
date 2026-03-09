@@ -329,9 +329,13 @@ class Position(Base):
     user = relationship("User", back_populates="positions")
     account = relationship("Account")
 
-    # Unique constraint
+    # Unique constraint — account_id scopes positions per brokerage account.
+    # Note: PostgreSQL treats NULLs as distinct in unique indexes, so two rows with
+    # account_id=NULL and the same other keys will not conflict at the DB level.
+    # Correctness for null-account positions is enforced by the delete-then-rebuild
+    # logic in PositionTracker, not by the constraint alone.
     __table_args__ = (
-        UniqueConstraint("user_id", "symbol", "instrument_type", "option_details", name="unique_position_per_user"),
+        UniqueConstraint("user_id", "symbol", "instrument_type", "option_details", "account_id", name="unique_position_per_user"),
     )
 
 
