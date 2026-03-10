@@ -91,6 +91,7 @@ class PositionTracker:
         # Prepare position data
         position_data = {
             'user_id': position.user_id,
+            'account_id': position.account_id,
             'symbol': position.symbol,
             'instrument_type': position.instrument_type,
             'option_details': position.option_details,
@@ -314,6 +315,7 @@ class PositionTracker:
         rows = [
             {
                 'user_id': p.user_id,
+                'account_id': p.account_id,
                 'symbol': p.symbol,
                 'instrument_type': p.instrument_type,
                 'option_details': p.option_details,
