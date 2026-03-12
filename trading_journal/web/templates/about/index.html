@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}About — Trading Journal{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-8 offset-lg-2">
+    <h2 class="mb-4">Release Notes</h2>
+
+    <div class="accordion" id="releaseAccordion">
+      {% for release in releases %}
+      {% set item_id = "release-" ~ loop.index %}
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading-{{ loop.index }}">
+          <button class="accordion-button {% if not release.is_current %}collapsed{% endif %}"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#{{ item_id }}"
+                  aria-expanded="{{ 'true' if release.is_current else 'false' }}"
+                  aria-controls="{{ item_id }}">
+            {{ release.heading }}
+            {% if release.is_current %}
+            <span class="badge bg-success ms-2">Current</span>
+            {% endif %}
+          </button>
+        </h2>
+        <div id="{{ item_id }}"
+             class="accordion-collapse collapse {% if release.is_current %}show{% endif %}"
+             aria-labelledby="heading-{{ loop.index }}"
+             data-bs-parent="#releaseAccordion">
+          <div class="accordion-body">
+            {{ release.html | safe }}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
