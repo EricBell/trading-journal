@@ -14,39 +14,29 @@
 <h4 class="mb-3">Export Annotations</h4>
 
 <div class="card">
-  <div class="card-header">Select Accounts to Export</div>
+  <div class="card-header">Select Users to Export</div>
   <div class="card-body">
     <form method="post" action="{{ url_for('admin.export_download') }}">
-      {% if accounts or show_no_account %}
+      {% if users %}
         <div class="mb-3">
-          {% for acct in accounts %}
+          {% for u in users %}
           <div class="form-check">
-            <input class="form-check-input account-cb" type="checkbox" name="accounts"
-                   value="{{ acct.account_id }}" id="acct{{ acct.account_id }}">
-            <label class="form-check-label" for="acct{{ acct.account_id }}">
-              <strong>{{ acct.account_number }}</strong>
-              {% if acct.account_name %} — {{ acct.account_name }}{% endif %}
-              {% if acct.account_type %}<span class="text-muted small"> ({{ acct.account_type }})</span>{% endif %}
+            <input class="form-check-input user-cb" type="checkbox" name="users"
+                   value="{{ u.user_id }}" id="user{{ u.user_id }}">
+            <label class="form-check-label" for="user{{ u.user_id }}">
+              <strong>{{ u.username }}</strong>
+              <span class="text-muted small"> {{ u.email }}</span>
+              <span class="text-muted small"> — {{ u.annotation_count }} annotation{{ 's' if u.annotation_count != 1 }}</span>
             </label>
           </div>
           {% endfor %}
-          {% if show_no_account %}
-          <div class="form-check">
-            <input class="form-check-input account-cb" type="checkbox" name="accounts"
-                   value="null" id="acctNull">
-            <label class="form-check-label" for="acctNull">
-              <span class="text-muted">No Account</span>
-              <span class="text-muted small"> (annotations without an account)</span>
-            </label>
-          </div>
-          {% endif %}
         </div>
         <div class="mb-3">
           <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllBtn">Select All</button>
         </div>
         <button type="submit" class="btn btn-primary">Download JSON</button>
       {% else %}
-        <p class="text-muted mb-0">No accounts or annotations found.</p>
+        <p class="text-muted mb-0">No users found.</p>
       {% endif %}
     </form>
   </div>
@@ -59,7 +49,7 @@
     let allSelected = false;
     btn.addEventListener('click', function () {
       allSelected = !allSelected;
-      document.querySelectorAll('.account-cb').forEach(function (cb) {
+      document.querySelectorAll('.user-cb').forEach(function (cb) {
         cb.checked = allSelected;
       });
       btn.textContent = allSelected ? 'Deselect All' : 'Select All';
