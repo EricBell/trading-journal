@@ -6,6 +6,7 @@ import markdown
 from flask import Blueprint, render_template
 
 from ..auth import login_required
+from ...authorization import AuthContext
 
 bp = Blueprint("about", __name__, url_prefix="/about")
 
@@ -18,8 +19,9 @@ _RELEASE_NOTES_PATH = _PROJECT_ROOT / "RELEASE_NOTES.md"
 @bp.route("/")
 @login_required
 def index():
+    user = AuthContext.get_current_user()
     releases = _parse_release_notes()
-    return render_template("about/index.html", releases=releases)
+    return render_template("about/index.html", user=user, releases=releases)
 
 
 def _parse_release_notes() -> list[dict]:
