@@ -1,4 +1,4 @@
-## v1.7.0 - 2026-03-12
+## v1.8.0 - 2026-03-12
 
 ### New Features
 - **Release Notes page** — "About" nav item shows full release history with collapsible accordion; current version expanded by default; markdown rendered to HTML.
