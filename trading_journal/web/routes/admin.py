@@ -1,12 +1,16 @@
 """Admin routes: /admin/users."""
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+import json
+from datetime import date
+
+from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
+from sqlalchemy import func
 from werkzeug.security import generate_password_hash
 
 from ..auth import admin_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import User
+from ...models import Account, CompletedTrade, TradeAnnotation, User
 from ...user_management import UserManager
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -101,3 +105,121 @@ def set_password(target_user_id: int):
     except Exception as e:
         flash(f"Failed: {e}", 'danger')
     return redirect(url_for('admin.users'))
+
+
+@bp.route('/export')
+@admin_required
+def export_page():
+    current_user = AuthContext.get_current_user()
+    with db_manager.get_session() as session:
+        accounts = (
+            session.query(Account)
+            .filter(Account.user_id == current_user.user_id)
+            .order_by(Account.account_name)
+            .all()
+        )
+        no_account_count = (
+            session.query(func.count(TradeAnnotation.annotation_id))
+            .outerjoin(CompletedTrade, TradeAnnotation.completed_trade_id == CompletedTrade.completed_trade_id)
+            .filter(
+                TradeAnnotation.user_id == current_user.user_id,
+                (TradeAnnotation.completed_trade_id == None) | (CompletedTrade.account_id == None),
+            )
+            .scalar()
+        )
+        account_data = [
+            {
+                'account_id': a.account_id,
+                'account_number': a.account_number,
+                'account_name': a.account_name or '',
+                'account_type': a.account_type or '',
+            }
+            for a in accounts
+        ]
+    return render_template(
+        'admin/export.html',
+        accounts=account_data,
+        show_no_account=bool(no_account_count),
+        user=current_user,
+    )
+
+
+@bp.route('/export/download', methods=['POST'])
+@admin_required
+def export_download():
+    current_user = AuthContext.get_current_user()
+    selected = set(request.form.getlist('accounts'))
+
+    with db_manager.get_session() as session:
+        annotations = (
+            session.query(TradeAnnotation)
+            .outerjoin(CompletedTrade, TradeAnnotation.completed_trade_id == CompletedTrade.completed_trade_id)
+            .filter(TradeAnnotation.user_id == current_user.user_id)
+            .all()
+        )
+
+        accounts_by_id = {
+            a.account_id: a
+            for a in session.query(Account).filter(Account.user_id == current_user.user_id).all()
+        }
+
+        buckets: dict = {}
+
+        for ann in annotations:
+            ct = ann.trade
+            account_id = ct.account_id if ct else None
+            bucket_key = str(account_id) if account_id is not None else 'null'
+
+            if bucket_key not in selected:
+                continue
+
+            if bucket_key not in buckets:
+                if account_id is not None and account_id in accounts_by_id:
+                    acct = accounts_by_id[account_id]
+                    buckets[bucket_key] = {
+                        'account_id': acct.account_id,
+                        'account_number': acct.account_number,
+                        'account_name': acct.account_name or '',
+                        'account_type': acct.account_type or '',
+                        'annotations': [],
+                    }
+                else:
+                    buckets[bucket_key] = {
+                        'account_id': None,
+                        'account_number': None,
+                        'account_name': 'No Account',
+                        'account_type': None,
+                        'annotations': [],
+                    }
+
+            pattern_name = ann.setup_pattern_rel.pattern_name if ann.setup_pattern_rel else None
+            source_name = ann.setup_source_rel.source_name if ann.setup_source_rel else None
+
+            buckets[bucket_key]['annotations'].append({
+                'annotation_id': ann.annotation_id,
+                'completed_trade_id': ann.completed_trade_id,
+                'symbol': ann.symbol,
+                'opened_at': ann.opened_at.isoformat() if ann.opened_at else None,
+                'setup_pattern': pattern_name,
+                'setup_source': source_name,
+                'stop_price': float(ann.stop_price) if ann.stop_price is not None else None,
+                'trade_notes': ann.trade_notes,
+                'strategy_category': ann.strategy_category,
+                'created_at': ann.created_at.isoformat() if ann.created_at else None,
+                'updated_at': ann.updated_at.isoformat() if ann.updated_at else None,
+            })
+
+    payload = {
+        'export_metadata': {
+            'exported_at': date.today().isoformat(),
+            'format_version': '1.0',
+            'username': current_user.username,
+        },
+        'accounts': list(buckets.values()),
+    }
+
+    response = make_response(json.dumps(payload, indent=2))
+    filename = f"annotations_export_{date.today().isoformat()}.json"
+    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+    response.headers['Content-Type'] = 'application/json'
+    return response

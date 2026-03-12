@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Custom Commands
+
+**`prime app`** — Read all key project files to build full context on this application (CLAUDE.md, docs/OVERVIEW.md, docs/PRD.md, pyproject.toml, and the main source files).
+
 ## Project Overview
 
 This is a **Trading Journal** application designed to ingest and analyze trading data from brokerage platforms. The project has **completed Phase 3 (MVP)** and is now in **Phase 4 (Production Features)**. See `docs/OVERVIEW.md` for the authoritative system description, or `docs/PRD.md` for the original requirements.
