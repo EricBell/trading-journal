@@ -56,18 +56,21 @@
   <!-- Trade summary card -->
   <div class="col-md-5">
     <div class="card">
-      <div class="card-header fw-bold">
-        {{ trade.symbol }}
-        <span class="badge bg-secondary ms-1">{{ trade.trade_type or trade.instrument_type }}</span>
-        {% if trade.is_winning_trade %}
-          <span class="badge bg-success ms-1">WIN</span>
-        {% else %}
-          <span class="badge bg-danger ms-1">LOSS</span>
-        {% endif %}
-        {% if grail_record %}
-        <a href="{{ url_for('trades.grail_plan', trade_id=trade.completed_trade_id) }}"
-           class="btn btn-sm btn-outline-info ms-2">View Trade Plan</a>
-        {% endif %}
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <div>
+          {{ trade.symbol }}
+          <span class="badge bg-secondary ms-1">{{ trade.trade_type or trade.instrument_type }}</span>
+          {% if trade.is_winning_trade %}
+            <span class="badge bg-success ms-1">WIN</span>
+          {% else %}
+            <span class="badge bg-danger ms-1">LOSS</span>
+          {% endif %}
+          {% if grail_record %}
+          <a href="{{ url_for('trades.grail_plan', trade_id=trade.completed_trade_id) }}"
+             class="btn btn-sm btn-outline-info ms-2">View Trade Plan</a>
+          {% endif %}
+        </div>
+        <button id="copyJsonBtn" type="button" class="btn btn-sm btn-outline-secondary">Copy JSON</button>
       </div>
       <div class="card-body">
         <table class="table table-sm mb-0">
@@ -204,6 +207,52 @@ const easyMDE = new EasyMDE({
 });
 </script>
 <script>
+// Trade JSON for clipboard copy
+const tradeData = {
+  trade_id: {{ trade.completed_trade_id }},
+  symbol: {{ trade.symbol | tojson }},
+  trade_type: {{ (trade.trade_type or trade.instrument_type) | tojson }},
+  instrument_type: {{ trade.instrument_type | tojson }},
+  result: {{ ("WIN" if trade.is_winning_trade else "LOSS") | tojson }},
+  account: {{ ((trade.account.account_name or trade.account.account_number) if trade.account else none) | tojson }},
+  qty: {{ trade.total_qty | tojson }},
+  entry_avg_price: {{ (trade.entry_avg_price | float) if trade.entry_avg_price else none }},
+  exit_avg_price: {{ (trade.exit_avg_price | float) if trade.exit_avg_price else none }},
+  net_pnl: {{ (trade.net_pnl | float) if trade.net_pnl else 0 }},
+  opened_at: {{ (trade.opened_at.strftime('%Y-%m-%dT%H:%M:%S') if trade.opened_at else none) | tojson }},
+  closed_at: {{ (trade.closed_at.strftime('%Y-%m-%dT%H:%M:%S') if trade.closed_at else none) | tojson }},
+  hold_duration: {{ (trade.hold_duration | string if trade.hold_duration else none) | tojson }},
+  option_details: {% if trade.instrument_type == 'OPTION' and trade.option_details_dict %}{{ trade.option_details_dict | tojson }}{% else %}null{% endif %},
+  executions: [
+    {% for e in executions %}
+    {
+      time: {{ (e.exec_timestamp.strftime('%H:%M:%S') if e.exec_timestamp else none) | tojson }},
+      side: {{ e.side | tojson }},
+      qty: {{ e.qty | tojson }},
+      price: {{ (e.net_price | float) if e.net_price else none }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ],
+  annotation: {% if annotation %}{
+    setup_pattern: {% set ns = namespace(pname=none) %}{% for p in patterns %}{% if p.pattern_id == annotation.setup_pattern_id %}{% set ns.pname = p.pattern_name %}{% endif %}{% endfor %}{{ ns.pname | tojson }},
+    setup_source: {% set ns2 = namespace(sname=none) %}{% for s in sources %}{% if s.source_id == annotation.setup_source_id %}{% set ns2.sname = s.source_name %}{% endif %}{% endfor %}{{ ns2.sname | tojson }},
+    notes: {{ (annotation.trade_notes if annotation.trade_notes else none) | tojson }},
+    stop_price: {{ (annotation.stop_price | float if annotation.stop_price else none) | tojson }}
+  }{% else %}null{% endif %}
+};
+
+document.getElementById('copyJsonBtn').addEventListener('click', function() {
+  navigator.clipboard.writeText(JSON.stringify(tradeData, null, 2)).then(() => {
+    const btn = this;
+    btn.textContent = 'Copied!';
+    btn.classList.replace('btn-outline-secondary', 'btn-success');
+    setTimeout(() => {
+      btn.textContent = 'Copy JSON';
+      btn.classList.replace('btn-success', 'btn-outline-secondary');
+    }, 2000);
+  });
+});
+
 // Show/hide new pattern input when "__new__" is selected
 const patternSelect = document.getElementById('patternSelect');
 const newPatternInput = document.getElementById('newPatternInput');
