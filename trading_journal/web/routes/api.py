@@ -18,6 +18,13 @@ def dashboard():
 
     symbol = request.args.get('symbol') or None
     date_range_str = request.args.get('range') or None
+    account_id: int | None = None
+    raw_account = request.args.get('account') or None
+    if raw_account:
+        try:
+            account_id = int(raw_account)
+        except ValueError:
+            pass
 
     start_date, end_date = None, None
     if date_range_str:
@@ -30,6 +37,7 @@ def dashboard():
         start_date=start_date,
         end_date=end_date,
         symbol=symbol,
+        account_id=account_id,
     )
     return jsonify(data)
 

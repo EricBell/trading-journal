@@ -13,13 +13,28 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0">Dashboard</h4>
-  <div class="d-flex gap-2">
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    {% if accounts %}
+    <select id="accountSelect" class="form-select form-select-sm" style="width:auto">
+      <option value="">All accounts</option>
+      {% for a in accounts %}
+      <option value="{{ a.account_id }}">{{ a.account_name or a.account_number }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
     <select id="rangeSelect" class="form-select form-select-sm" style="width:auto">
+      <option value="today" selected>Today</option>
       <option value="">All time</option>
       <option value="7d">Last 7 days</option>
       <option value="30d">Last 30 days</option>
       <option value="90d">Last 90 days</option>
+      <option value="custom">Date range&hellip;</option>
     </select>
+    <div id="customDateRange" class="d-flex gap-1 align-items-center" style="display:none!important">
+      <input type="date" id="dateStart" class="form-control form-control-sm" style="width:145px">
+      <span class="text-muted small">to</span>
+      <input type="date" id="dateEnd" class="form-control form-control-sm" style="width:145px">
+    </div>
     <input id="symbolInput" type="text" class="form-control form-control-sm" placeholder="Symbol" style="width:100px">
     <button class="btn btn-sm btn-primary" onclick="loadDashboard()">Go</button>
   </div>
@@ -88,12 +103,38 @@
 <script>
 let equityChart, winLossChart, monthlyChart, patternChart;
 
+// Initialise custom date pickers to today
+const _todayStr = new Date().toISOString().substring(0, 10);
+document.addEventListener('DOMContentLoaded', function () {
+  document.getElementById('dateStart').value = _todayStr;
+  document.getElementById('dateEnd').value   = _todayStr;
+
+  document.getElementById('rangeSelect').addEventListener('change', function () {
+    const cdv = document.getElementById('customDateRange');
+    if (this.value === 'custom') {
+      cdv.style.removeProperty('display');
+    } else {
+      cdv.style.display = 'none';
+    }
+  });
+});
+
 function loadDashboard() {
-  const range = document.getElementById('rangeSelect').value;
+  const rangeVal = document.getElementById('rangeSelect').value;
   const symbol = document.getElementById('symbolInput').value.trim().toUpperCase();
+  const accountEl = document.getElementById('accountSelect');
+  const account = accountEl ? accountEl.value : '';
   const params = new URLSearchParams();
-  if (range) params.set('range', range);
-  if (symbol) params.set('symbol', symbol);
+
+  if (rangeVal === 'custom') {
+    const start = document.getElementById('dateStart').value;
+    const end   = document.getElementById('dateEnd').value;
+    params.set('range', (start || '') + '/' + (end || ''));
+  } else if (rangeVal) {
+    params.set('range', rangeVal);
+  }
+  if (symbol)  params.set('symbol', symbol);
+  if (account) params.set('account', account);
 
   fetch('/api/dashboard?' + params)
     .then(r => r.json())

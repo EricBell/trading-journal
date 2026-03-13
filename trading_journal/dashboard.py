@@ -26,7 +26,8 @@ class DashboardEngine:
         self,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
-        symbol: Optional[str] = None
+        symbol: Optional[str] = None,
+        account_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Generate complete dashboard metrics.
@@ -57,6 +58,8 @@ class DashboardEngine:
                 ))
             if symbol:
                 query = query.filter(CompletedTrade.symbol == symbol)
+            if account_id is not None:
+                query = query.filter(CompletedTrade.account_id == account_id)
 
             trades = query.order_by(CompletedTrade.closed_at).all()
 
