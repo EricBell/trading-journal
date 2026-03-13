@@ -103,24 +103,12 @@
 <script>
 let equityChart, winLossChart, monthlyChart, patternChart;
 
-// Local today string (not UTC, so US timezones get the right date)
 function _localToday() {
   const d = new Date();
   return d.getFullYear() + '-' +
     String(d.getMonth() + 1).padStart(2, '0') + '-' +
     String(d.getDate()).padStart(2, '0');
 }
-
-document.addEventListener('DOMContentLoaded', function () {
-  const todayStr = _localToday();
-  document.getElementById('dateStart').value = todayStr;
-  document.getElementById('dateEnd').value   = todayStr;
-
-  document.getElementById('rangeSelect').addEventListener('change', function () {
-    const cdv = document.getElementById('customDateRange');
-    cdv.style.display = (this.value === 'custom') ? 'flex' : 'none';
-  });
-});
 
 function loadDashboard() {
   const rangeVal = document.getElementById('rangeSelect').value;
@@ -201,6 +189,18 @@ function renderPatterns(patterns) {
   patternChart = buildBarChart('patternChart', patternChart, labels, values, 'P&L by Pattern', colors, true);
 }
 
-document.addEventListener('DOMContentLoaded', loadDashboard);
+// ── Initialization ──────────────────────────────────────────────────────────
+// Script is at the end of <body> so the DOM is already fully parsed here.
+// No DOMContentLoaded needed.
+const todayStr = _localToday();
+document.getElementById('dateStart').value = todayStr;
+document.getElementById('dateEnd').value   = todayStr;
+
+document.getElementById('rangeSelect').addEventListener('change', function () {
+  document.getElementById('customDateRange').style.display =
+    (this.value === 'custom') ? 'flex' : 'none';
+});
+
+loadDashboard();
 </script>
 {% endblock %}

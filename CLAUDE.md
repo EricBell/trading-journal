@@ -168,6 +168,17 @@ log_level = "WARNING"
 description = "Test environment"
 ```
 
+## Version Management
+
+Version is stored **only in `pyproject.toml`** under `[project] version`. Format is `x.y.z`:
+
+- **x** — major: breaking changes or major releases
+- **y** — minor: increment by 1 when one or more new features are delivered in a turn (even if multiple features are implemented together, only increment once)
+- **z** — patch: increment by 1 when delivering bug fixes or non-feature changes
+
+Claude must update `pyproject.toml` at the end of every turn where code changes were made.
+
+
 ### Migrating from .env
 
 If you have an existing `.env` file, use the migration command:
