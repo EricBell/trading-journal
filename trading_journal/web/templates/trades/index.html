@@ -48,7 +48,7 @@
   {% set next_dir = 'asc' if (is_active and sort_dir == 'desc') else 'desc' if is_active else 'asc' %}
   {% set arrow = '▼' if (is_active and sort_dir == 'desc') else '▲' if is_active else '⇅' %}
   <th class="{{ extra_class }}">
-    <a href="{{ url_for('trades.index', symbol=symbol, range=range_filter, sort=col_key, dir=next_dir, page=1, per_page=per_page) }}"
+    <a href="{{ url_for('trades.index', symbol=symbol, range=range_filter, account=account_filter, sort=col_key, dir=next_dir, page=1, per_page=per_page) }}"
        class="text-decoration-none {% if is_active %}text-white{% else %}text-white-50{% endif %}">
       {{ label }} <small>{{ arrow }}</small>
     </a>
@@ -121,24 +121,24 @@
   <nav aria-label="Trades pagination">
     <ul class="pagination pagination-sm mb-0">
       <li class="page-item {% if page == 1 %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('trades.index', symbol=symbol, range=range_filter, sort=sort_col, dir=sort_dir, page=1, per_page=per_page) }}">&laquo;</a>
+        <a class="page-link" href="{{ url_for('trades.index', symbol=symbol, range=range_filter, account=account_filter, sort=sort_col, dir=sort_dir, page=1, per_page=per_page) }}">&laquo;</a>
       </li>
       <li class="page-item {% if page == 1 %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('trades.index', symbol=symbol, range=range_filter, sort=sort_col, dir=sort_dir, page=[page-1,1]|max, per_page=per_page) }}">&lsaquo;</a>
+        <a class="page-link" href="{{ url_for('trades.index', symbol=symbol, range=range_filter, account=account_filter, sort=sort_col, dir=sort_dir, page=[page-1,1]|max, per_page=per_page) }}">&lsaquo;</a>
       </li>
       <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
       <li class="page-item {% if page == total_pages %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('trades.index', symbol=symbol, range=range_filter, sort=sort_col, dir=sort_dir, page=[page+1,total_pages]|min, per_page=per_page) }}">&rsaquo;</a>
+        <a class="page-link" href="{{ url_for('trades.index', symbol=symbol, range=range_filter, account=account_filter, sort=sort_col, dir=sort_dir, page=[page+1,total_pages]|min, per_page=per_page) }}">&rsaquo;</a>
       </li>
       <li class="page-item {% if page == total_pages %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('trades.index', symbol=symbol, range=range_filter, sort=sort_col, dir=sort_dir, page=total_pages, per_page=per_page) }}">&raquo;</a>
+        <a class="page-link" href="{{ url_for('trades.index', symbol=symbol, range=range_filter, account=account_filter, sort=sort_col, dir=sort_dir, page=total_pages, per_page=per_page) }}">&raquo;</a>
       </li>
     </ul>
   </nav>
   <div class="d-flex align-items-center gap-1">
     <span class="text-muted small">Rows:</span>
     {% for n in per_page_options %}
-    <a href="{{ url_for('trades.index', symbol=symbol, range=range_filter, sort=sort_col, dir=sort_dir, page=1, per_page=n) }}"
+    <a href="{{ url_for('trades.index', symbol=symbol, range=range_filter, account=account_filter, sort=sort_col, dir=sort_dir, page=1, per_page=n) }}"
        class="btn btn-sm {% if per_page == n %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ n }}</a>
     {% endfor %}
   </div>
