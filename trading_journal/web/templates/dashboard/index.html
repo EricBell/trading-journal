@@ -30,7 +30,7 @@
       <option value="90d">Last 90 days</option>
       <option value="custom">Date range&hellip;</option>
     </select>
-    <div id="customDateRange" class="d-flex gap-1 align-items-center" style="display:none!important">
+    <div id="customDateRange" class="d-flex gap-1 align-items-center" style="display:none">
       <input type="date" id="dateStart" class="form-control form-control-sm" style="width:145px">
       <span class="text-muted small">to</span>
       <input type="date" id="dateEnd" class="form-control form-control-sm" style="width:145px">
@@ -103,19 +103,22 @@
 <script>
 let equityChart, winLossChart, monthlyChart, patternChart;
 
-// Initialise custom date pickers to today
-const _todayStr = new Date().toISOString().substring(0, 10);
+// Local today string (not UTC, so US timezones get the right date)
+function _localToday() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
 document.addEventListener('DOMContentLoaded', function () {
-  document.getElementById('dateStart').value = _todayStr;
-  document.getElementById('dateEnd').value   = _todayStr;
+  const todayStr = _localToday();
+  document.getElementById('dateStart').value = todayStr;
+  document.getElementById('dateEnd').value   = todayStr;
 
   document.getElementById('rangeSelect').addEventListener('change', function () {
     const cdv = document.getElementById('customDateRange');
-    if (this.value === 'custom') {
-      cdv.style.removeProperty('display');
-    } else {
-      cdv.style.display = 'none';
-    }
+    cdv.style.display = (this.value === 'custom') ? 'flex' : 'none';
   });
 });
 
