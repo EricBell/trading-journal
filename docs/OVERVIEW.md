@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.5.0
-**Last Updated:** 2026-03-09
+**Version:** 1.12.3
+**Last Updated:** 2026-03-14
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -70,6 +70,8 @@ The hard problems this application solves:
       ├── /trades/<id>         trade detail + grail plan link
       ├── /positions           open and closed positions
       ├── /admin/users         user management (admin only)
+      ├── /admin/export        annotation export as JSON (admin only)
+      ├── /about               release notes accordion
       └── /api/*               JSON API (dashboard, trades)
 
  CLI (Click via main.py)
@@ -250,15 +252,17 @@ fire-and-forget: if `grail_files` is unreachable the page renders normally with 
 ### Web UI
 | Feature | Route | Notes |
 |---|---|---|
-| Dashboard | `/` | Total P&L, win rate, profit factor, avg win/loss, avg trade, largest win/loss, max win/loss streak, trade counts, equity curve. Profit factor = total winning P&L ÷ \|total losing P&L\|; null when no losers. |
-| Trades list | `/trades` | Sort by any column, filter by symbol/date range/account, pagination (per_page persisted in session) |
-| Trade detail | `/trades/<id>` | Execution breakdown, annotation form, prev/next navigation, Grail plan link |
+| Dashboard | `/` | Total P&L, win rate, profit factor, avg win/loss, avg trade, largest win/loss, max win/loss streak, trade counts, equity curve. Defaults to "All time" on load. Account filter dropdown. Profit factor = total winning P&L ÷ \|total losing P&L\|; null when no losers. |
+| Trades list | `/trades` | Sort by any column, filter by symbol/date range/account, pagination (per_page persisted in session). Account filter preserved across sort and pagination links. |
+| Trade detail | `/trades/<id>` | Execution breakdown, annotation form, prev/next navigation, Grail plan link with copy-to-clipboard |
 | Trade annotation | `/trades/<id>/annotate` | Pattern (managed dropdown + inline create), source, stop price, notes |
 | Positions | `/positions` | All positions with open/closed status, filter by symbol/account |
 | CSV upload | `/ingest` | Drag-and-drop CSV; shows insert/update counts; inline error display |
-| Admin: users | `/admin/users` | Create, deactivate, regenerate API key (admin-only) |
+| Admin: users | `/admin/users` | Create, deactivate, regenerate API key; pill sub-nav to export (admin-only) |
+| Admin: export | `/admin/export` | Export trade annotations as JSON (format v2.0); per-account or multi-user selection (admin-only) |
+| About | `/about` | Release notes parsed from RELEASE_NOTES.md; Bootstrap accordion; current release badged |
 | Settings | `/settings` | User preferences |
-| JSON API | `/api/dashboard`, `/api/trades` | For external tooling |
+| JSON API | `/api/dashboard`, `/api/trades` | For external tooling; dashboard endpoint accepts `?account=` filter |
 
 ### CLI
 | Command group | Key commands |
@@ -365,13 +369,15 @@ trading_journal/
         ├── trades.py       /trades, /trades/<id>, annotate, delete, grail-plan
         ├── positions.py    /positions
         ├── ingest.py       /ingest (CSV upload)
-        ├── admin.py        /admin/users
+        ├── admin.py        /admin/users, /admin/export
+        ├── about.py        /about (release notes)
         ├── settings.py     /settings
         └── api.py          /api/*
 
 main.py                     Click CLI entry point
 wsgi.py                     gunicorn entry point
 alembic/versions/           Migration history
+RELEASE_NOTES.md            Release history; parsed by /about route
 ```
 
 ---
