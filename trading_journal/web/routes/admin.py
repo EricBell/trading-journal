@@ -107,6 +107,62 @@ def set_password(target_user_id: int):
     return redirect(url_for('admin.users'))
 
 
+@bp.route('/market-data', methods=['GET', 'POST'])
+@admin_required
+def market_data():
+    import os
+    import json
+    import urllib.request
+    from datetime import datetime
+
+    current_user = AuthContext.get_current_user()
+    api_key = os.environ.get('MASSIVE_API_KEY', '')
+    result = None
+    error = None
+    form_symbol = ''
+    form_date = ''
+
+    if request.method == 'POST':
+        form_symbol = request.form.get('symbol', '').strip().upper()
+        form_date = request.form.get('date', '').strip()
+
+        if not api_key:
+            error = 'MASSIVE_API_KEY is not set in the environment.'
+        elif not form_symbol:
+            error = 'Symbol is required.'
+        elif not form_date:
+            error = 'Date is required.'
+        else:
+            try:
+                dt = datetime.strptime(form_date, '%Y-%m-%d')
+                from_ms = int(dt.replace(hour=0, minute=0, second=0).timestamp() * 1000)
+                to_ms   = int(dt.replace(hour=23, minute=59, second=59).timestamp() * 1000)
+                url = (
+                    f"https://api.polygon.io/v2/aggs/ticker/{form_symbol}"
+                    f"/range/15/minute/{from_ms}/{to_ms}"
+                    f"?adjusted=false&sort=asc&limit=100&apiKey={api_key}"
+                )
+                with urllib.request.urlopen(url, timeout=15) as resp:
+                    data = json.loads(resp.read().decode())
+                # Annotate each bar with a human-readable UTC time string
+                if data.get("results"):
+                    for bar in data["results"]:
+                        bar["_dt"] = datetime.utcfromtimestamp(bar["t"] / 1000).strftime("%Y-%m-%d %H:%M")
+                result = data
+            except Exception as exc:
+                error = str(exc)
+
+    return render_template(
+        'admin/market_data.html',
+        user=current_user,
+        api_key_set=bool(api_key),
+        result=result,
+        error=error,
+        form_symbol=form_symbol,
+        form_date=form_date,
+    )
+
+
 @bp.route('/export')
 @admin_required
 def export_page():

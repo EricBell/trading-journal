@@ -14,10 +14,23 @@ bp = Blueprint('trades', __name__)
 
 
 def _get_or_create_annotation(session, trade):
-    """Load the TradeAnnotation for a trade, creating one if it doesn't exist yet."""
+    """Load the TradeAnnotation for a trade, creating one if it doesn't exist yet.
+
+    Looks up by completed_trade_id first, then falls back to the natural key
+    (user_id, symbol, opened_at) to handle the case where a completed_trades
+    rebuild has NULLed the FK but the annotation row still exists.
+    """
     ann = session.query(TradeAnnotation).filter_by(
         completed_trade_id=trade.completed_trade_id
     ).one_or_none()
+    if ann is None:
+        ann = session.query(TradeAnnotation).filter_by(
+            user_id=trade.user_id,
+            symbol=trade.symbol,
+            opened_at=trade.opened_at,
+        ).one_or_none()
+        if ann is not None:
+            ann.completed_trade_id = trade.completed_trade_id
     if ann is None:
         ann = TradeAnnotation(
             completed_trade_id=trade.completed_trade_id,

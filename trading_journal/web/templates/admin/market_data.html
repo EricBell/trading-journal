@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Market Data — Admin{% endblock %}
+
+{% block content %}
+<ul class="nav nav-pills mb-4">
+  <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('admin.users') }}">Users</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('admin.export_page') }}">Export Annotations</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link active" href="{{ url_for('admin.market_data') }}">Market Data</a>
+  </li>
+</ul>
+
+<h4 class="mb-3">Fetch Historical Data — Massive.com</h4>
+
+{% if not api_key_set %}
+<div class="alert alert-warning">
+  <strong>MASSIVE_API_KEY is not set.</strong> Add it to your <code>.env</code> file and restart the container.
+</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-header">15-Minute Aggregate Bars</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('admin.market_data') }}">
+      <div class="row g-3 align-items-end">
+        <div class="col-sm-3">
+          <label for="symbol" class="form-label">Symbol</label>
+          <input type="text" class="form-control text-uppercase" id="symbol" name="symbol"
+                 value="{{ form_symbol }}" placeholder="e.g. SPY" required
+                 {% if not api_key_set %}disabled{% endif %}>
+        </div>
+        <div class="col-sm-3">
+          <label for="date" class="form-label">Date</label>
+          <input type="date" class="form-control" id="date" name="date"
+                 value="{{ form_date }}"
+                 {% if not api_key_set %}disabled{% endif %}>
+        </div>
+        <div class="col-sm-2">
+          <button type="submit" class="btn btn-primary w-100"
+                  {% if not api_key_set %}disabled{% endif %}>Fetch</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+{% if result %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>
+      Response — {{ form_symbol }} &nbsp;
+      <span class="badge {% if result.status == 'OK' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+        {{ result.status }}
+      </span>
+    </span>
+    <span class="text-muted small">{{ result.resultsCount if result.resultsCount is defined else (result.results|length if result.results else 0) }} bars</span>
+  </div>
+
+  {% if result.results %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th>Time (UTC)</th>
+          <th class="text-end">Open</th>
+          <th class="text-end">High</th>
+          <th class="text-end">Low</th>
+          <th class="text-end">Close</th>
+          <th class="text-end">Volume</th>
+          <th class="text-end">VWAP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for bar in result.results %}
+        <tr>
+          <td class="font-monospace small">{{ bar._dt }}</td>
+          <td class="text-end">{{ "%.4f"|format(bar.o) }}</td>
+          <td class="text-end">{{ "%.4f"|format(bar.h) }}</td>
+          <td class="text-end">{{ "%.4f"|format(bar.l) }}</td>
+          <td class="text-end fw-semibold">{{ "%.4f"|format(bar.c) }}</td>
+          <td class="text-end text-muted">{{ bar.v|int }}</td>
+          <td class="text-end text-muted">{{ "%.4f"|format(bar.vw) if bar.vw is defined else "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body text-muted">No bars returned for this symbol / date.</div>
+  {% endif %}
+
+  <div class="card-footer">
+    <details>
+      <summary class="text-muted small" style="cursor:pointer">Raw JSON</summary>
+      <pre class="mt-2 p-2 bg-light rounded small" style="max-height:300px;overflow:auto">{{ result|tojson(indent=2) }}</pre>
+    </details>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -194,6 +194,14 @@ def enrich_missing_underlying_prices(user_id: int) -> dict:
                     completed_trade_id=trade.completed_trade_id
                 ).one_or_none()
                 if ann is None:
+                    ann = session.query(TradeAnnotation).filter_by(
+                        user_id=trade.user_id,
+                        symbol=trade.symbol,
+                        opened_at=trade.opened_at,
+                    ).one_or_none()
+                    if ann is not None:
+                        ann.completed_trade_id = trade.completed_trade_id
+                if ann is None:
                     ann = TradeAnnotation(
                         completed_trade_id=trade.completed_trade_id,
                         user_id=trade.user_id,
