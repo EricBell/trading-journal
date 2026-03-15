@@ -264,8 +264,8 @@ def enrich_trades_by_ids(user_id: int, trade_ids: list) -> dict:
                     if api_calls >= _MAX_CALLS_PER_RUN:
                         skipped += 1
                         continue
-                    if api_calls > 0:
-                        time.sleep(_RATE_LIMIT_SLEEP)
+                    # No sleep here: manual fetch is capped at _MAX_CALLS_PER_RUN which
+                    # is within the free-tier 5 req/min limit without needing delays.
                     try:
                         price = client._fetch_and_cache(underlying, ts_utc)
                         api_calls += 1

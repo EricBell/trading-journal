@@ -19,4 +19,4 @@ RUN chmod +x /docker-entrypoint.sh
 EXPOSE 5000
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "wsgi:app"]
+CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "wsgi:app"]
