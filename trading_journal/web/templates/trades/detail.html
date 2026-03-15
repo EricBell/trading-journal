@@ -218,7 +218,7 @@
 
           <div class="mb-3">
             <label class="form-label">Notes</label>
-            <textarea id="trade_notes" name="trade_notes" rows="6"
+            <textarea id="trade_notes" name="trade_notes"
                       placeholder="Trade notes...">{{ (annotation.trade_notes if annotation else '') or '' }}</textarea>
           </div>
           <button type="submit" class="btn btn-primary">Save</button>
@@ -237,8 +237,21 @@ const easyMDE = new EasyMDE({
   spellChecker: false,
   autosave: { enabled: false },
   toolbar: ['bold','italic','heading','|','unordered-list','ordered-list','|','link','code','|','preview','side-by-side','fullscreen'],
-  minHeight: '150px',
+  minHeight: '200px',
 });
+
+function fitNotesEditor() {
+  const cm = document.querySelector('.CodeMirror');
+  const saveBtn = document.querySelector('button[type="submit"].btn-primary');
+  if (!cm) return;
+  const top = cm.getBoundingClientRect().top;
+  const btnHeight = saveBtn ? saveBtn.offsetHeight + parseInt(getComputedStyle(saveBtn).marginTop || 0) : 0;
+  const h = Math.max(200, window.innerHeight - top - 60 - btnHeight);
+  cm.style.height = h + 'px';
+  easyMDE.codemirror.refresh();
+}
+fitNotesEditor();
+window.addEventListener('resize', fitNotesEditor);
 </script>
 <script>
 // Trade JSON for clipboard copy
