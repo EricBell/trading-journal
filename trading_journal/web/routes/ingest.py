@@ -11,6 +11,7 @@ from ..auth import login_required
 from ...authorization import AuthContext
 from ...csv_parser import CsvParser
 from ...ingestion import NdjsonIngester, IngestionError
+from ...market_data import enrich_missing_underlying_prices
 from ...trade_completion import TradeCompletionEngine
 
 bp = Blueprint('ingest', __name__)
@@ -96,9 +97,16 @@ def upload():
         engine = TradeCompletionEngine()
         proc = engine.reprocess_all_completed_trades(user_id)
 
+        # Auto-populate underlying_at_entry for option trades (fire-and-forget)
+        enrichment = enrich_missing_underlying_prices(user_id)
+
+        enrichment_msg = ""
+        if not enrichment.get("disabled") and enrichment.get("enriched", 0) > 0:
+            enrichment_msg = f" {enrichment['enriched']} underlying prices auto-filled."
+
         flash(
             f"Imported {result['inserts']} new, updated {result['updates']}. "
-            f"{proc.get('completed_trades', 0)} trades completed.",
+            f"{proc.get('completed_trades', 0)} trades completed.{enrichment_msg}",
             'success',
         )
         if result['validation_errors']:
