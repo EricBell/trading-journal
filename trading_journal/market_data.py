@@ -168,6 +168,7 @@ def enrich_missing_underlying_prices(user_id: int) -> dict:
                     sa.or_(
                         TradeAnnotation.annotation_id.is_(None),
                         TradeAnnotation.underlying_at_entry.is_(None),
+                        TradeAnnotation.underlying_at_entry == 0,
                     ),
                 )
                 .all()
