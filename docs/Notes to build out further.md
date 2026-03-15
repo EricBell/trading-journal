@@ -20,32 +20,65 @@
   Data you should start capturing going forward
 
   Category 1: Post-trade annotation (add to the annotation form — low effort, high value)
++----------------------+---------------------------+
+| Field                | Why it matters            |
++----------------------+---------------------------+
+| ATM engaged?         | Compare ATM-guided vs     |
+| Not used / Entry     | manual trades over time.  |
+| only / Full session  | This is your biggest      |
+|                      | unknown right now.        |
++----------------------+---------------------------+
+| Exit reason          | Distinguishes "I followed |
+| Hit T1 / Hit T2 /    | the plan and stopped out" |
+| Stopped out / Time   | from "I panicked early."  |
+| stop / Early         | Completely different      |
+| discretionary /      | learning signal.          |
+| Held too long        |                           |
++----------------------+---------------------------+
+| Plan overridden?     | When you deviated from    |
+| Yes/No + reason      | the plan, was it          |
+|                      | intentional and why?      |
++----------------------+---------------------------+
+| Underlying at entry  | Manual field for now.     |
+| options only         | Lets us check your entry  |
+|                      | zone discipline until     |
+|                      | market data is wired up.  |
++----------------------+---------------------------+
 
-  ┌─────────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │                                           Field                                 │                                              Why it matters                                        │
-  ├─────────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ ATM engaged? (Not used / Entry only / Full session)                             │ Lets you compare ATM-guided vs manual trades over time. This is your biggest unknown right now.    │
-  ├─────────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ Exit reason                                                                     │                                                                                                    │
-  │  Hit T1 / Hit T2 / Stopped out / Time stop / Early discretionary / Held too     │ Distinguishes "I followed the plan and stopped out" from "I panicked early." Completely            │
-  │ long)                                                                           │ different learning signal.                                                                         │ │                                                                                 │                                                                                                    │
-  ├─────────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ Plan overridden? (Yes/No + reason)                                              │ When you deviated from the plan, was it intentional and why?                                       │
-  ├─────────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ Underlying at entry (options only)                                              │ Manual field for now. Lets us check your entry zone discipline until market data is wired up.      │
-  └─────────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────────┘
+Category 2: Automatic enrichment
+(requires a market data integration
+— medium effort)
 
-  Category 2: Automatic enrichment (requires a market data integration — medium effort)
++----------------------+---------------------------+
+| Data                 | Source                    |
++----------------------+---------------------------+
+| Underlying OHLCV at  | Polygon.io free tier /   |
+| trade time           | Schwab API               |
++----------------------+---------------------------+
+| Did price ever reach | Same                      |
+| T1/T2?               |                           |
++----------------------+---------------------------+
+| VIX at trade time    | Same                      |
++----------------------+---------------------------+
 
-  ┌────────────────────────────────┬───────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │              Data              │              Source               │                                        What it unlocks                                         │
-  ├────────────────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ Underlying OHLCV at trade time │ Polygon.io free tier / Schwab API │ Entry zone pass/fail for options, high-of-day context                                          │
-  ├────────────────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ Did price ever reach T1/T2?    │ Same                              │ True counterfactual: "T1 was reachable and you left it on the table" vs "T1 was never touched" │
-  ├────────────────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ VIX at trade time              │ Same                              │ Correlate trade performance with volatility regime                                             │
-  └────────────────────────────────┴───────────────────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────┘
++----------------------+---------------------------+
+| Data                 | What it unlocks           |
++----------------------+---------------------------+
+| Underlying OHLCV at  | Entry zone pass/fail for  |
+| trade time           | options, high-of-day      |
+|                      | context                   |
++----------------------+---------------------------+
+| Did price ever reach | True counterfactual:      |
+| T1/T2?               | "T1 was reachable and you |
+|                      | left it on the table" vs  |
+|                      | "T1 was never touched"    |
++----------------------+---------------------------+
+| VIX at trade time    | Correlate trade           |
+|                      | performance with          |
+|                      | volatility regime         |
++----------------------+---------------------------+
+```
+
 
   Category 3: ATM session data (requires new pipeline — future, but worth designing for)
 
