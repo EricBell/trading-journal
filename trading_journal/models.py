@@ -69,6 +69,9 @@ class User(Base):
     api_key_hash = Column(String(64), unique=True)  # SHA256 hash
     api_key_created_at = Column(TIMESTAMP(timezone=True))
 
+    # User preferences
+    timezone = Column(String(50), default='US/Eastern')
+
     # Timestamps
     created_at = Column(TIMESTAMP(timezone=True), default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())

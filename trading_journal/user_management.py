@@ -49,6 +49,7 @@ class UserManager:
             User.email,
             User.is_active,
             User.is_admin,
+            User.timezone,
             User.created_at,
             User.last_login_at,
             func.count(CompletedTrade.completed_trade_id).label('trade_count')
@@ -61,6 +62,7 @@ class UserManager:
             User.email,
             User.is_active,
             User.is_admin,
+            User.timezone,
             User.created_at,
             User.last_login_at
         )
@@ -79,6 +81,7 @@ class UserManager:
                 'email': row.email,
                 'is_active': row.is_active,
                 'is_admin': row.is_admin,
+                'timezone': row.timezone or 'US/Eastern',
                 'trade_count': row.trade_count,
                 'created_at': row.created_at,
                 'last_login_at': row.last_login_at

@@ -15,6 +15,7 @@ class AuthUser:
     is_admin: bool
     is_active: bool
     auth_method: str
+    timezone: str = 'US/Eastern'
 
     def __post_init__(self):
         """Validate user data."""

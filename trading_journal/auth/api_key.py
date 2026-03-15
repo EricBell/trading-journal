@@ -117,6 +117,7 @@ class APIKeyAuthenticationProvider(AuthenticationProvider):
             is_admin=user.is_admin,
             is_active=user.is_active,
             auth_method=user.auth_method,
+            timezone=user.timezone or 'US/Eastern',
         )
 
     @property

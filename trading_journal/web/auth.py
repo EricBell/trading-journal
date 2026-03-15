@@ -29,6 +29,7 @@ def _load_user(user_id: int) -> Optional[AuthUser]:
                 is_admin=user.is_admin,
                 is_active=user.is_active,
                 auth_method='session',
+                timezone=user.timezone or 'US/Eastern',
             )
     except Exception:
         logger.exception("Failed to load user from session")
@@ -71,6 +72,7 @@ def authenticate_user(username: str, password: str) -> Optional[AuthUser]:
                 is_admin=user.is_admin,
                 is_active=user.is_active,
                 auth_method='session',
+                timezone=user.timezone or 'US/Eastern',
             )
     except Exception:
         logger.exception("Authentication error")

@@ -91,12 +91,12 @@
               {% if grail_record %}
                 {% set _jc = grail_record.get('json_content') or {} %}
                 {% set _sl_range = ((_jc.get('trade_plan') or {}).get('exits') or {}).get('stop_loss', {}).get('price_range') or [] %}
-                {% if _sl_range | length >= 1 %}
+                {% if _sl_range | length >= 1 and _sl_range[0] | float > 0 %}
                   {% set _grail_stop = '%.4f' | format(_sl_range[0] | float) %}
                 {% endif %}
               {% endif %}
               <form method="post" action="{{ url_for('trades.set_stop', trade_id=trade.completed_trade_id) }}" class="d-flex align-items-center gap-1">
-                <input type="number" name="stop_price" step="0.0001"
+                <input type="number" name="stop_price" step="0.0001" min="0.0001"
                        value="{{ '%.4f'|format(_saved_stop|float) if _saved_stop is not none else '' }}"
                        placeholder="{{ _grail_stop if _grail_stop else '—' }}"
                        class="form-control form-control-sm" style="width:9ch">

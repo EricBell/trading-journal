@@ -107,16 +107,56 @@ def set_password(target_user_id: int):
     return redirect(url_for('admin.users'))
 
 
+_COMMON_TIMEZONES = [
+    'US/Eastern', 'US/Central', 'US/Mountain', 'US/Pacific', 'UTC',
+]
+
+
+@bp.route('/users/<int:target_user_id>/set-timezone', methods=['POST'])
+@admin_required
+def set_timezone(target_user_id: int):
+    tz = request.form.get('timezone', '').strip()
+    if not tz:
+        flash('Timezone cannot be empty.', 'danger')
+        return redirect(url_for('admin.users'))
+    try:
+        import zoneinfo
+        zoneinfo.ZoneInfo(tz)  # validates the timezone string
+    except Exception:
+        flash(f'Invalid timezone: {tz}', 'danger')
+        return redirect(url_for('admin.users'))
+    try:
+        with db_manager.get_session() as session:
+            user_obj = session.get(User, target_user_id)
+            if user_obj is None:
+                flash('User not found.', 'danger')
+                return redirect(url_for('admin.users'))
+            user_obj.timezone = tz
+            session.commit()
+            flash(f'Timezone set to {tz} for {user_obj.username}.', 'success')
+    except Exception as e:
+        flash(f'Failed: {e}', 'danger')
+    return redirect(url_for('admin.users'))
+
+
 @bp.route('/market-data', methods=['GET', 'POST'])
 @admin_required
 def market_data():
     import os
     import json
+    import zoneinfo
     import urllib.request
-    from datetime import datetime
+    from datetime import datetime, timezone as dt_timezone
 
     current_user = AuthContext.get_current_user()
     api_key = os.environ.get('MASSIVE_API_KEY', '')
+    user_tz_str = current_user.timezone or 'US/Eastern'
+    try:
+        user_tz = zoneinfo.ZoneInfo(user_tz_str)
+    except Exception:
+        user_tz = zoneinfo.ZoneInfo('UTC')
+        user_tz_str = 'UTC'
+
     result = None
     error = None
     form_symbol = ''
@@ -144,10 +184,12 @@ def market_data():
                 )
                 with urllib.request.urlopen(url, timeout=15) as resp:
                     data = json.loads(resp.read().decode())
-                # Annotate each bar with a human-readable UTC time string
                 if data.get("results"):
                     for bar in data["results"]:
-                        bar["_dt"] = datetime.utcfromtimestamp(bar["t"] / 1000).strftime("%Y-%m-%d %H:%M")
+                        bar_dt = datetime.fromtimestamp(
+                            bar["t"] / 1000, tz=dt_timezone.utc
+                        ).astimezone(user_tz)
+                        bar["_dt"] = bar_dt.strftime("%Y-%m-%d %H:%M %Z")
                 result = data
             except Exception as exc:
                 error = str(exc)
@@ -156,6 +198,7 @@ def market_data():
         'admin/market_data.html',
         user=current_user,
         api_key_set=bool(api_key),
+        user_tz=user_tz_str,
         result=result,
         error=error,
         form_symbol=form_symbol,
