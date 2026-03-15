@@ -225,6 +225,7 @@ def market_data():
         form_date=form_date,
         missing_trades=missing_trades,
         max_per_fetch=4,
+        active_tab='sample' if request.method == 'POST' else 'resolve',
     )
 
 
