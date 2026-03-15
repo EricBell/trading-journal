@@ -97,20 +97,17 @@ def upload():
         engine = TradeCompletionEngine()
         proc = engine.reprocess_all_completed_trades(user_id)
 
-        # Auto-populate underlying_at_entry for option trades (fire-and-forget)
-        enrichment = enrich_missing_underlying_prices(user_id)
-
-        if enrichment.get("disabled"):
-            enrichment_msg = ""
+        # Auto-populate underlying_at_entry for option trades (background, fire-and-forget)
+        import threading
+        from ...market_data import enrich_missing_underlying_prices as _enrich
+        client_enabled = bool(os.environ.get('MASSIVE_API_KEY'))
+        if client_enabled:
+            threading.Thread(
+                target=_enrich, args=(user_id,), daemon=True
+            ).start()
+            enrichment_msg = " Enrichment running in background."
         else:
-            parts = [f"{enrichment['enriched']} filled"]
-            if enrichment.get("unavailable", 0):
-                parts.append(f"{enrichment['unavailable']} too old (free tier)")
-            if enrichment["failed"]:
-                parts.append(f"{enrichment['failed']} failed")
-            if enrichment["skipped"]:
-                parts.append(f"{enrichment['skipped']} pending")
-            enrichment_msg = " Enrichment: " + ", ".join(parts) + "."
+            enrichment_msg = ""
 
         flash(
             f"Imported {result['inserts']} new, updated {result['updates']}. "

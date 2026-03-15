@@ -253,6 +253,7 @@ def market_data():
 @bp.route('/market-data/enrich', methods=['POST'])
 @admin_required
 def market_data_enrich():
+    import threading
     from ...market_data import enrich_trades_by_ids
 
     current_user = AuthContext.get_current_user()
@@ -268,16 +269,18 @@ def market_data_enrich():
         flash('No trades selected.', 'warning')
         return redirect(url_for('admin.market_data'))
 
-    result = enrich_trades_by_ids(current_user.user_id, trade_ids)
+    user_id = current_user.user_id
 
-    parts = [f"{result['enriched']} filled"]
-    if result.get('unavailable'):
-        parts.append(f"{result['unavailable']} too old (free tier)")
-    if result['failed']:
-        parts.append(f"{result['failed']} failed")
-    if result['skipped']:
-        parts.append(f"{result['skipped']} skipped (cap reached — resubmit)")
-    flash("Enrichment: " + ", ".join(parts) + ".", 'success' if result['enriched'] else 'warning')
+    def _run():
+        enrich_trades_by_ids(user_id, trade_ids)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    flash(
+        f"Fetching underlying prices for {len(trade_ids)} trade(s) in the background — "
+        "refresh this page in ~15 seconds to see results.",
+        'info',
+    )
     return redirect(url_for('admin.market_data'))
 
 
