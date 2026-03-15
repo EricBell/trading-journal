@@ -1,3 +1,25 @@
+## v1.13.0 - 2026-03-14
+
+### New Features
+- **Trade context annotations** — Three new fields on the annotation form: ATM Engaged (not used / entry only / full session), Exit Reason (Hit T1/T2/T3, stopped out, time stop, early exit, held too long), and Underlying Price at Entry (options only — records the spot price of the underlying at fill time for future plan adherence analysis).
+- These fields are included in the admin annotation export (format v2.0).
+
+### Improvements
+- Notes field on trade detail page now fills the viewport height and scrolls internally, with the Save button always visible below it.
+
+---
+
+## v1.12.3 - 2026-03-13
+
+### Improvements
+- Dashboard defaults to "All time" view on load.
+- Dashboard account filter dropdown added.
+- Account filter now preserved across sort column clicks and pagination links on the trades list.
+- Fixed show/hide toggle for dashboard equity curve (replaced `display:none!important` with plain toggle).
+- Fixed today's date calculation to use local timezone instead of UTC.
+
+---
+
 ## v1.8.0 - 2026-03-12
 
 ### New Features
