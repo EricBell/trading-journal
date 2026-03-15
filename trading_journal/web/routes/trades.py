@@ -469,7 +469,8 @@ def set_stop(trade_id: int):
         ann = _get_or_create_annotation(session, trade)
         if stop_raw:
             try:
-                ann.stop_price = float(stop_raw)
+                val = float(stop_raw)
+                ann.stop_price = val if val != 0.0 else None
             except ValueError:
                 flash('Invalid stop price — must be a number.', 'warning')
                 return redirect(url_for('trades.detail', trade_id=trade_id))
