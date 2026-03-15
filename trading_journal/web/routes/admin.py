@@ -147,6 +147,7 @@ def market_data():
     import zoneinfo
     import urllib.request
     from datetime import datetime, timezone as dt_timezone, timedelta
+    import urllib.error as urllib_error
 
     from ...market_data import get_unenriched_option_trades
 
@@ -177,22 +178,42 @@ def market_data():
         else:
             try:
                 dt = datetime.strptime(form_date, '%Y-%m-%d')
-                from_ms = int(dt.replace(hour=0, minute=0, second=0).timestamp() * 1000)
-                to_ms   = int(dt.replace(hour=23, minute=59, second=59).timestamp() * 1000)
-                url = (
-                    f"https://api.polygon.io/v2/aggs/ticker/{form_symbol}"
-                    f"/range/15/minute/{from_ms}/{to_ms}"
-                    f"?adjusted=false&sort=asc&limit=100&apiKey={api_key}"
-                )
-                with urllib.request.urlopen(url, timeout=15) as resp:
-                    data = json.loads(resp.read().decode())
-                if data.get("results"):
-                    for bar in data["results"]:
-                        bar_dt = datetime.fromtimestamp(
-                            bar["t"] / 1000, tz=dt_timezone.utc
-                        ).astimezone(user_tz)
-                        bar["_dt"] = bar_dt.strftime("%Y-%m-%d %H:%M %Z")
-                result = data
+                cutoff = datetime.now() - timedelta(days=730)
+                if dt < cutoff:
+                    error = (
+                        f"{form_date} is more than 2 years ago — "
+                        "the free tier only covers the last 2 years of history."
+                    )
+                else:
+                    from_ms = int(dt.replace(hour=0, minute=0, second=0).timestamp() * 1000)
+                    to_ms   = int(dt.replace(hour=23, minute=59, second=59).timestamp() * 1000)
+                    url = (
+                        f"https://api.polygon.io/v2/aggs/ticker/{form_symbol}"
+                        f"/range/15/minute/{from_ms}/{to_ms}"
+                        f"?adjusted=false&sort=asc&limit=100&apiKey={api_key}"
+                    )
+                    try:
+                        with urllib.request.urlopen(url, timeout=15) as resp:
+                            data = json.loads(resp.read().decode())
+                    except urllib_error.HTTPError as exc:
+                        if exc.code == 403:
+                            error = (
+                                "403 Forbidden — check that MASSIVE_API_KEY is correct "
+                                "and that your plan covers this symbol/date."
+                            )
+                        elif exc.code == 429:
+                            error = "429 Too Many Requests — rate limit hit, wait a minute and try again."
+                        else:
+                            error = str(exc)
+                        data = None
+                    if data is not None:
+                        if data.get("results"):
+                            for bar in data["results"]:
+                                bar_dt = datetime.fromtimestamp(
+                                    bar["t"] / 1000, tz=dt_timezone.utc
+                                ).astimezone(user_tz)
+                                bar["_dt"] = bar_dt.strftime("%Y-%m-%d %H:%M %Z")
+                        result = data
             except Exception as exc:
                 error = str(exc)
 
