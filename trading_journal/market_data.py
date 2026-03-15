@@ -3,6 +3,8 @@
 import json
 import logging
 import os
+import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -16,6 +18,13 @@ from .models import CompletedTrade, OhlcvPriceSeries, TradeAnnotation
 logger = logging.getLogger(__name__)
 
 _MASSIVE_BASE = "https://api.polygon.io"
+
+# Free tier: 5 req/min. Sleep this many seconds between API calls to stay safe.
+_RATE_LIMIT_SLEEP = 13
+
+# Max API calls per enrichment run to keep upload response times reasonable.
+# Remaining unenriched trades are filled in on the next upload.
+_MAX_CALLS_PER_RUN = 4
 
 
 class MassiveClient:
@@ -33,6 +42,7 @@ class MassiveClient:
 
         Checks ohlcv_price_series cache first; fetches from Massive on a miss.
         Returns None if disabled, no data exists, or any error occurs.
+        Raises _RateLimitError on HTTP 429 or _UnavailableError on HTTP 403.
         """
         if not self.enabled or ts is None:
             return None
@@ -60,6 +70,7 @@ class MassiveClient:
                         OhlcvPriceSeries.timeframe == "1m",
                         OhlcvPriceSeries.timestamp >= ts_utc - window,
                         OhlcvPriceSeries.timestamp <= ts_utc + window,
+                        OhlcvPriceSeries.close_price > 1,
                     )
                     .order_by(
                         sa.func.abs(
@@ -91,6 +102,18 @@ class MassiveClient:
         try:
             with urllib.request.urlopen(url, timeout=10) as resp:
                 data = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            if exc.code == 403:
+                logger.debug(
+                    "Massive: historical data unavailable for %s at %s (403 — free tier limit)",
+                    symbol, ts_utc,
+                )
+                raise _UnavailableError()
+            if exc.code == 429:
+                logger.warning("Massive: rate limited (429) for %s at %s", symbol, ts_utc)
+                raise _RateLimitError()
+            logger.warning("Massive API call failed for %s at %s: %s", symbol, ts_utc, exc)
+            return None
         except Exception as exc:
             logger.warning("Massive API call failed for %s at %s: %s", symbol, ts_utc, exc)
             return None
@@ -107,8 +130,15 @@ class MassiveClient:
 
         ts_epoch_ms = ts_utc.timestamp() * 1000
         closest = min(bars, key=lambda b: abs(b["t"] - ts_epoch_ms))
-        logger.debug("Fetched underlying %s at %s → close=%.4f", symbol, ts_utc, closest["c"])
-        return float(closest["c"])
+        price = float(closest["c"])
+        if price <= 1:
+            logger.warning(
+                "Massive returned implausible close=%.4f for %s at %s — ignoring",
+                price, symbol, ts_utc,
+            )
+            return None
+        logger.debug("Fetched underlying %s at %s → close=%.4f", symbol, ts_utc, price)
+        return price
 
     def _cache_bars(self, symbol: str, bars: list) -> None:
         """Insert bars into ohlcv_price_series, ignoring conflicts."""
@@ -136,6 +166,163 @@ class MassiveClient:
             logger.warning("Failed to cache ohlcv bars for %s: %s", symbol, exc)
 
 
+class _RateLimitError(Exception):
+    pass
+
+
+class _UnavailableError(Exception):
+    pass
+
+
+def get_unenriched_option_trades(user_id: int) -> list:
+    """
+    Return a list of dicts for option CompletedTrades missing underlying_at_entry.
+
+    Each dict has: completed_trade_id, symbol, underlying, opened_at, option_details.
+    """
+    try:
+        with db_manager.get_session() as session:
+            trades = (
+                session.query(CompletedTrade)
+                .outerjoin(
+                    TradeAnnotation,
+                    TradeAnnotation.completed_trade_id == CompletedTrade.completed_trade_id,
+                )
+                .filter(
+                    CompletedTrade.user_id == user_id,
+                    CompletedTrade.instrument_type == "OPTION",
+                    sa.or_(
+                        TradeAnnotation.annotation_id.is_(None),
+                        TradeAnnotation.underlying_at_entry.is_(None),
+                        TradeAnnotation.underlying_at_entry == 0,
+                    ),
+                )
+                .order_by(CompletedTrade.opened_at.desc())
+                .all()
+            )
+            result = []
+            for t in trades:
+                underlying = t.symbol.split()[0] if t.symbol else None
+                details = t.option_details_dict or {}
+                result.append({
+                    "completed_trade_id": t.completed_trade_id,
+                    "symbol": t.symbol,
+                    "underlying": underlying,
+                    "opened_at": t.opened_at,
+                    "right": details.get("right", ""),
+                    "strike": details.get("strike"),
+                    "exp_date": details.get("exp_date"),
+                })
+            return result
+    except Exception as exc:
+        logger.warning("get_unenriched_option_trades failed: %s", exc)
+        return []
+
+
+def enrich_trades_by_ids(user_id: int, trade_ids: list) -> dict:
+    """
+    Fetch and store underlying_at_entry for specific completed_trade_ids.
+
+    Processes at most _MAX_CALLS_PER_RUN API calls, sleeping between each.
+    Returns dict with keys: enriched, failed, unavailable, skipped, disabled.
+    """
+    client = MassiveClient()
+    if not client.enabled:
+        return {"enriched": 0, "skipped": 0, "failed": 0, "unavailable": 0, "disabled": True}
+
+    enriched = 0
+    skipped = 0
+    failed = 0
+    unavailable = 0
+    api_calls = 0
+
+    try:
+        with db_manager.get_session() as session:
+            for trade_id in trade_ids:
+                trade = session.get(CompletedTrade, trade_id)
+                if trade is None or trade.user_id != user_id:
+                    skipped += 1
+                    continue
+                if trade.opened_at is None:
+                    skipped += 1
+                    continue
+
+                underlying = trade.symbol.split()[0] if trade.symbol else None
+                if not underlying:
+                    skipped += 1
+                    continue
+
+                if trade.opened_at.tzinfo is None:
+                    ts_utc = trade.opened_at.replace(tzinfo=timezone.utc)
+                else:
+                    ts_utc = trade.opened_at.astimezone(timezone.utc)
+
+                cached_price = client._cache_lookup(underlying, ts_utc)
+                if cached_price is not None:
+                    price = cached_price
+                else:
+                    if api_calls >= _MAX_CALLS_PER_RUN:
+                        skipped += 1
+                        continue
+                    if api_calls > 0:
+                        time.sleep(_RATE_LIMIT_SLEEP)
+                    try:
+                        price = client._fetch_and_cache(underlying, ts_utc)
+                        api_calls += 1
+                    except _UnavailableError:
+                        unavailable += 1
+                        api_calls += 1
+                        continue
+                    except _RateLimitError:
+                        failed += 1
+                        api_calls += 1
+                        break
+
+                if price is None:
+                    failed += 1
+                    continue
+
+                ann = session.query(TradeAnnotation).filter_by(
+                    completed_trade_id=trade.completed_trade_id
+                ).one_or_none()
+                if ann is None:
+                    ann = session.query(TradeAnnotation).filter_by(
+                        user_id=trade.user_id,
+                        symbol=trade.symbol,
+                        opened_at=trade.opened_at,
+                    ).one_or_none()
+                    if ann is not None:
+                        ann.completed_trade_id = trade.completed_trade_id
+                if ann is None:
+                    ann = TradeAnnotation(
+                        completed_trade_id=trade.completed_trade_id,
+                        user_id=trade.user_id,
+                        symbol=trade.symbol,
+                        opened_at=trade.opened_at,
+                    )
+                    session.add(ann)
+
+                ann.underlying_at_entry = price
+                enriched += 1
+
+            session.commit()
+
+    except Exception as exc:
+        logger.warning("enrich_trades_by_ids failed: %s", exc)
+
+    logger.info(
+        "Manual enrichment complete: enriched=%d skipped=%d failed=%d unavailable=%d",
+        enriched, skipped, failed, unavailable,
+    )
+    return {
+        "enriched": enriched,
+        "skipped": skipped,
+        "failed": failed,
+        "unavailable": unavailable,
+        "disabled": False,
+    }
+
+
 def enrich_missing_underlying_prices(user_id: int) -> dict:
     """
     For every option CompletedTrade without underlying_at_entry, fetch the underlying
@@ -144,15 +331,20 @@ def enrich_missing_underlying_prices(user_id: int) -> dict:
     Idempotent: skips trades that already have underlying_at_entry set.
     Fire-and-forget: individual fetch failures are logged but do not raise.
 
-    Returns dict with keys: enriched, skipped, failed, disabled.
+    Processes at most _MAX_CALLS_PER_RUN API calls per invocation to avoid
+    rate-limiting on the free tier. Remaining trades are filled on the next upload.
+
+    Returns dict with keys: enriched, skipped, failed, unavailable, disabled.
     """
     client = MassiveClient()
     if not client.enabled:
-        return {"enriched": 0, "skipped": 0, "failed": 0, "disabled": True}
+        return {"enriched": 0, "skipped": 0, "failed": 0, "unavailable": 0, "disabled": True}
 
     enriched = 0
     skipped = 0
     failed = 0
+    unavailable = 0
+    api_calls = 0
 
     try:
         with db_manager.get_session() as session:
@@ -179,13 +371,42 @@ def enrich_missing_underlying_prices(user_id: int) -> dict:
                     skipped += 1
                     continue
 
-                option_details = trade.option_details_dict
-                underlying = (option_details or {}).get("underlying")
+                # Derive underlying ticker from option contract symbol
+                # e.g. "SPY 03/21/26 580.00 C" → "SPY"
+                underlying = trade.symbol.split()[0] if trade.symbol else None
                 if not underlying:
                     skipped += 1
                     continue
 
-                price = client.get_underlying_close_at(underlying, trade.opened_at)
+                # Check cache first — no API call needed if already cached
+                if trade.opened_at.tzinfo is None:
+                    ts_utc = trade.opened_at.replace(tzinfo=timezone.utc)
+                else:
+                    ts_utc = trade.opened_at.astimezone(timezone.utc)
+                cached_price = client._cache_lookup(underlying, ts_utc)
+                if cached_price is not None:
+                    price = cached_price
+                else:
+                    # Need an API call — enforce per-run cap
+                    if api_calls >= _MAX_CALLS_PER_RUN:
+                        skipped += 1
+                        continue
+
+                    if api_calls > 0:
+                        time.sleep(_RATE_LIMIT_SLEEP)
+
+                    try:
+                        price = client._fetch_and_cache(underlying, ts_utc)
+                        api_calls += 1
+                    except _UnavailableError:
+                        unavailable += 1
+                        api_calls += 1
+                        continue
+                    except _RateLimitError:
+                        failed += 1
+                        api_calls += 1
+                        break  # Stop immediately on rate limit
+
                 if price is None:
                     failed += 1
                     continue
@@ -219,7 +440,13 @@ def enrich_missing_underlying_prices(user_id: int) -> dict:
         logger.warning("enrich_missing_underlying_prices failed: %s", exc)
 
     logger.info(
-        "Market data enrichment complete: enriched=%d skipped=%d failed=%d",
-        enriched, skipped, failed,
+        "Market data enrichment complete: enriched=%d skipped=%d failed=%d unavailable=%d",
+        enriched, skipped, failed, unavailable,
     )
-    return {"enriched": enriched, "skipped": skipped, "failed": failed, "disabled": False}
+    return {
+        "enriched": enriched,
+        "skipped": skipped,
+        "failed": failed,
+        "unavailable": unavailable,
+        "disabled": False,
+    }

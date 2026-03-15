@@ -100,9 +100,17 @@ def upload():
         # Auto-populate underlying_at_entry for option trades (fire-and-forget)
         enrichment = enrich_missing_underlying_prices(user_id)
 
-        enrichment_msg = ""
-        if not enrichment.get("disabled") and enrichment.get("enriched", 0) > 0:
-            enrichment_msg = f" {enrichment['enriched']} underlying prices auto-filled."
+        if enrichment.get("disabled"):
+            enrichment_msg = ""
+        else:
+            parts = [f"{enrichment['enriched']} filled"]
+            if enrichment.get("unavailable", 0):
+                parts.append(f"{enrichment['unavailable']} too old (free tier)")
+            if enrichment["failed"]:
+                parts.append(f"{enrichment['failed']} failed")
+            if enrichment["skipped"]:
+                parts.append(f"{enrichment['skipped']} pending")
+            enrichment_msg = " Enrichment: " + ", ".join(parts) + "."
 
         flash(
             f"Imported {result['inserts']} new, updated {result['updates']}. "

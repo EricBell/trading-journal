@@ -146,7 +146,9 @@ def market_data():
     import json
     import zoneinfo
     import urllib.request
-    from datetime import datetime, timezone as dt_timezone
+    from datetime import datetime, timezone as dt_timezone, timedelta
+
+    from ...market_data import get_unenriched_option_trades
 
     current_user = AuthContext.get_current_user()
     api_key = os.environ.get('MASSIVE_API_KEY', '')
@@ -194,6 +196,24 @@ def market_data():
             except Exception as exc:
                 error = str(exc)
 
+    # Load unenriched trades for the missing-data panel
+    user_id = current_user.user_id
+    cutoff = datetime.now(dt_timezone.utc) - timedelta(days=730)
+    raw_trades = get_unenriched_option_trades(user_id)
+    # Annotate each with user-tz display time and "too_old" flag
+    missing_trades = []
+    for t in raw_trades:
+        ts = t["opened_at"]
+        if ts is not None:
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=dt_timezone.utc)
+            display_dt = ts.astimezone(user_tz).strftime("%Y-%m-%d %H:%M %Z")
+            too_old = ts < cutoff
+        else:
+            display_dt = "—"
+            too_old = False
+        missing_trades.append({**t, "display_dt": display_dt, "too_old": too_old})
+
     return render_template(
         'admin/market_data.html',
         user=current_user,
@@ -203,7 +223,40 @@ def market_data():
         error=error,
         form_symbol=form_symbol,
         form_date=form_date,
+        missing_trades=missing_trades,
+        max_per_fetch=4,
     )
+
+
+@bp.route('/market-data/enrich', methods=['POST'])
+@admin_required
+def market_data_enrich():
+    from ...market_data import enrich_trades_by_ids
+
+    current_user = AuthContext.get_current_user()
+    raw_ids = request.form.getlist('trade_ids')
+    trade_ids = []
+    for v in raw_ids:
+        try:
+            trade_ids.append(int(v))
+        except ValueError:
+            pass
+
+    if not trade_ids:
+        flash('No trades selected.', 'warning')
+        return redirect(url_for('admin.market_data'))
+
+    result = enrich_trades_by_ids(current_user.user_id, trade_ids)
+
+    parts = [f"{result['enriched']} filled"]
+    if result.get('unavailable'):
+        parts.append(f"{result['unavailable']} too old (free tier)")
+    if result['failed']:
+        parts.append(f"{result['failed']} failed")
+    if result['skipped']:
+        parts.append(f"{result['skipped']} skipped (cap reached — resubmit)")
+    flash("Enrichment: " + ", ".join(parts) + ".", 'success' if result['enriched'] else 'warning')
+    return redirect(url_for('admin.market_data'))
 
 
 @bp.route('/export')

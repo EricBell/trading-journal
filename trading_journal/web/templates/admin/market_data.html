@@ -55,6 +55,68 @@
 <div class="alert alert-danger">{{ error }}</div>
 {% endif %}
 
+{% if missing_trades %}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Missing Underlying Prices — Option Trades <span class="badge bg-secondary">{{ missing_trades|length }}</span></span>
+    <span class="text-muted small">Times in {{ user_tz }} &nbsp;|&nbsp; Up to {{ max_per_fetch }} fetched per submit</span>
+  </div>
+  <form method="post" action="{{ url_for('admin.market_data_enrich') }}">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th style="width:2rem">
+              <input type="checkbox" id="select-all" title="Select all">
+            </th>
+            <th>Underlying</th>
+            <th>Option Symbol</th>
+            <th>Opened At</th>
+            <th class="text-end">Strike</th>
+            <th>Type</th>
+            <th>Expiry</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in missing_trades %}
+          <tr class="{% if t.too_old %}text-muted{% endif %}">
+            <td>
+              <input type="checkbox" name="trade_ids" value="{{ t.completed_trade_id }}"
+                     class="row-check" {% if not api_key_set %}disabled{% endif %}>
+            </td>
+            <td class="fw-semibold">{{ t.underlying or '—' }}</td>
+            <td class="font-monospace small">{{ t.symbol }}</td>
+            <td class="small">{{ t.display_dt }}</td>
+            <td class="text-end">{{ "%.2f"|format(t.strike) if t.strike else '—' }}</td>
+            <td>{{ t.right }}</td>
+            <td class="small">{{ t.exp_date }}</td>
+            <td>
+              {% if t.too_old %}
+              <span class="badge bg-warning text-dark" title="Free tier covers ~2 years of history">too old</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer d-flex align-items-center gap-3">
+      <button type="submit" class="btn btn-primary btn-sm"
+              {% if not api_key_set %}disabled{% endif %}>
+        Fetch Selected
+      </button>
+      <span class="text-muted small">
+        Free tier: 5 req/min — {{ max_per_fetch }} fetched per submit, ~{{ max_per_fetch * 13 }}s wait.
+        Resubmit to continue.
+      </span>
+    </div>
+  </form>
+</div>
+{% elif api_key_set %}
+<div class="alert alert-success mb-4">All option trades have underlying prices — nothing missing.</div>
+{% endif %}
+
 {% if result %}
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center">
@@ -109,4 +171,15 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const selectAll = document.getElementById('select-all');
+  if (selectAll) {
+    selectAll.addEventListener('change', function () {
+      document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
+    });
+  }
+</script>
 {% endblock %}
