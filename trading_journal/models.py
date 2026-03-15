@@ -279,6 +279,9 @@ class TradeAnnotation(Base):
     stop_price = Column(Numeric(18, 8), nullable=True)
     trade_notes = Column(Text, nullable=True)
     strategy_category = Column(String(30), nullable=True)
+    atm_engaged = Column(String(20), nullable=True)
+    exit_reason = Column(String(30), nullable=True)
+    underlying_at_entry = Column(Numeric(18, 8), nullable=True)
 
     created_at = Column(TIMESTAMP(timezone=True), default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())

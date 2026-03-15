@@ -408,6 +408,20 @@ def annotate(trade_id: int):
             ann.setup_source_id = None
 
         ann.trade_notes = request.form.get('trade_notes', '').strip() or None
+
+        ann.atm_engaged = request.form.get('atm_engaged', '').strip() or None
+        ann.exit_reason = request.form.get('exit_reason', '').strip() or None
+
+        underlying_raw = request.form.get('underlying_at_entry', '').strip()
+        if underlying_raw:
+            try:
+                ann.underlying_at_entry = float(underlying_raw)
+            except ValueError:
+                flash('Invalid underlying price — must be a number.', 'warning')
+                return redirect(url_for('trades.detail', trade_id=trade_id))
+        else:
+            ann.underlying_at_entry = None
+
         session.commit()
         flash('Trade updated.', 'success')
 

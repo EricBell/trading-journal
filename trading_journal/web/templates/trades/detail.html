@@ -183,6 +183,40 @@
           </div>
 
           <div class="mb-3">
+            <label class="form-label">ATM Engaged</label>
+            <select name="atm_engaged" class="form-select">
+              <option value="">— not recorded —</option>
+              <option value="not_used" {% if annotation and annotation.atm_engaged == 'not_used' %}selected{% endif %}>Not used (manual trade)</option>
+              <option value="entry_only" {% if annotation and annotation.atm_engaged == 'entry_only' %}selected{% endif %}>Entry signal only</option>
+              <option value="full_session" {% if annotation and annotation.atm_engaged == 'full_session' %}selected{% endif %}>Full session</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Exit Reason</label>
+            <select name="exit_reason" class="form-select">
+              <option value="">— not recorded —</option>
+              <option value="hit_t1" {% if annotation and annotation.exit_reason == 'hit_t1' %}selected{% endif %}>Hit T1</option>
+              <option value="hit_t2" {% if annotation and annotation.exit_reason == 'hit_t2' %}selected{% endif %}>Hit T2</option>
+              <option value="hit_t3" {% if annotation and annotation.exit_reason == 'hit_t3' %}selected{% endif %}>Hit T3</option>
+              <option value="stopped_out" {% if annotation and annotation.exit_reason == 'stopped_out' %}selected{% endif %}>Stopped out</option>
+              <option value="time_stop" {% if annotation and annotation.exit_reason == 'time_stop' %}selected{% endif %}>Time stop</option>
+              <option value="early_exit" {% if annotation and annotation.exit_reason == 'early_exit' %}selected{% endif %}>Early exit (left gains)</option>
+              <option value="held_too_long" {% if annotation and annotation.exit_reason == 'held_too_long' %}selected{% endif %}>Held too long (gave back)</option>
+              <option value="other" {% if annotation and annotation.exit_reason == 'other' %}selected{% endif %}>Other</option>
+            </select>
+          </div>
+
+          {% if trade.instrument_type == 'OPTION' %}
+          <div class="mb-3">
+            <label class="form-label">Underlying Price at Entry <span class="text-muted small">({{ trade.option_details_dict.get('underlying', trade.symbol) if trade.option_details_dict else trade.symbol }} spot when you filled)</span></label>
+            <input type="number" name="underlying_at_entry" step="0.01"
+                   value="{{ '%.2f'|format(annotation.underlying_at_entry|float) if annotation and annotation.underlying_at_entry else '' }}"
+                   placeholder="e.g. 687.91" class="form-control">
+          </div>
+          {% endif %}
+
+          <div class="mb-3">
             <label class="form-label">Notes</label>
             <textarea id="trade_notes" name="trade_notes" rows="6"
                       placeholder="Trade notes...">{{ (annotation.trade_notes if annotation else '') or '' }}</textarea>
@@ -237,7 +271,10 @@ const tradeData = {
     setup_pattern: {% set ns = namespace(pname=none) %}{% for p in patterns %}{% if p.pattern_id == annotation.setup_pattern_id %}{% set ns.pname = p.pattern_name %}{% endif %}{% endfor %}{{ ns.pname | tojson }},
     setup_source: {% set ns2 = namespace(sname=none) %}{% for s in sources %}{% if s.source_id == annotation.setup_source_id %}{% set ns2.sname = s.source_name %}{% endif %}{% endfor %}{{ ns2.sname | tojson }},
     notes: {{ (annotation.trade_notes if annotation.trade_notes else none) | tojson }},
-    stop_price: {{ (annotation.stop_price | float if annotation.stop_price else none) | tojson }}
+    stop_price: {{ (annotation.stop_price | float if annotation.stop_price else none) | tojson }},
+    atm_engaged: {{ (annotation.atm_engaged if annotation.atm_engaged else none) | tojson }},
+    exit_reason: {{ (annotation.exit_reason if annotation.exit_reason else none) | tojson }},
+    underlying_at_entry: {{ (annotation.underlying_at_entry | float if annotation.underlying_at_entry else none) | tojson }}
   }{% else %}null{% endif %}
 };
 

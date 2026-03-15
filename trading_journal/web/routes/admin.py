@@ -198,6 +198,9 @@ def export_download():
                     'stop_price': float(ann.stop_price) if ann.stop_price is not None else None,
                     'trade_notes': ann.trade_notes,
                     'strategy_category': ann.strategy_category,
+                    'atm_engaged': ann.atm_engaged,
+                    'exit_reason': ann.exit_reason,
+                    'underlying_at_entry': float(ann.underlying_at_entry) if ann.underlying_at_entry is not None else None,
                     'created_at': ann.created_at.isoformat() if ann.created_at else None,
                     'updated_at': ann.updated_at.isoformat() if ann.updated_at else None,
                 })
