@@ -1,3 +1,10 @@
+## v1.16.5 - 2026-03-16
+
+### Bug Fixes
+- Trade detail page: Save button is now disabled on load and re-disabled after a successful save; it enables only when a field has been changed.
+
+---
+
 ## v1.16.4 - 2026-03-15
 
 ### Improvements

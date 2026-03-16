@@ -222,7 +222,7 @@
             <textarea id="trade_notes" name="trade_notes"
                       placeholder="Trade notes...">{{ (annotation.trade_notes if annotation else '') or '' }}</textarea>
           </div>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="submit" id="saveBtn" class="btn btn-primary" disabled>Save</button>
         </form>
       </div>
     </div>
@@ -253,6 +253,21 @@ function fitNotesEditor() {
 }
 fitNotesEditor();
 window.addEventListener('resize', fitNotesEditor);
+
+// Dirty-state tracking: enable Save only when something has changed
+const saveBtn = document.getElementById('saveBtn');
+const annotationForm = saveBtn ? saveBtn.closest('form') : null;
+if (annotationForm && saveBtn) {
+  function enableSave() { saveBtn.disabled = false; }
+
+  // Native form controls
+  annotationForm.querySelectorAll('select, input[type="number"]').forEach(el => {
+    el.addEventListener('change', enableSave);
+  });
+
+  // EasyMDE (CodeMirror) — fires on every keystroke
+  easyMDE.codemirror.on('change', enableSave);
+}
 </script>
 <script>
 // Trade JSON for clipboard copy
