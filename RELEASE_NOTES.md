@@ -1,3 +1,85 @@
+## v1.16.4 - 2026-03-15
+
+### Improvements
+- Both enrichment paths (upload auto-enrich and admin manual enrich) are now fully non-blocking — the page responds immediately and enrichment runs in a background thread.
+
+---
+
+## v1.16.3 - 2026-03-15
+
+### Bug Fixes
+- Replaced raw `HTTP Error 403: Forbidden` with a specific, actionable message when the Polygon.io API key is invalid or rate-limited.
+
+---
+
+## v1.16.2 - 2026-03-15
+
+### Improvements
+- Admin → Market Data page reorganized into two clearly named tabs: **Enrich Underlying Prices** and **Fetch 15-min Bars**.
+
+---
+
+## v1.16.1 - 2026-03-15
+
+### Improvements
+- Removed artificial sleep from `enrich_trades_by_ids` — 4 sequential Polygon calls complete in ~5–15 s under the free-tier rate limit without it.
+- Gunicorn timeout raised to 120 s to cover worst-case enrichment latency (requires container rebuild).
+
+---
+
+## v1.16.0 - 2026-03-15
+
+### New Features
+- Admin → Market Data now shows a card listing all option trades missing `underlying_at_entry`, with a one-click button to enrich them via Polygon.io.
+
+---
+
+## v1.15.0 - 2026-03-15
+
+### Bug Fixes
+- Stop price input now enforces `min="0.0001"` so the browser rejects negative values.
+- Grail stop is only used as a placeholder when it is a valid positive number, eliminating the spurious `-0.01` that was coming from malformed grail plan JSON.
+
+---
+
+## v1.14.4 - 2026-03-15
+
+### Bug Fixes
+- Fixed annotation route to handle a null trade entry price without raising a server error.
+- Corrected template rendering for trade entry display.
+
+---
+
+## v1.14.3 - 2026-03-15
+
+### Bug Fixes
+- Fixed broken annotation route after earlier template refactor (required container restart).
+
+---
+
+## v1.14.1 - 2026-03-15
+
+### Bug Fixes
+- `underlying_at_entry` field now accepts null/blank values without validation error on the annotation form.
+
+---
+
+## v1.14.0 - 2026-03-15
+
+### New Features
+- **Market data enrichment (Polygon.io / MASSIVE)** — New `MassiveClient` reads `MASSIVE_API_KEY` from the environment; if absent, enrichment is silently disabled and the upload flow is unaffected.
+- `get_underlying_close_at(symbol, ts)` — fetches the 1-min OHLCV bar closest to a fill timestamp, with an in-process cache to avoid redundant API calls.
+- `enrich_missing_underlying_prices(user_id)` — idempotent bulk enricher that fills `underlying_at_entry` for all option trades that are missing it; writes into `trade_annotations`, creating the row if needed.
+
+---
+
+## v1.13.1 - 2026-03-14
+
+### Bug Fixes
+- Fixed table formatting in the trade notes section.
+
+---
+
 ## v1.13.0 - 2026-03-14
 
 ### New Features
