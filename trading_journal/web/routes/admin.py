@@ -275,10 +275,13 @@ def market_data_enrich():
     user_id = current_user.user_id
 
     def _run():
+        print(f"[enrich thread] starting user={user_id} trade_ids={trade_ids}", flush=True)
         try:
-            enrich_trades_by_ids(user_id, trade_ids)
+            result = enrich_trades_by_ids(user_id, trade_ids)
+            print(f"[enrich thread] done: {result}", flush=True)
         except Exception as exc:
             import traceback
+            print(f"[enrich thread] ERROR: {exc}", flush=True)
             traceback.print_exc()
 
     threading.Thread(target=_run, daemon=True).start()

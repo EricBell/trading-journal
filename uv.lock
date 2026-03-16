@@ -835,7 +835,7 @@ wheels = [
 
 [[package]]
 name = "trading-journal"
-version = "1.16.5"
+version = "1.16.7"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },

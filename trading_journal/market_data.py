@@ -153,10 +153,11 @@ class MassiveClient:
                 return json.loads(resp.read().decode())
         except urllib.error.HTTPError as exc:
             if exc.code == 403:
-                logger.debug(
-                    "Massive: 403 for %s at %s (%s)",
-                    symbol, ts_utc, timeframe,
-                )
+                try:
+                    body = exc.read().decode()
+                except Exception:
+                    body = "(unreadable)"
+                print(f"[enrich] 403 body for {symbol} ({timeframe}): {body}", flush=True)
                 raise _UnavailableError()
             if exc.code == 429:
                 logger.warning("Massive: rate limited (429) for %s at %s", symbol, ts_utc)
@@ -311,24 +312,27 @@ def enrich_trades_by_ids(user_id: int, trade_ids: list) -> dict:
                     continue
 
                 ts_utc = _db_ts_to_utc(trade.opened_at)
+                print(f"[enrich] trade={trade_id} underlying={underlying} opened_at={trade.opened_at} ts_utc={ts_utc}", flush=True)
 
                 cached_price = client._cache_lookup(underlying, ts_utc)
                 if cached_price is not None:
+                    print(f"[enrich] trade={trade_id} cache hit: {cached_price}", flush=True)
                     price = cached_price
                 else:
                     if api_calls >= _MAX_CALLS_PER_RUN:
                         skipped += 1
                         continue
-                    # No sleep here: manual fetch is capped at _MAX_CALLS_PER_RUN which
-                    # is within the free-tier 5 req/min limit without needing delays.
                     try:
                         price = client._fetch_and_cache(underlying, ts_utc)
                         api_calls += 1
+                        print(f"[enrich] trade={trade_id} fetched price={price}", flush=True)
                     except _UnavailableError:
+                        print(f"[enrich] trade={trade_id} UNAVAILABLE (403)", flush=True)
                         unavailable += 1
                         api_calls += 1
                         continue
                     except _RateLimitError:
+                        print(f"[enrich] trade={trade_id} RATE LIMITED", flush=True)
                         failed += 1
                         api_calls += 1
                         break

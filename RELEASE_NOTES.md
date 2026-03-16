@@ -1,3 +1,10 @@
+## v1.16.7 - 2026-03-16
+
+### Debug
+- Added trace prints to enrichment thread and `enrich_trades_by_ids` to diagnose silent failures.
+
+---
+
 ## v1.16.6 - 2026-03-16
 
 ### Bug Fixes
