@@ -6,6 +6,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+import zoneinfo
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -18,6 +19,19 @@ from .models import CompletedTrade, OhlcvPriceSeries, TradeAnnotation
 logger = logging.getLogger(__name__)
 
 _MASSIVE_BASE = "https://api.polygon.io"
+_APP_TZ = zoneinfo.ZoneInfo("US/Eastern")
+
+
+def _db_ts_to_utc(ts: datetime) -> datetime:
+    """Convert a DB-stored timestamp to real UTC.
+
+    Source data has no timezone info so timestamps are ingested as naive ET and
+    stored in a TIMESTAMP WITH TIME ZONE column.  PostgreSQL labels them UTC, but
+    the values are actually Eastern time.  Strip the wrong UTC label, attach the
+    app timezone, then convert to real UTC.
+    """
+    naive = ts.replace(tzinfo=None)
+    return naive.replace(tzinfo=_APP_TZ).astimezone(timezone.utc)
 
 # Free tier: 5 req/min. Sleep this many seconds between API calls to stay safe.
 _RATE_LIMIT_SLEEP = 13
@@ -100,30 +114,22 @@ class MassiveClient:
         )
 
         try:
-            with urllib.request.urlopen(url, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-        except urllib.error.HTTPError as exc:
-            if exc.code == 403:
-                logger.debug(
-                    "Massive: historical data unavailable for %s at %s (403 — free tier limit)",
-                    symbol, ts_utc,
-                )
-                raise _UnavailableError()
-            if exc.code == 429:
-                logger.warning("Massive: rate limited (429) for %s at %s", symbol, ts_utc)
-                raise _RateLimitError()
-            logger.warning("Massive API call failed for %s at %s: %s", symbol, ts_utc, exc)
-            return None
-        except Exception as exc:
-            logger.warning("Massive API call failed for %s at %s: %s", symbol, ts_utc, exc)
+            data = self._http_get(url, symbol, ts_utc, timeframe="1m")
+        except _UnavailableError:
+            # 1-minute bars blocked (403) — fall back to daily bar
+            logger.debug("1m bars unavailable for %s at %s — trying daily fallback", symbol, ts_utc)
+            return self._fetch_daily_fallback(symbol, ts_utc)
+
+        if data is None:
             return None
 
         if data.get("status") not in ("OK", "DELAYED") or not data.get("results"):
+            # 1-minute bars returned empty — fall back to daily bar (open price)
             logger.debug(
-                "No Massive results for %s at %s: status=%s",
+                "No 1m results for %s at %s (status=%s) — trying daily fallback",
                 symbol, ts_utc, data.get("status"),
             )
-            return None
+            return self._fetch_daily_fallback(symbol, ts_utc)
 
         bars = data["results"]
         self._cache_bars(symbol, bars)
@@ -138,6 +144,58 @@ class MassiveClient:
             )
             return None
         logger.debug("Fetched underlying %s at %s → close=%.4f", symbol, ts_utc, price)
+        return price
+
+    def _http_get(self, url: str, symbol: str, ts_utc: datetime, timeframe: str = ""):
+        """Execute a GET request, raising _UnavailableError / _RateLimitError as appropriate."""
+        try:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            if exc.code == 403:
+                logger.debug(
+                    "Massive: 403 for %s at %s (%s)",
+                    symbol, ts_utc, timeframe,
+                )
+                raise _UnavailableError()
+            if exc.code == 429:
+                logger.warning("Massive: rate limited (429) for %s at %s", symbol, ts_utc)
+                raise _RateLimitError()
+            logger.warning("Massive API call failed for %s at %s: %s", symbol, ts_utc, exc)
+            return None
+        except Exception as exc:
+            logger.warning("Massive API call failed for %s at %s: %s", symbol, ts_utc, exc)
+            return None
+
+    def _fetch_daily_fallback(self, symbol: str, ts_utc: datetime) -> Optional[float]:
+        """
+        Fall back to the daily bar for the trade date and return its open price.
+        Used when 1-minute bars are unavailable (e.g. older data on free tier).
+        """
+        date_str = ts_utc.strftime("%Y-%m-%d")
+        url = (
+            f"{_MASSIVE_BASE}/v2/aggs/ticker/{symbol}/range/1/day"
+            f"/{date_str}/{date_str}"
+            f"?adjusted=false&sort=asc&limit=1&apiKey={self.api_key}"
+        )
+        try:
+            data = self._http_get(url, symbol, ts_utc, timeframe="1d")
+        except (_UnavailableError, _RateLimitError):
+            raise
+
+        if data is None or data.get("status") not in ("OK", "DELAYED") or not data.get("results"):
+            logger.debug("No daily fallback results for %s on %s", symbol, date_str)
+            return None
+
+        bar = data["results"][0]
+        price = float(bar.get("o") or bar.get("c") or 0)
+        if price <= 1:
+            logger.warning(
+                "Daily fallback returned implausible price=%.4f for %s on %s — ignoring",
+                price, symbol, date_str,
+            )
+            return None
+        logger.debug("Daily fallback %s on %s → open=%.4f", symbol, date_str, price)
         return price
 
     def _cache_bars(self, symbol: str, bars: list) -> None:
@@ -252,10 +310,7 @@ def enrich_trades_by_ids(user_id: int, trade_ids: list) -> dict:
                     skipped += 1
                     continue
 
-                if trade.opened_at.tzinfo is None:
-                    ts_utc = trade.opened_at.replace(tzinfo=timezone.utc)
-                else:
-                    ts_utc = trade.opened_at.astimezone(timezone.utc)
+                ts_utc = _db_ts_to_utc(trade.opened_at)
 
                 cached_price = client._cache_lookup(underlying, ts_utc)
                 if cached_price is not None:
@@ -379,10 +434,7 @@ def enrich_missing_underlying_prices(user_id: int) -> dict:
                     continue
 
                 # Check cache first — no API call needed if already cached
-                if trade.opened_at.tzinfo is None:
-                    ts_utc = trade.opened_at.replace(tzinfo=timezone.utc)
-                else:
-                    ts_utc = trade.opened_at.astimezone(timezone.utc)
+                ts_utc = _db_ts_to_utc(trade.opened_at)
                 cached_price = client._cache_lookup(underlying, ts_utc)
                 if cached_price is not None:
                     price = cached_price

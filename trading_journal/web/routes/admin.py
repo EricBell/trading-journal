@@ -226,10 +226,13 @@ def market_data():
     for t in raw_trades:
         ts = t["opened_at"]
         if ts is not None:
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=dt_timezone.utc)
-            display_dt = ts.astimezone(user_tz).strftime("%Y-%m-%d %H:%M %Z")
-            too_old = ts < cutoff
+            # Timestamps are stored as naive ET (no tz in source data) but PostgreSQL
+            # labels them UTC. Strip that label and display as-is in the app timezone.
+            naive = ts.replace(tzinfo=None)
+            display_dt = naive.strftime("%Y-%m-%d %H:%M") + f" {user_tz_str}"
+            # For "too old" check, reinterpret as the app timezone to get real UTC
+            ts_real_utc = naive.replace(tzinfo=user_tz).astimezone(dt_timezone.utc)
+            too_old = ts_real_utc < cutoff
         else:
             display_dt = "—"
             too_old = False
@@ -272,13 +275,17 @@ def market_data_enrich():
     user_id = current_user.user_id
 
     def _run():
-        enrich_trades_by_ids(user_id, trade_ids)
+        try:
+            enrich_trades_by_ids(user_id, trade_ids)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
 
     threading.Thread(target=_run, daemon=True).start()
 
     flash(
         f"Fetching underlying prices for {len(trade_ids)} trade(s) in the background — "
-        "refresh this page in ~15 seconds to see results.",
+        "refresh this page in ~30 seconds to see results.",
         'info',
     )
     return redirect(url_for('admin.market_data'))

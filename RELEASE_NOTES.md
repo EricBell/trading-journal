@@ -1,3 +1,12 @@
+## v1.16.6 - 2026-03-16
+
+### Bug Fixes
+- Market Data "Resolve Option Trades" panel: "Opened At" times now display correctly in ET instead of being shifted 4–5 hours early (timestamps were stored as naive ET but incorrectly treated as UTC during display).
+- Polygon API enrichment now fetches bars at the correct UTC time — fixes the root cause of `unavailable` results when the trades were actually within the free-tier coverage window.
+- Added daily-bar fallback when 1-minute bars return 403 or empty results, improving coverage for older trades on the free tier.
+
+---
+
 ## v1.16.5 - 2026-03-16
 
 ### Bug Fixes
