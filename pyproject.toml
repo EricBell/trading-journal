@@ -1,6 +1,6 @@
 [project]
 name = "trading-journal"
-version = "1.16.7"
+version = "1.16.8"
 description = "PostgreSQL-based trading journal for data ingestion and performance analysis"
 readme = "README.md"
 requires-python = ">=3.11"

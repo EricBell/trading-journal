@@ -1,3 +1,10 @@
+## v1.16.8 - 2026-03-16
+
+### Debug
+- Log Polygon 403 response body to identify plan/rate-limit errors.
+
+---
+
 ## v1.16.7 - 2026-03-16
 
 ### Debug
