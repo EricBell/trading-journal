@@ -20,6 +20,29 @@
 </div>
 {% endif %}
 
+{# Background enrichment result banner — shown once on refresh after fetch completes #}
+{% if enrich_result %}
+  {% if enrich_result.get('error') %}
+  <div class="alert alert-danger d-flex align-items-start gap-2">
+    <span style="font-size:1.2rem">&#10060;</span>
+    <div>
+      <strong>Enrichment failed.</strong> {{ enrich_result.error }}
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-{{ 'success' if enrich_result.enriched else 'warning' }} d-flex align-items-start gap-2">
+    <span style="font-size:1.2rem">{{ '&#9989;' if enrich_result.enriched else '&#9888;' }}</span>
+    <div>
+      <strong>Enrichment complete.</strong>
+      {{ enrich_result.enriched }} filled
+      {%- if enrich_result.unavailable %}, {{ enrich_result.unavailable }} too old (free tier){% endif %}
+      {%- if enrich_result.failed %}, <strong>{{ enrich_result.failed }} failed</strong>{% endif %}
+      {%- if enrich_result.skipped %}, {{ enrich_result.skipped }} skipped (cap reached — resubmit){% endif %}.
+    </div>
+  </div>
+  {% endif %}
+{% endif %}
+
 {# Sub-tabs #}
 <ul class="nav nav-tabs mb-4" id="mdTabs" role="tablist">
   <li class="nav-item" role="presentation">
@@ -135,6 +158,18 @@
                      {% if not api_key_set %}disabled{% endif %}>
             </div>
             <div class="col-sm-2">
+              <label class="form-label">Timeframe</label>
+              <div class="btn-group w-100" role="group">
+                {% for tf in [('1','1m'), ('5','5m'), ('15','15m')] %}
+                <input type="radio" class="btn-check" name="timeframe" id="tf{{ tf[0] }}"
+                       value="{{ tf[0] }}" autocomplete="off"
+                       {% if form_timeframe == tf[0] %}checked{% endif %}
+                       {% if not api_key_set %}disabled{% endif %}>
+                <label class="btn btn-outline-secondary btn-sm" for="tf{{ tf[0] }}">{{ tf[1] }}</label>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-sm-2">
               <button type="submit" class="btn btn-primary w-100"
                       {% if not api_key_set %}disabled{% endif %}>Fetch</button>
             </div>
@@ -144,7 +179,10 @@
     </div>
 
     {% if error %}
-    <div class="alert alert-danger">{{ error }}</div>
+    <div class="alert alert-danger d-flex align-items-start gap-2">
+      <span style="font-size:1.2rem">&#10060;</span>
+      <div><strong>Fetch failed.</strong> {{ error }}</div>
+    </div>
     {% endif %}
 
     {% if result %}
@@ -152,6 +190,7 @@
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>
           Response — {{ form_symbol }} &nbsp;
+          <span class="badge bg-secondary">{{ form_timeframe }}m</span>
           <span class="badge {% if result.status == 'OK' %}bg-success{% else %}bg-warning text-dark{% endif %}">
             {{ result.status }}
           </span>

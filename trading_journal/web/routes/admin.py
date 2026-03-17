@@ -1,6 +1,7 @@
 """Admin routes: /admin/users."""
 
 import json
+import threading
 from datetime import date
 
 from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
@@ -14,6 +15,11 @@ from ...models import Account, CompletedTrade, TradeAnnotation, User
 from ...user_management import UserManager
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+# In-memory store for background enrichment results, keyed by user_id.
+# Written by the daemon thread, read-and-cleared on the next GET to market_data.
+_enrich_results: dict = {}
+_enrich_lock = threading.Lock()
 
 
 @bp.route('/users')
@@ -165,9 +171,15 @@ def market_data():
     form_symbol = ''
     form_date = ''
 
+    _VALID_TIMEFRAMES = {'1': 'minute', '5': 'minute', '15': 'minute'}
+    form_timeframe = '5'
+
     if request.method == 'POST':
         form_symbol = request.form.get('symbol', '').strip().upper()
         form_date = request.form.get('date', '').strip()
+        form_timeframe = request.form.get('timeframe', '5')
+        if form_timeframe not in _VALID_TIMEFRAMES:
+            form_timeframe = '5'
 
         if not api_key:
             error = 'MASSIVE_API_KEY is not set in the environment.'
@@ -187,9 +199,11 @@ def market_data():
                 else:
                     from_ms = int(dt.replace(hour=0, minute=0, second=0).timestamp() * 1000)
                     to_ms   = int(dt.replace(hour=23, minute=59, second=59).timestamp() * 1000)
+                    multiplier = form_timeframe
+                    timespan = _VALID_TIMEFRAMES[form_timeframe]
                     url = (
                         f"https://api.polygon.io/v2/aggs/ticker/{form_symbol}"
-                        f"/range/15/minute/{from_ms}/{to_ms}"
+                        f"/range/{multiplier}/{timespan}/{from_ms}/{to_ms}"
                         f"?adjusted=false&sort=asc&limit=100&apiKey={api_key}"
                     )
                     try:
@@ -217,8 +231,12 @@ def market_data():
             except Exception as exc:
                 error = str(exc)
 
-    # Load unenriched trades for the missing-data panel
+    # Pick up any completed background enrichment result
     user_id = current_user.user_id
+    with _enrich_lock:
+        enrich_result = _enrich_results.pop(user_id, None)
+
+    # Load unenriched trades for the missing-data panel
     cutoff = datetime.now(dt_timezone.utc) - timedelta(days=730)
     raw_trades = get_unenriched_option_trades(user_id)
     # Annotate each with user-tz display time and "too_old" flag
@@ -247,8 +265,10 @@ def market_data():
         error=error,
         form_symbol=form_symbol,
         form_date=form_date,
+        form_timeframe=form_timeframe,
         missing_trades=missing_trades,
         max_per_fetch=4,
+        enrich_result=enrich_result,
         active_tab='sample' if request.method == 'POST' else 'resolve',
     )
 
@@ -275,20 +295,19 @@ def market_data_enrich():
     user_id = current_user.user_id
 
     def _run():
-        print(f"[enrich thread] starting user={user_id} trade_ids={trade_ids}", flush=True)
         try:
             result = enrich_trades_by_ids(user_id, trade_ids)
-            print(f"[enrich thread] done: {result}", flush=True)
         except Exception as exc:
-            import traceback
-            print(f"[enrich thread] ERROR: {exc}", flush=True)
-            traceback.print_exc()
+            result = {"enriched": 0, "skipped": 0, "failed": len(trade_ids),
+                      "unavailable": 0, "disabled": False, "error": str(exc)}
+        with _enrich_lock:
+            _enrich_results[user_id] = result
 
     threading.Thread(target=_run, daemon=True).start()
 
     flash(
-        f"Fetching underlying prices for {len(trade_ids)} trade(s) in the background — "
-        "refresh this page in ~30 seconds to see results.",
+        f"Fetching underlying prices for {len(trade_ids)} trade(s) — "
+        "refresh this page in ~15 seconds to see results.",
         'info',
     )
     return redirect(url_for('admin.market_data'))
