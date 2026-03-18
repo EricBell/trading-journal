@@ -20,28 +20,6 @@
 </div>
 {% endif %}
 
-{# Background enrichment result banner — shown once on refresh after fetch completes #}
-{% if enrich_result %}
-  {% if enrich_result.get('error') %}
-  <div class="alert alert-danger d-flex align-items-start gap-2">
-    <span style="font-size:1.2rem">❌</span>
-    <div>
-      <strong>Enrichment failed.</strong> {{ enrich_result.error }}
-    </div>
-  </div>
-  {% else %}
-  <div class="alert alert-{{ 'success' if enrich_result.enriched else 'warning' }} d-flex align-items-start gap-2">
-    <span style="font-size:1.2rem">{{ '✅' if enrich_result.enriched else '⚠️' }}</span>
-    <div>
-      <strong>Enrichment complete.</strong>
-      {{ enrich_result.enriched }} filled
-      {%- if enrich_result.unavailable %}, {{ enrich_result.unavailable }} too old (free tier){% endif %}
-      {%- if enrich_result.failed %}, <strong>{{ enrich_result.failed }} failed</strong>{% endif %}
-      {%- if enrich_result.skipped %}, {{ enrich_result.skipped }} skipped (cap reached — resubmit){% endif %}.
-    </div>
-  </div>
-  {% endif %}
-{% endif %}
 
 {# Sub-tabs #}
 <ul class="nav nav-tabs mb-4" id="mdTabs" role="tablist">

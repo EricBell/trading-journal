@@ -1,3 +1,10 @@
+## v1.16.13 - 2026-03-18
+
+### Bug Fixes
+- "Resolve Option Trades" enrichment no longer silently swallows failures. The route is now synchronous — it runs the API calls inline and immediately flashes a specific success/warning/danger message covering all outcomes: enriched, failed (no price data), unavailable (too old for API plan), API key not set, and unexpected exceptions. Previously the result was stored in an in-memory dict by a background thread and only shown if the user happened to refresh at the right moment; after a container restart or a timing race the result was simply lost.
+
+---
+
 ## v1.16.12 - 2026-03-18
 
 ### Bug Fixes

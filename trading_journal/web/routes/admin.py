@@ -1,7 +1,6 @@
 """Admin routes: /admin/users."""
 
 import json
-import threading
 from datetime import date
 
 from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
@@ -15,11 +14,6 @@ from ...models import Account, CompletedTrade, TradeAnnotation, User
 from ...user_management import UserManager
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
-
-# In-memory store for background enrichment results, keyed by user_id.
-# Written by the daemon thread, read-and-cleared on the next GET to market_data.
-_enrich_results: dict = {}
-_enrich_lock = threading.Lock()
 
 
 @bp.route('/users')
@@ -231,10 +225,7 @@ def market_data():
             except Exception as exc:
                 error = str(exc)
 
-    # Pick up any completed background enrichment result
     user_id = current_user.user_id
-    with _enrich_lock:
-        enrich_result = _enrich_results.pop(user_id, None)
 
     # Load unenriched trades for the missing-data panel
     cutoff = datetime.now(dt_timezone.utc) - timedelta(days=730)
@@ -268,7 +259,6 @@ def market_data():
         form_timeframe=form_timeframe,
         missing_trades=missing_trades,
         max_per_fetch=4,
-        enrich_result=enrich_result,
         active_tab='sample' if request.method == 'POST' else 'resolve',
     )
 
@@ -276,7 +266,6 @@ def market_data():
 @bp.route('/market-data/enrich', methods=['POST'])
 @admin_required
 def market_data_enrich():
-    import threading
     from ...market_data import enrich_trades_by_ids
 
     current_user = AuthContext.get_current_user()
@@ -294,22 +283,41 @@ def market_data_enrich():
 
     user_id = current_user.user_id
 
-    def _run():
-        try:
-            result = enrich_trades_by_ids(user_id, trade_ids)
-        except Exception as exc:
-            result = {"enriched": 0, "skipped": 0, "failed": len(trade_ids),
-                      "unavailable": 0, "disabled": False, "error": str(exc)}
-        with _enrich_lock:
-            _enrich_results[user_id] = result
+    try:
+        result = enrich_trades_by_ids(user_id, trade_ids)
+    except Exception as exc:
+        flash(f"Enrichment failed: {exc}", 'danger')
+        return redirect(url_for('admin.market_data'))
 
-    threading.Thread(target=_run, daemon=True).start()
+    if result.get('disabled'):
+        flash('Enrichment is disabled — MASSIVE_API_KEY is not set.', 'warning')
+    elif result.get('error'):
+        flash(f"Enrichment error: {result['error']}", 'danger')
+    elif result['enriched'] == 0 and result['failed'] > 0:
+        flash(
+            f"Enrichment failed for all {result['failed']} trade(s). "
+            "The data may be too old for your API plan, or the API returned no price data.",
+            'danger',
+        )
+    elif result['failed'] > 0:
+        flash(
+            f"Enriched {result['enriched']} trade(s). "
+            f"{result['failed']} failed (no price data returned).",
+            'warning',
+        )
+    elif result['unavailable'] > 0 and result['enriched'] == 0:
+        flash(
+            f"{result['unavailable']} trade(s) could not be enriched — "
+            "data is too old for your API plan (free tier covers ~2 years).",
+            'warning',
+        )
+    else:
+        flash(
+            f"✅ Enriched {result['enriched']} trade(s)."
+            + (f" {result['unavailable']} too old for free tier." if result['unavailable'] else ""),
+            'success',
+        )
 
-    flash(
-        f"Fetching underlying prices for {len(trade_ids)} trade(s) — "
-        "refresh this page in ~15 seconds to see results.",
-        'info',
-    )
     return redirect(url_for('admin.market_data'))
 
 
