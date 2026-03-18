@@ -1,3 +1,12 @@
+## v1.16.10 - 2026-03-16
+
+### Improvements
+- Admin → Market Data "Fetch Bars" tab now has a 1m / 5m / 15m timeframe selector; selected timeframe is shown as a badge on the result card.
+- Background enrichment result is now persisted in memory and surfaced as a success/warning/error banner on the next page load, replacing the previous "refresh in ~30s" flow.
+- Removed debug prints from the enrichment thread; errors are now captured and displayed in the result banner rather than silently logged.
+
+---
+
 ## v1.16.8 - 2026-03-16
 
 ### Debug
