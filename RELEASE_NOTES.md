@@ -1,3 +1,10 @@
+## v1.16.12 - 2026-03-18
+
+### Bug Fixes
+- Market Data enrichment result banner and fetch error banner showed literal `&#9888;` / `&#9989;` / `&#10060;` text instead of emoji icons — Jinja2 auto-escapes string literals so HTML entities in `{{ }}` expressions are never interpreted. Replaced with direct Unicode characters (⚠️ ✅ ❌).
+
+---
+
 ## v1.16.11 - 2026-03-18
 
 ### Bug Fixes

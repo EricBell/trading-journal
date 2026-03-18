@@ -24,14 +24,14 @@
 {% if enrich_result %}
   {% if enrich_result.get('error') %}
   <div class="alert alert-danger d-flex align-items-start gap-2">
-    <span style="font-size:1.2rem">&#10060;</span>
+    <span style="font-size:1.2rem">❌</span>
     <div>
       <strong>Enrichment failed.</strong> {{ enrich_result.error }}
     </div>
   </div>
   {% else %}
   <div class="alert alert-{{ 'success' if enrich_result.enriched else 'warning' }} d-flex align-items-start gap-2">
-    <span style="font-size:1.2rem">{{ '&#9989;' if enrich_result.enriched else '&#9888;' }}</span>
+    <span style="font-size:1.2rem">{{ '✅' if enrich_result.enriched else '⚠️' }}</span>
     <div>
       <strong>Enrichment complete.</strong>
       {{ enrich_result.enriched }} filled
@@ -180,7 +180,7 @@
 
     {% if error %}
     <div class="alert alert-danger d-flex align-items-start gap-2">
-      <span style="font-size:1.2rem">&#10060;</span>
+      <span style="font-size:1.2rem">❌</span>
       <div><strong>Fetch failed.</strong> {{ error }}</div>
     </div>
     {% endif %}
