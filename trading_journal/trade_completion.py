@@ -6,10 +6,10 @@ from typing import List, Dict, Any, Optional
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, text
 
 from .database import db_manager
-from .models import Trade, CompletedTrade
+from .models import Trade, CompletedTrade, TradeAnnotation
 from .authorization import AuthContext
 from .positions import get_contract_multiplier
 
@@ -60,6 +60,25 @@ class TradeCompletionEngine:
             for trades in trade_groups.values():
                 completed_count += self._process_trade_group(session, trades)
 
+            session.commit()
+
+        # Re-link any annotations that were orphaned by the completed_trades rebuild.
+        # The natural key (user_id, symbol, opened_at) ties each annotation back to
+        # its newly-created completed_trade row so they are never left with a NULL FK.
+        with self.db_manager.get_session() as session:
+            session.execute(
+                text("""
+                    UPDATE trade_annotations ta
+                    SET completed_trade_id = ct.completed_trade_id
+                    FROM completed_trades ct
+                    WHERE ta.user_id   = :user_id
+                      AND ta.completed_trade_id IS NULL
+                      AND ct.user_id   = :user_id
+                      AND ta.symbol    = ct.symbol
+                      AND ta.opened_at = ct.opened_at
+                """),
+                {"user_id": user_id},
+            )
             session.commit()
 
         return {

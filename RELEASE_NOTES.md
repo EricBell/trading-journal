@@ -1,3 +1,10 @@
+## v1.16.11 - 2026-03-18
+
+### Bug Fixes
+- Trade annotations (setup pattern, notes, stop price, etc.) were appearing blank after a CSV re-import because `reprocess_all_completed_trades` deleted and rebuilt `completed_trades` rows, leaving annotation FKs NULL. Annotations were only re-linked lazily when a user opened a trade detail page, so the trades list showed them as empty. Fixed by eagerly re-linking all orphaned annotations to their new `completed_trade_id` (matched on the natural key `user_id / symbol / opened_at`) immediately after the rebuild.
+
+---
+
 ## v1.16.10 - 2026-03-16
 
 ### Improvements
