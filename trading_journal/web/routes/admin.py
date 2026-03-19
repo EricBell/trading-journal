@@ -10,7 +10,7 @@ from werkzeug.security import generate_password_hash
 from ..auth import admin_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Account, CompletedTrade, TradeAnnotation, User
+from ...models import Account, CompletedTrade, JournalNote, TradeAnnotation, User
 from ...user_management import UserManager
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -333,8 +333,14 @@ def export_page():
             .group_by(TradeAnnotation.user_id)
             .all()
         )
+        note_counts = dict(
+            session.query(JournalNote.user_id, func.count())
+            .group_by(JournalNote.user_id)
+            .all()
+        )
     for u in user_list:
         u['annotation_count'] = counts.get(u['user_id'], 0)
+        u['note_count'] = note_counts.get(u['user_id'], 0)
     return render_template(
         'admin/export.html',
         users=user_list,
@@ -419,17 +425,39 @@ def export_download():
                     'updated_at': ann.updated_at.isoformat() if ann.updated_at else None,
                 })
 
+            journal_notes = (
+                session.query(JournalNote)
+                .filter(JournalNote.user_id == uid)
+                .order_by(JournalNote.created_at.asc())
+                .all()
+            )
+
             users_out.append({
                 'user_id': user_obj.user_id,
                 'username': user_obj.username,
                 'accounts': list(buckets.values()),
+                'journal_notes': [
+                    {
+                        'note_id': n.note_id,
+                        'title': n.title,
+                        'body': n.body,
+                        'created_at': n.created_at.isoformat() if n.created_at else None,
+                        'updated_at': n.updated_at.isoformat() if n.updated_at else None,
+                    }
+                    for n in journal_notes
+                ],
             })
 
     payload = {
         'export_metadata': {
             'exported_at': date.today().isoformat(),
-            'format_version': '2.0',
+            'format_version': '3.0',
             'exported_by': current_user.username,
+            'schema': {
+                'description': 'Complete export of all manually entered data. Suitable for re-import.',
+                'trade_annotation_natural_key': ['username', 'symbol', 'opened_at'],
+                'journal_note_natural_key': ['username', 'created_at'],
+            },
         },
         'users': users_out,
     }

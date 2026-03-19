@@ -1,6 +1,6 @@
 # Trading Journal — System Overview
 
-**Version:** 1.16.13
+**Version:** 1.17.0
 **Last Updated:** 2026-03-19
 **Status:** Production (Phase 4 complete)
 
@@ -72,6 +72,7 @@ The hard problems this application solves:
       ├── /admin/users         user management (admin only)
       ├── /admin/market-data   Polygon.io enrichment UI (admin only)
       ├── /admin/export        annotation export as JSON (admin only)
+      ├── /journal             timestamped free-form notes (list + create + edit + delete)
       ├── /about               release notes accordion
       └── /api/*               JSON API (dashboard, trades)
 
@@ -135,6 +136,7 @@ restores them exactly.
 | `setup_sources` | User-managed dropdown: signal sources | case-insensitive UNIQUE per user |
 | `processing_log` | Ingest audit trail | (user_id, file_path, processing_started_at) UNIQUE |
 | `ohlcv_price_series` | 1-min and daily OHLCV bars fetched from Polygon.io; cached to avoid redundant API calls | (symbol, timestamp, timeframe) UNIQUE |
+| `journal_notes` | Free-form trader notes (not trade-linked): title, body (markdown), timestamps | note_id PK; user_id FK |
 
 ### Why `trade_annotations` is a separate table
 
@@ -261,7 +263,8 @@ fire-and-forget: if `grail_files` is unreachable the page renders normally with 
 | CSV upload | `/ingest` | Drag-and-drop CSV; shows insert/update counts; inline error display |
 | Admin: users | `/admin/users` | Create, deactivate, regenerate API key; pill sub-nav to export (admin-only) |
 | Admin: market data | `/admin/market-data` | Two tabs: (1) list option trades missing `underlying_at_entry` with one-click Polygon.io enrichment; (2) fetch 1m/5m/15m OHLCV bars for any symbol and date range. Admin-only. |
-| Admin: export | `/admin/export` | Export trade annotations as JSON (format v2.0); per-account or multi-user selection (admin-only) |
+| Admin: export | `/admin/export` | Export all manually entered data as JSON (format v3.0): trade annotations (grouped by account) + journal notes. Per-user selection. Natural keys documented in `export_metadata.schema` for re-import. Admin-only. |
+| Journal | `/journal` | Timestamped free-form notes (EasyMDE markdown editor, title optional). List shows newest first with snippet. Not trade-linked. Included in export. |
 | About | `/about` | Release notes parsed from RELEASE_NOTES.md; Bootstrap accordion; current release badged |
 | Settings | `/settings` | User preferences |
 | JSON API | `/api/dashboard`, `/api/trades` | For external tooling; dashboard endpoint accepts `?account=` filter |
@@ -360,6 +363,8 @@ trading_journal/
 ├── positions.py            PositionTracker — avg cost basis, bulk UPSERT, option expiry
 ├── dashboard.py            DashboardEngine — metrics aggregation
 ├── market_data.py          MassiveClient (Polygon.io); enrich_missing_underlying_prices; enrich_trades_by_ids
+│
+└── web/routes/journal.py   /journal — list, create, detail/edit, delete
 ├── grail_connector.py      Read-only connector to external grail_files DB
 ├── config.py               Two-tier TOML config loader
 ├── database.py             db_manager singleton, session context manager

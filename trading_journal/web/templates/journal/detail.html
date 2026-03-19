@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{% if note %}Journal Note — {% if note.title %}{{ note.title }}{% else %}(untitled){% endif %}{% else %}New Note{% endif %} — Trading Journal{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <a href="{{ url_for('journal.index') }}" class="btn btn-sm btn-outline-secondary">&larr; Journal</a>
+  {% if note %}
+  <div class="text-muted small">
+    Created {{ note.created_at.strftime('%Y-%m-%d %H:%M') if note.created_at else '' }}
+    {% if note.updated_at and note.updated_at != note.created_at %}
+    · Updated {{ note.updated_at.strftime('%Y-%m-%d %H:%M') }}
+    {% endif %}
+  </div>
+  <button type="button" class="btn btn-sm btn-outline-danger"
+          data-bs-toggle="modal" data-bs-target="#deleteModal">Delete</button>
+  {% else %}
+  <div></div>
+  {% endif %}
+</div>
+
+{% if note %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Note</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Delete <strong>{{ note.title or '(untitled)' }}</strong>? This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="post" action="{{ url_for('journal.delete', note_id=note.note_id) }}">
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<form method="post"
+      action="{{ url_for('journal.update', note_id=note.note_id) if note else url_for('journal.create') }}">
+  <div class="mb-3">
+    <input type="text" name="title" class="form-control form-control-lg"
+           placeholder="Title (optional)"
+           value="{{ note.title or '' if note else '' }}">
+  </div>
+  <div class="mb-3">
+    <textarea id="note_body" name="body"
+              placeholder="Write your note here...">{{ note.body or '' if note else '' }}</textarea>
+  </div>
+  <button type="submit" id="saveBtn" class="btn btn-primary"
+          {% if note %}disabled{% endif %}>Save</button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<script>
+const easyMDE = new EasyMDE({
+  element: document.getElementById('note_body'),
+  spellChecker: false,
+  autosave: { enabled: false },
+  toolbar: ['bold','italic','heading','|','unordered-list','ordered-list','|','link','code','|','preview','side-by-side','fullscreen'],
+  minHeight: '200px',
+});
+
+function fitEditor() {
+  const cm = document.querySelector('.CodeMirror');
+  const saveBtn = document.getElementById('saveBtn');
+  if (!cm) return;
+  const top = cm.getBoundingClientRect().top;
+  const btnHeight = saveBtn ? saveBtn.offsetHeight + 16 : 0;
+  const h = Math.max(200, window.innerHeight - top - 60 - btnHeight);
+  cm.style.height = h + 'px';
+  easyMDE.codemirror.refresh();
+}
+fitEditor();
+window.addEventListener('resize', fitEditor);
+
+// Enable Save button when content changes
+const saveBtn = document.getElementById('saveBtn');
+const titleInput = document.querySelector('input[name="title"]');
+
+function enableSave() { if (saveBtn) saveBtn.disabled = false; }
+if (titleInput) titleInput.addEventListener('input', enableSave);
+easyMDE.codemirror.on('change', enableSave);
+
+// New note: enable immediately since there's nothing to compare
+{% if not note %}
+enableSave();
+{% endif %}
+</script>
+{% endblock %}

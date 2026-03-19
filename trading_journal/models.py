@@ -86,6 +86,7 @@ class User(Base):
     setup_sources = relationship("SetupSource", back_populates="user")
     processing_logs = relationship("ProcessingLog", back_populates="user")
     trade_annotations = relationship("TradeAnnotation", back_populates="user")
+    journal_notes = relationship("JournalNote", back_populates="user", order_by="JournalNote.created_at.desc()")
 
     # Constraints
     __table_args__ = (
@@ -410,3 +411,18 @@ class OhlcvPriceSeries(Base):
     low_price = Column(Numeric(18, 8))
     close_price = Column(Numeric(18, 8))
     volume = Column(Integer)
+
+
+class JournalNote(Base):
+    """Free-form timestamped notes for the trader (not tied to any trade)."""
+
+    __tablename__ = "journal_notes"
+
+    note_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+    title = Column(String(200), nullable=True)
+    body = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="journal_notes")

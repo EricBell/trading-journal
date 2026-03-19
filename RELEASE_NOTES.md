@@ -1,3 +1,11 @@
+## v1.17.0 - 2026-03-19
+
+### New Features
+- **Journal** — Timestamped free-form notes, independent of any trade. Accessible via the new "Journal" nav item (between Settings and About). Supports markdown via the EasyMDE editor (same as trade notes). Each note has an optional title; the list shows newest first with a body snippet and timestamp. Notes can be created, edited, and deleted.
+- **Journal notes included in export** — Admin → Export now includes all journal notes per user in the downloaded JSON (format v3.0). Notes are exported at the user level alongside trade annotations. `export_metadata.schema` documents the natural keys for re-import: `["username", "symbol", "opened_at"]` for annotations and `["username", "created_at"]` for notes.
+
+---
+
 ## v1.16.13 - 2026-03-18
 
 ### Bug Fixes

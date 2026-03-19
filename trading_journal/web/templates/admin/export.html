@@ -29,7 +29,7 @@
             <label class="form-check-label" for="user{{ u.user_id }}">
               <strong>{{ u.username }}</strong>
               <span class="text-muted small"> {{ u.email }}</span>
-              <span class="text-muted small"> — {{ u.annotation_count }} annotation{{ 's' if u.annotation_count != 1 }}</span>
+              <span class="text-muted small"> — {{ u.annotation_count }} annotation{{ 's' if u.annotation_count != 1 }}, {{ u.note_count }} journal note{{ 's' if u.note_count != 1 }}</span>
             </label>
           </div>
           {% endfor %}
