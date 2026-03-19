@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.12.3
-**Last Updated:** 2026-03-14
+**Version:** 1.16.13
+**Last Updated:** 2026-03-19
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -70,6 +70,7 @@ The hard problems this application solves:
       ├── /trades/<id>         trade detail + grail plan link
       ├── /positions           open and closed positions
       ├── /admin/users         user management (admin only)
+      ├── /admin/market-data   Polygon.io enrichment UI (admin only)
       ├── /admin/export        annotation export as JSON (admin only)
       ├── /about               release notes accordion
       └── /api/*               JSON API (dashboard, trades)
@@ -128,12 +129,12 @@ restores them exactly.
 | `accounts` | Brokerage accounts per user | (user_id, account_number) UNIQUE |
 | `trades` | Individual fills (Tier 1) | (user_id, unique_key) UNIQUE |
 | `completed_trades` | Round-trip trades (Tier 2) | user_id FK |
-| `trade_annotations` | Manual annotations (pattern, notes, stop) | (user_id, symbol, opened_at) UNIQUE |
+| `trade_annotations` | Manual annotations (pattern, notes, stop, atm_engaged, exit_reason, underlying_at_entry) | (user_id, symbol, opened_at) UNIQUE |
 | `positions` | Running position aggregate (Tier 3) | (user_id, symbol, instrument_type, option_details, account_id) UNIQUE |
 | `setup_patterns` | User-managed dropdown: pattern names | case-insensitive UNIQUE per user |
 | `setup_sources` | User-managed dropdown: signal sources | case-insensitive UNIQUE per user |
 | `processing_log` | Ingest audit trail | (user_id, file_path, processing_started_at) UNIQUE |
-| `ohlcv_price_series` | Future price data (currently unused) | (symbol, timestamp, timeframe) UNIQUE |
+| `ohlcv_price_series` | 1-min and daily OHLCV bars fetched from Polygon.io; cached to avoid redundant API calls | (symbol, timestamp, timeframe) UNIQUE |
 
 ### Why `trade_annotations` is a separate table
 
@@ -259,6 +260,7 @@ fire-and-forget: if `grail_files` is unreachable the page renders normally with 
 | Positions | `/positions` | All positions with open/closed status, filter by symbol/account |
 | CSV upload | `/ingest` | Drag-and-drop CSV; shows insert/update counts; inline error display |
 | Admin: users | `/admin/users` | Create, deactivate, regenerate API key; pill sub-nav to export (admin-only) |
+| Admin: market data | `/admin/market-data` | Two tabs: (1) list option trades missing `underlying_at_entry` with one-click Polygon.io enrichment; (2) fetch 1m/5m/15m OHLCV bars for any symbol and date range. Admin-only. |
 | Admin: export | `/admin/export` | Export trade annotations as JSON (format v2.0); per-account or multi-user selection (admin-only) |
 | About | `/about` | Release notes parsed from RELEASE_NOTES.md; Bootstrap accordion; current release badged |
 | Settings | `/settings` | User preferences |
@@ -327,9 +329,12 @@ for the user, not just affected symbols. This is fast enough currently but will 
 bottleneck at large trade volumes (same class of problem as positions had before §5.3).
 
 ### No real-time data
-All data is file-import only. There is no connection to live broker APIs or market data
-feeds. The `ohlcv_price_series` table exists but is empty — it was designed for future
-entry/exit price analysis against market context.
+All data is file-import only. There is no connection to live broker APIs. Historical
+OHLCV bars are fetched on demand from Polygon.io (`market_data.py`) and cached in
+`ohlcv_price_series`. `underlying_at_entry` on `trade_annotations` is auto-populated
+for option trades on every CSV upload (when `MASSIVE_API_KEY` is set), and can also
+be backfilled manually via Admin → Market Data. Analysis of T1/T2 reach and VIX
+context is not yet implemented.
 
 ### Single brokerage source
 The parser understands Schwab CSV format only. Other brokerages would require a new parser
@@ -354,6 +359,7 @@ trading_journal/
 ├── trade_completion.py     TradeCompletionEngine — groups fills into completed trades
 ├── positions.py            PositionTracker — avg cost basis, bulk UPSERT, option expiry
 ├── dashboard.py            DashboardEngine — metrics aggregation
+├── market_data.py          MassiveClient (Polygon.io); enrich_missing_underlying_prices; enrich_trades_by_ids
 ├── grail_connector.py      Read-only connector to external grail_files DB
 ├── config.py               Two-tier TOML config loader
 ├── database.py             db_manager singleton, session context manager
