@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Custom Commands
 
-**`prime app`** — Read all key project files to build full context on this application (CLAUDE.md, docs/OVERVIEW.md, docs/PRD.md, pyproject.toml, and the main source files).
+**`prime app`** — Read `CLAUDE.md` and `docs/OVERVIEW.md` to build full context on this application. OVERVIEW.md is the authoritative description of architecture, design decisions, feature inventory, and file map. Read individual source files on demand when a task requires it — use §11 of OVERVIEW.md to locate the right file.
 
 ## Project Overview
 
