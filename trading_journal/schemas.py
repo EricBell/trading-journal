@@ -104,8 +104,8 @@ class NdjsonRecord(BaseModel):
     @field_validator('asset_type')
     @classmethod
     def validate_asset_type(cls, v):
-        if v is not None and v not in ['STOCK', 'OPTION', 'ETF']:
-            raise ValueError('asset_type must be STOCK, OPTION, or ETF')
+        if v is not None and v not in ['STOCK', 'OPTION', 'ETF', 'FUTURES']:
+            raise ValueError('asset_type must be STOCK, OPTION, ETF, or FUTURES')
         return v
 
     @property
@@ -122,6 +122,11 @@ class NdjsonRecord(BaseModel):
     def is_option(self) -> bool:
         """Check if this is an option trade."""
         return self.asset_type == 'OPTION' or self.type in ['CALL', 'PUT']
+
+    @property
+    def is_futures(self) -> bool:
+        """Check if this is a futures trade."""
+        return self.asset_type == 'FUTURES'
 
     @property
     def is_section_header(self) -> bool:

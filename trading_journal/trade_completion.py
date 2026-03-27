@@ -52,8 +52,10 @@ class TradeCompletionEngine:
             trade_groups: Dict[Any, List[Trade]] = {}
             for trade in unlinked_trades:
                 key = (trade.symbol, trade.instrument_type, trade.account_id)
-                if trade.option_data:
+                if trade.instrument_type == 'OPTION' and trade.option_data:
                     key = key + (trade.exp_date, trade.strike_price, trade.option_type)
+                elif trade.instrument_type == 'FUTURES':
+                    key = key + (trade.exp_date,)
                 trade_groups.setdefault(key, []).append(trade)
 
             completed_count = 0
@@ -116,10 +118,13 @@ class TradeCompletionEngine:
             trade_groups = {}
             for trade in unlinked_trades:
                 key = (trade.symbol, trade.instrument_type, trade.account_id)
-                if trade.option_data:
+                if trade.instrument_type == 'OPTION' and trade.option_data:
                     # For options, include expiration and strike in key
                     option_key = (trade.exp_date, trade.strike_price, trade.option_type)
                     key = key + option_key
+                elif trade.instrument_type == 'FUTURES':
+                    # For futures, include contract expiry to distinguish JUN26 from SEP26
+                    key = key + (trade.exp_date,)
 
                 if key not in trade_groups:
                     trade_groups[key] = []
@@ -215,27 +220,41 @@ class TradeCompletionEngine:
             logger.warning(f"Trade cycle for {cycle_trades[0].symbol} is incomplete, skipping.")
             return
 
-        # Get contract multiplier (100 for options, 1 for equity/ETF)
-        multiplier = get_contract_multiplier(cycle_trades[0].instrument_type)
+        # Get contract multiplier (100 for options, $N/point for futures, 1 for equity)
+        first_trade = cycle_trades[0]
+        multiplier = get_contract_multiplier(first_trade.instrument_type, first_trade.symbol or '')
 
-        # Calculate weighted average entry price from all "TO OPEN" trades
-        total_open_cost = sum(Decimal(str(t.net_price)) * abs(t.qty) * multiplier for t in opens)
         total_open_qty = sum(abs(t.qty) for t in opens)
-        entry_avg_price = total_open_cost / total_open_qty if total_open_qty else Decimal(0)
-
-        # Calculate weighted average exit price from all "TO CLOSE" trades
-        total_close_proceeds = sum(Decimal(str(t.net_price)) * abs(t.qty) * multiplier for t in closes)
         total_close_qty = sum(abs(t.qty) for t in closes)
-        exit_avg_price = total_close_proceeds / total_close_qty if total_close_qty else Decimal(0)
 
-        # Gross cost and proceeds (already multiplied by contract multiplier)
-        gross_cost = total_open_cost
-        gross_proceeds = total_close_proceeds
+        if first_trade.instrument_type == 'FUTURES':
+            # For futures: store raw point prices (not dollar notional) so the UI shows
+            # recognisable index levels (e.g. 6590.50) rather than contract notional.
+            # The multiplier is applied only when calculating gross_cost/proceeds and P&L.
+            entry_avg_price = (
+                sum(Decimal(str(t.net_price)) * abs(t.qty) for t in opens) / total_open_qty
+                if total_open_qty else Decimal(0)
+            )
+            exit_avg_price = (
+                sum(Decimal(str(t.net_price)) * abs(t.qty) for t in closes) / total_close_qty
+                if total_close_qty else Decimal(0)
+            )
+            gross_cost = entry_avg_price * total_open_qty * multiplier
+            gross_proceeds = exit_avg_price * total_close_qty * multiplier
+        else:
+            # EQUITY / OPTION: existing behaviour — entry_avg_price absorbs the multiplier
+            # (options show per-contract dollar cost, equities show per-share price)
+            total_open_cost = sum(Decimal(str(t.net_price)) * abs(t.qty) * multiplier for t in opens)
+            entry_avg_price = total_open_cost / total_open_qty if total_open_qty else Decimal(0)
+            total_close_proceeds = sum(Decimal(str(t.net_price)) * abs(t.qty) * multiplier for t in closes)
+            exit_avg_price = total_close_proceeds / total_close_qty if total_close_qty else Decimal(0)
+            gross_cost = total_open_cost
+            gross_proceeds = total_close_proceeds
 
         # Determine trade type (LONG/SHORT) from the first opening trade.
         # For options, the right (CALL/PUT) determines direction:
         #   BUY CALL = LONG, BUY PUT = SHORT, SELL CALL = SHORT, SELL PUT = LONG
-        # For equities, side alone determines direction: BUY = LONG, SELL = SHORT.
+        # For equities and futures, side alone determines: BUY = LONG, SELL = SHORT.
         first_open = opens[0]
         if first_open.side == "BUY":
             net_pnl = gross_proceeds - gross_cost
@@ -252,13 +271,25 @@ class TradeCompletionEngine:
         closed_at = max(t.exec_timestamp for t in closes if t.exec_timestamp)
         hold_duration = closed_at - opened_at if opened_at and closed_at else None
 
+        # Build option_details for completed_trade:
+        # - OPTION: copy from the execution's option_data JSONB
+        # - FUTURES: store contract expiry so the UI can display the contract month
+        # - EQUITY: None
+        if first_open.instrument_type == 'FUTURES':
+            ct_option_details = (
+                {"exp_date": first_open.exp_date.isoformat()}
+                if first_open.exp_date else None
+            )
+        else:
+            ct_option_details = first_open.option_data
+
         # Create the single CompletedTrade object
         completed_trade = CompletedTrade(
             user_id=first_open.user_id,
             account_id=first_open.account_id,
             symbol=first_open.symbol,
             instrument_type=first_open.instrument_type,
-            option_details=first_open.option_data,
+            option_details=ct_option_details,
             total_qty=total_open_qty,
             entry_avg_price=float(entry_avg_price),
             exit_avg_price=float(exit_avg_price),

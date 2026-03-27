@@ -343,7 +343,12 @@ class NdjsonIngester:
         """Convert NdjsonRecord to Trade table data."""
 
         # Determine instrument type
-        instrument_type = "OPTION" if record.is_option else "EQUITY"
+        if record.is_futures:
+            instrument_type = "FUTURES"
+        elif record.is_option:
+            instrument_type = "OPTION"
+        else:
+            instrument_type = "EQUITY"
 
         # Handle event type
         event_type = record.event_type or "fill"  # Default to fill for missing event_type
@@ -366,6 +371,13 @@ class NdjsonIngester:
             "raw_data": record.raw,
             "processing_timestamp": datetime.now(),
         }
+
+        # Add futures-specific fields (contract expiry for position grouping)
+        if record.is_futures and record.exp:
+            trade_data.update({
+                "exp_date": record.exp,
+                "platform_source": "NINJATRADER",
+            })
 
         # Add option-specific fields
         if record.is_option and record.option:

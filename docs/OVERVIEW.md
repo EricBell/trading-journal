@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.17.0
-**Last Updated:** 2026-03-19
+**Version:** 1.18.0
+**Last Updated:** 2026-03-26
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -358,6 +358,7 @@ trading_journal/
 ├── models.py               SQLAlchemy ORM — all 10 tables
 ├── ingestion.py            NdjsonIngester — ingest pipeline entry point
 ├── csv_parser.py           CsvParser — Schwab CSV → record dicts
+├── ninjatrader_parser.py   NinjaTraderParser — NinjaTrader exec CSV → record dicts (FUTURES)
 ├── schemas.py              NdjsonRecord pydantic schema + unique_key generation
 ├── trade_completion.py     TradeCompletionEngine — groups fills into completed trades
 ├── positions.py            PositionTracker — avg cost basis, bulk UPSERT, option expiry

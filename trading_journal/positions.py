@@ -16,13 +16,39 @@ from .models import Trade, Position, CompletedTrade
 logger = logging.getLogger(__name__)
 
 
-def get_contract_multiplier(instrument_type: str) -> int:
-    """Get the contract multiplier for the given instrument type.
+# Dollar value per index point for common futures contracts.
+# Used by get_contract_multiplier when instrument_type is FUTURES.
+FUTURES_POINT_VALUES: Dict[str, Decimal] = {
+    'ES':  Decimal('50'),    # E-mini S&P 500
+    'MES': Decimal('5'),     # Micro E-mini S&P 500
+    'NQ':  Decimal('20'),    # E-mini Nasdaq-100
+    'MNQ': Decimal('2'),     # Micro E-mini Nasdaq-100
+    'YM':  Decimal('5'),     # E-mini Dow Jones
+    'MYM': Decimal('0.5'),   # Micro E-mini Dow Jones
+    'RTY': Decimal('50'),    # E-mini Russell 2000
+    'M2K': Decimal('10'),    # Micro E-mini Russell 2000
+    'CL':  Decimal('1000'),  # Crude Oil (100 barrels × $10/bbl)
+    'MCL': Decimal('100'),   # Micro Crude Oil (10 barrels × $10/bbl)
+    'GC':  Decimal('100'),   # Gold (100 troy oz × $1/oz)
+    'MGC': Decimal('10'),    # Micro Gold (10 troy oz × $1/oz)
+    'ZB':  Decimal('1000'),  # 30-Year T-Bond
+    'ZN':  Decimal('1000'),  # 10-Year T-Note
+}
 
-    Options contracts represent 100 shares, so premiums must be multiplied by 100.
-    Equity/ETF are 1:1.
+
+def get_contract_multiplier(instrument_type: str, symbol: str = '') -> Decimal:
+    """Get the dollar-per-unit multiplier for the given instrument type.
+
+    - OPTION: 100 (contracts represent 100 shares)
+    - FUTURES: point value looked up by root symbol (e.g. MES → $5/point)
+    - EQUITY/ETF: 1 (1:1 share price)
     """
-    return 100 if instrument_type == "OPTION" else 1
+    if instrument_type == 'OPTION':
+        return Decimal('100')
+    if instrument_type == 'FUTURES':
+        root = symbol.split()[0].upper() if symbol else ''
+        return FUTURES_POINT_VALUES.get(root, Decimal('1'))
+    return Decimal('1')
 
 
 class PositionTracker:
@@ -49,10 +75,12 @@ class PositionTracker:
 
     def _get_or_create_position(self, session: Session, trade: Trade) -> Position:
         """Get existing position or create new one."""
-        # Build option details for unique position identification
+        # Build option/futures details for unique position identification
         option_details = None
         if trade.instrument_type == "OPTION" and trade.option_data:
             option_details = trade.option_data
+        elif trade.instrument_type == "FUTURES" and trade.exp_date:
+            option_details = {"exp_date": trade.exp_date.isoformat()}
 
         account_filter = (
             Position.account_id == trade.account_id
@@ -127,8 +155,8 @@ class PositionTracker:
             return
 
         trade_qty = trade.qty
-        # Apply contract multiplier for options (100x) vs equity (1x)
-        multiplier = get_contract_multiplier(trade.instrument_type)
+        # Apply contract multiplier for options (100x), futures (e.g. MES=5x), equity (1x)
+        multiplier = get_contract_multiplier(trade.instrument_type, trade.symbol or '')
         trade_cost = Decimal(str(trade.net_price)) * abs(trade_qty) * multiplier
 
         # Determine direction based on side
@@ -187,8 +215,8 @@ class PositionTracker:
         shares_closed = min(shares_closed, abs(position.current_qty))
 
         # Calculate P&L using average cost basis
-        # Apply contract multiplier for options
-        multiplier = get_contract_multiplier(trade.instrument_type)
+        # Apply contract multiplier for options/futures
+        multiplier = get_contract_multiplier(trade.instrument_type, trade.symbol or '')
         cost_basis_per_share = position.avg_cost_basis
         cost_basis = cost_basis_per_share * shares_closed
         proceeds = Decimal(str(trade.net_price)) * shares_closed * multiplier
@@ -282,6 +310,8 @@ class PositionTracker:
             option_details = None
             if trade.instrument_type == "OPTION" and trade.option_data:
                 option_details = trade.option_data
+            elif trade.instrument_type == "FUTURES" and trade.exp_date:
+                option_details = {"exp_date": trade.exp_date.isoformat()}
 
             # Dict key must be hashable; serialise option_details to a stable string.
             option_key = json.dumps(option_details, sort_keys=True) if option_details else None

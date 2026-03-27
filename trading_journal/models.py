@@ -176,7 +176,7 @@ class Trade(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "unique_key", name="unique_trade_per_user"),
         CheckConstraint(
-            "instrument_type IN ('EQUITY', 'OPTION')",
+            "instrument_type IN ('EQUITY', 'OPTION', 'FUTURES')",
             name="valid_instrument_type"
         ),
         CheckConstraint(

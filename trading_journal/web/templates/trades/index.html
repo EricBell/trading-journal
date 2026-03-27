@@ -5,15 +5,33 @@
 <style>
   .date-band-alt td { background-color: #e8edf2 !important; }
   .date-band-alt:hover td { background-color: #dde4eb !important; }
+  /* In select-mode the row click is disabled; show default cursor */
+  .select-mode tr[data-id] { cursor: default !important; }
+  .select-mode tr[data-id]:hover td { background-color: inherit; }
+  .select-mode tr[data-id].date-band-alt:hover td { background-color: #dde4eb !important; }
+  /* Highlight selected rows */
+  tr.row-selected td { background-color: #fff3cd !important; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0">Completed Trades</h4>
+  {# Bulk-delete toolbar — hidden until at least one row is checked #}
+  <div id="delete-toolbar" class="d-none d-flex align-items-center gap-2">
+    <span class="text-muted small" id="selected-count-label">0 selected</span>
+    <form id="bulk-delete-form" action="{{ url_for('trades.bulk_delete') }}" method="post" style="display:inline">
+      <button type="button" id="bulk-delete-btn"
+              class="btn btn-sm btn-danger" disabled
+              onclick="confirmBulkDelete()">
+        Delete Selected
+      </button>
+    </form>
+    <button class="btn btn-sm btn-outline-secondary" onclick="exitSelectMode()">Cancel</button>
+  </div>
 </div>
 
-<form class="row g-2 mb-3" method="get">
+<form class="row g-2 mb-3" method="get" id="filter-form">
   <div class="col-auto">
     <input type="text" name="symbol" class="form-control form-control-sm" placeholder="Symbol" value="{{ symbol }}">
   </div>
@@ -41,6 +59,13 @@
     <button class="btn btn-sm btn-primary">Filter</button>
     <a href="{{ url_for('trades.index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
   </div>
+  {# Select-mode toggle — shown when there are trades to delete #}
+  {% if trades %}
+  <div class="col-auto ms-auto">
+    <button type="button" class="btn btn-sm btn-outline-danger" id="select-mode-btn"
+            onclick="enterSelectMode()">Select to Delete</button>
+  </div>
+  {% endif %}
 </form>
 
 {% macro sort_th(label, col_key, extra_class='') %}
@@ -57,9 +82,14 @@
 
 {% if trades or total > 0 %}
 <div class="table-responsive">
-  <table class="table table-sm table-hover align-middle">
+  <table class="table table-sm table-hover align-middle" id="trades-table">
     <thead class="table-dark">
       <tr>
+        {# Checkbox column — visible only in select mode #}
+        <th class="select-col d-none" style="width:2rem">
+          <input type="checkbox" id="select-all-cb" title="Select all on this page"
+                 onchange="toggleSelectAll(this.checked)">
+        </th>
         {{ sort_th('ID', 'id') }}
         {{ sort_th('Symbol', 'symbol') }}
         {{ sort_th('Type', 'type') }}
@@ -81,8 +111,16 @@
         {% if ns.prev_date is not none %}{% set ns.band = 1 - ns.band %}{% endif %}
         {% set ns.prev_date = row_date %}
       {% endif %}
-      <tr onclick="location.href='{{ url_for('trades.detail', trade_id=t.completed_trade_id, sort=sort_col, dir=sort_dir, symbol=symbol, range=range_filter, account=account_filter) }}'"
-          style="cursor:pointer" class="{% if ns.band == 1 %}date-band-alt{% endif %}">
+      <tr data-id="{{ t.completed_trade_id }}"
+          data-href="{{ url_for('trades.detail', trade_id=t.completed_trade_id, sort=sort_col, dir=sort_dir, symbol=symbol, range=range_filter, account=account_filter) }}"
+          onclick="rowClick(this)"
+          style="cursor:pointer"
+          class="{% if ns.band == 1 %}date-band-alt{% endif %}">
+        {# Row checkbox — hidden until select mode #}
+        <td class="select-col d-none">
+          <input type="checkbox" class="row-cb" value="{{ t.completed_trade_id }}"
+                 onchange="rowCbChanged(this)" onclick="event.stopPropagation()">
+        </td>
         <td>{{ t.completed_trade_id }}</td>
         <td>
           <strong>{{ t.symbol }}</strong>
@@ -92,6 +130,8 @@
             {{ t.option_details_dict.get('right', '') }}
             &middot; {{ t.option_details_dict.get('exp_date', '') }}
           </small>
+          {% elif t.instrument_type == 'FUTURES' and t.option_details_dict %}
+          <br><small class="text-muted">{{ t.option_details_dict.get('exp_date', '') }}</small>
           {% endif %}
         </td>
         <td><span class="badge bg-secondary">{{ t.trade_type or t.instrument_type }}</span></td>
@@ -149,4 +189,95 @@
   <a href="{{ url_for('ingest.upload_form') }}" class="btn btn-primary">Upload CSV</a>
 </div>
 {% endif %}
+
+<script>
+(function () {
+  let selectMode = false;
+
+  function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => cb.value);
+  }
+
+  function updateToolbar() {
+    const ids = getSelectedIds();
+    const count = ids.length;
+    document.getElementById('selected-count-label').textContent =
+      count === 0 ? '0 selected' : count + ' selected';
+    document.getElementById('bulk-delete-btn').disabled = count === 0;
+  }
+
+  window.enterSelectMode = function () {
+    selectMode = true;
+    document.getElementById('trades-table').classList.add('select-mode');
+    document.querySelectorAll('.select-col').forEach(el => el.classList.remove('d-none'));
+    document.getElementById('select-mode-btn').classList.add('d-none');
+    document.getElementById('delete-toolbar').classList.remove('d-none');
+    updateToolbar();
+  };
+
+  window.exitSelectMode = function () {
+    selectMode = false;
+    document.getElementById('trades-table').classList.remove('select-mode');
+    document.querySelectorAll('.select-col').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.row-cb').forEach(cb => { cb.checked = false; });
+    document.querySelectorAll('tr.row-selected').forEach(tr => tr.classList.remove('row-selected'));
+    const sab = document.getElementById('select-all-cb');
+    if (sab) sab.checked = false;
+    document.getElementById('select-mode-btn').classList.remove('d-none');
+    document.getElementById('delete-toolbar').classList.add('d-none');
+  };
+
+  window.rowClick = function (row) {
+    if (selectMode) {
+      const cb = row.querySelector('.row-cb');
+      if (cb) { cb.checked = !cb.checked; rowCbChanged(cb); }
+    } else {
+      const href = row.getAttribute('data-href');
+      if (href) location.href = href;
+    }
+  };
+
+  window.rowCbChanged = function (cb) {
+    const row = cb.closest('tr');
+    if (cb.checked) {
+      row.classList.add('row-selected');
+    } else {
+      row.classList.remove('row-selected');
+      const sab = document.getElementById('select-all-cb');
+      if (sab) sab.checked = false;
+    }
+    updateToolbar();
+  };
+
+  window.toggleSelectAll = function (checked) {
+    document.querySelectorAll('.row-cb').forEach(cb => {
+      cb.checked = checked;
+      const row = cb.closest('tr');
+      if (checked) row.classList.add('row-selected');
+      else row.classList.remove('row-selected');
+    });
+    updateToolbar();
+  };
+
+  window.confirmBulkDelete = function () {
+    const ids = getSelectedIds();
+    if (ids.length === 0) return;
+    const msg = `Delete ${ids.length} trade${ids.length === 1 ? '' : 's'} and all their executions?\n\nThis cannot be undone.`;
+    if (!confirm(msg)) return;
+
+    // Inject hidden inputs into the form and submit
+    const form = document.getElementById('bulk-delete-form');
+    // Remove any previously added inputs
+    form.querySelectorAll('input[name="trade_ids"]').forEach(el => el.remove());
+    ids.forEach(id => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'trade_ids';
+      input.value = id;
+      form.appendChild(input);
+    });
+    form.submit();
+  };
+}());
+</script>
 {% endblock %}

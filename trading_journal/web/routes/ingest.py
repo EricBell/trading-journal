@@ -10,6 +10,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...csv_parser import CsvParser
+from ...ninjatrader_parser import NinjaTraderParser, is_ninjatrader_exec_file
 from ...ingestion import NdjsonIngester, IngestionError
 from ...market_data import enrich_missing_underlying_prices
 from ...trade_completion import TradeCompletionEngine
@@ -49,9 +50,16 @@ def upload():
             flash('No valid files to process.', 'warning')
             return redirect(url_for('ingest.upload_form'))
 
-        # Parse CSVs
-        parser = CsvParser(include_rolling=include_rolling)
-        records = parser.parse_files(saved_paths)
+        # Parse CSVs — detect NinjaTrader exec files and route to the right parser
+        schwab_paths = []
+        records = []
+        for path in saved_paths:
+            if is_ninjatrader_exec_file(path):
+                records.extend(NinjaTraderParser().parse_file(path))
+            else:
+                schwab_paths.append(path)
+        if schwab_paths:
+            records.extend(CsvParser(include_rolling=include_rolling).parse_files(schwab_paths))
 
         # Ingest into DB (dry_run=True skips all writes)
         ingester = NdjsonIngester()

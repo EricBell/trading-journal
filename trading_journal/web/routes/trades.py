@@ -4,7 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 from sqlalchemy import asc, desc
 from sqlalchemy.orm import joinedload
 
-from ..auth import admin_required, login_required
+from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
 from ...models import Account, CompletedTrade, SetupPattern, SetupSource, Trade, TradeAnnotation
@@ -319,7 +319,7 @@ def grail_plan(trade_id: int):
 
 
 @bp.route('/trades/<int:trade_id>/delete', methods=['POST'])
-@admin_required
+@login_required
 def delete(trade_id: int):
     user = AuthContext.require_user()
     symbol = None
@@ -342,6 +342,64 @@ def delete(trade_id: int):
     PositionTracker().reprocess_positions_for_symbols(user.user_id, {symbol})
 
     flash(f'Trade #{trade_id} and its executions have been deleted.', 'success')
+    return redirect(url_for('trades.index'))
+
+
+@bp.route('/trades/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete():
+    user = AuthContext.require_user()
+    raw_ids = request.form.getlist('trade_ids')
+    try:
+        trade_ids = [int(i) for i in raw_ids if i.strip()]
+    except ValueError:
+        flash('Invalid trade selection.', 'danger')
+        return redirect(url_for('trades.index'))
+
+    if not trade_ids:
+        flash('No trades selected.', 'warning')
+        return redirect(url_for('trades.index'))
+
+    affected_symbols: set = set()
+
+    with db_manager.get_session() as db_session:
+        trades = (
+            db_session.query(CompletedTrade)
+            .filter(
+                CompletedTrade.completed_trade_id.in_(trade_ids),
+                CompletedTrade.user_id == user.user_id,
+            )
+            .all()
+        )
+
+        if not trades:
+            flash('No matching trades found.', 'warning')
+            return redirect(url_for('trades.index'))
+
+        confirmed_ids = [t.completed_trade_id for t in trades]
+        affected_symbols = {t.symbol for t in trades}
+
+        # Delete annotations (they would be orphaned; ON DELETE SET NULL keeps the row)
+        db_session.query(TradeAnnotation).filter(
+            TradeAnnotation.completed_trade_id.in_(confirmed_ids)
+        ).delete(synchronize_session=False)
+
+        # Delete underlying executions (Tier 1)
+        db_session.query(Trade).filter(
+            Trade.completed_trade_id.in_(confirmed_ids)
+        ).delete(synchronize_session=False)
+
+        # Delete completed trades (Tier 2)
+        db_session.query(CompletedTrade).filter(
+            CompletedTrade.completed_trade_id.in_(confirmed_ids)
+        ).delete(synchronize_session=False)
+
+        db_session.commit()
+
+    # Reprocess positions for affected symbols so P&L stays correct
+    PositionTracker().reprocess_positions_for_symbols(user.user_id, affected_symbols)
+
+    flash(f'Deleted {len(confirmed_ids)} trade(s) and their executions.', 'success')
     return redirect(url_for('trades.index'))
 
 
