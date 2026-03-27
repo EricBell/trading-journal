@@ -1,3 +1,11 @@
+## v1.18.0 - 2026-03-27
+
+### New Features
+- **NinjaTrader futures ingestion** — Upload NinjaTrader executions CSV files (`-exec.csv`) via the existing `/upload` page. The file format is auto-detected; Schwab and NinjaTrader files can be mixed in a single upload. Parses `MES JUN26`-style instrument names into a root symbol (`MES`) plus contract expiry date; supports futures contracts from multiple brokers (MES, ES, NQ, MNQ, YM, CL, GC, and more). Per-contract P&L multipliers are applied correctly (e.g. MES = $5/point). Entry/exit prices are stored as index points so the trades list shows recognisable levels (e.g. 6590.50) rather than contract notional. Contract months are kept separate for position grouping (JUN26 and SEP26 are independent positions). New Alembic migration expands the `instrument_type` constraint to include `FUTURES`.
+- **Bulk delete trades** — The trades list now has a "Select to Delete" button. Clicking enters selection mode: row-level checkboxes appear, a "Select All" toggle appears in the header, and selected rows highlight. A "Delete Selected (N)" button is enabled once at least one trade is checked. Pressing it shows a confirmation dialog then permanently deletes the selected completed trades, their underlying executions, and their annotations, and reprocesses positions for affected symbols. Single-trade delete (on the trade detail page) is now available to all logged-in users rather than admins only.
+
+---
+
 ## v1.17.0 - 2026-03-19
 
 ### New Features
