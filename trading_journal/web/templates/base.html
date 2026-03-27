@@ -32,27 +32,42 @@
              href="{{ url_for('positions.index') }}">Positions</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('ingest.') %}active{% endif %}"
-             href="{{ url_for('ingest.upload_form') }}">Upload CSV</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('settings.') %}active{% endif %}"
-             href="{{ url_for('settings.index') }}">Settings</a>
-        </li>
-        <li class="nav-item">
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('journal.') %}active{% endif %}"
              href="{{ url_for('journal.index') }}">Journal</a>
+        </li>
+        {# Tools dropdown: Upload CSV, Settings, Admin #}
+        {% set tools_active = request.endpoint and (
+            request.endpoint.startswith('ingest.')
+            or request.endpoint.startswith('settings.')
+            or request.endpoint.startswith('admin.')
+        ) %}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if tools_active %}active{% endif %}"
+             href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Tools
+          </a>
+          <ul class="dropdown-menu dropdown-menu-dark">
+            <li>
+              <a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('ingest.') %}active{% endif %}"
+                 href="{{ url_for('ingest.upload_form') }}">Upload CSV</a>
+            </li>
+            <li>
+              <a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('settings.') %}active{% endif %}"
+                 href="{{ url_for('settings.index') }}">Settings</a>
+            </li>
+            {% if user.is_admin %}
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}"
+                 href="{{ url_for('admin.users') }}">Admin</a>
+            </li>
+            {% endif %}
+          </ul>
         </li>
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('about.') %}active{% endif %}"
              href="{{ url_for('about.index') }}">About</a>
         </li>
-        {% if user.is_admin %}
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}"
-             href="{{ url_for('admin.users') }}">Admin</a>
-        </li>
-        {% endif %}
       </ul>
       <span class="navbar-text me-3 text-light">
         <span class="text-secondary small me-2">v{{ app_version }}</span>{{ user.username }}{% if user.is_admin %} <span class="badge bg-warning text-dark">admin</span>{% endif %}

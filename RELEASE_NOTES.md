@@ -1,3 +1,10 @@
+## v1.18.1 - 2026-03-27
+
+### Improvements
+- **Nav "Tools" dropdown** — Upload CSV, Settings, and Admin are now grouped under a single "Tools" dropdown in the navbar, reducing top-level clutter. Admin only appears for admin users, separated by a divider.
+
+---
+
 ## v1.18.0 - 2026-03-27
 
 ### New Features
