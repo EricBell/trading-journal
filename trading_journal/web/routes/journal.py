@@ -1,11 +1,22 @@
 """Journal routes: /journal"""
 
+import zoneinfo
+from datetime import timezone as dt_timezone
+
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
 from ...models import JournalNote
+
+
+def _to_user_tz(dt, user):
+    """Convert a naive UTC datetime to the user's local timezone."""
+    if dt is None:
+        return None
+    user_tz = zoneinfo.ZoneInfo(user.timezone or 'US/Eastern')
+    return dt.replace(tzinfo=dt_timezone.utc).astimezone(user_tz)
 
 bp = Blueprint('journal', __name__, url_prefix='/journal')
 
@@ -26,8 +37,8 @@ def index():
                 'note_id': n.note_id,
                 'title': n.title,
                 'body': n.body,
-                'created_at': n.created_at,
-                'updated_at': n.updated_at,
+                'created_at': _to_user_tz(n.created_at, user),
+                'updated_at': _to_user_tz(n.updated_at, user),
             }
             for n in notes
         ]
@@ -73,8 +84,8 @@ def detail(note_id):
             'note_id': note.note_id,
             'title': note.title,
             'body': note.body,
-            'created_at': note.created_at,
-            'updated_at': note.updated_at,
+            'created_at': _to_user_tz(note.created_at, user),
+            'updated_at': _to_user_tz(note.updated_at, user),
         }
     return render_template('journal/detail.html', user=AuthContext.get_current_user(), note=note_data)
 
