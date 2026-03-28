@@ -24,3 +24,43 @@ The live .claude.json doesn't exist─right─now─—─Claude─Code─manage
   The script auto-reads from default.toml so each machine just needs its own toml with the right
    credentials.                                                                               
                    
+##default.toml
+
+[server]
+host = "192.168..."
+port = 32...
+user = "post..."
+password = "f96CW..."
+
+[metadata]
+created_at = "2025-12-12T19:42:09.502900"
+description = "Main PostgreSQL server"
+
+##postgres-mcp
+
+#!/bin/bash
+# Wrapper for crystaldba/postgres-mcp that reads credentials from
+# ~/.config/postgres/default.toml so the password is never stored in
+# ~/.claude/.claude.json.
+#
+# Override the target database with:
+#   POSTGRES_MCP_DB=trading_journal_dev postgres-mcp
+set -euo pipefail
+
+read -r HOST PORT USER PW <<< "$(python3 - <<'EOF'
+import tomllib, os
+path = os.path.expanduser("~/.config/postgres/default.toml")
+with open(path, "rb") as f:
+    d = tomllib.load(f)
+s = d["server"]
+print(s["host"], s["port"], s["user"], s["password"])
+EOF
+)"
+
+DB="${POSTGRES_MCP_DB:-trading_journal}"
+URI="postgresql://${USER}:${PW}@${HOST}:${PORT}/${DB}"
+
+exec docker run -i --rm \
+    -e "DATABASE_URI=${URI}" \
+    crystaldba/postgres-mcp \
+    --access-mode=restricted
