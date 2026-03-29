@@ -94,9 +94,10 @@ URI="postgresql://${USER}:${PW}@${HOST}:${PORT}/${DB}"
 CONTAINER_NAME="postgres-mcp"
 
 # Remove any stale container from a previous session
-docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
 exec docker run -i --rm --name "$CONTAINER_NAME" \
     -e "DATABASE_URI=${URI}" \
     crystaldba/postgres-mcp \
     --access-mode=restricted
+
