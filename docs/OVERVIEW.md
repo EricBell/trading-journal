@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.18.0
-**Last Updated:** 2026-03-26
+**Version:** 1.18.2
+**Last Updated:** 2026-03-28
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -97,7 +97,7 @@ TIER 1 — trades (executions)
   One row per broker fill. Immutable input data. Never recalculated.
   Source: NDJSON / CSV upload.
   Key fields: unique_key, exec_timestamp, symbol, side, qty, net_price,
-              pos_effect ("TO OPEN" / "TO CLOSE"), instrument_type, option_data (JSONB)
+              pos_effect ("TO OPEN" / "TO CLOSE"), instrument_type (EQUITY/OPTION/FUTURES), option_data (JSONB)
   FK: completed_trade_id (nullable until TradeCompletionEngine runs)
 
 TIER 2 — completed_trades (round-trip trades)
@@ -135,7 +135,7 @@ restores them exactly.
 | `setup_patterns` | User-managed dropdown: pattern names | case-insensitive UNIQUE per user |
 | `setup_sources` | User-managed dropdown: signal sources | case-insensitive UNIQUE per user |
 | `processing_log` | Ingest audit trail | (user_id, file_path, processing_started_at) UNIQUE |
-| `ohlcv_price_series` | 1-min and daily OHLCV bars fetched from Polygon.io; cached to avoid redundant API calls | (symbol, timestamp, timeframe) UNIQUE |
+| `ohlcv_price_series` | 1-min and daily OHLCV bars fetched from Polygon.io; cached to avoid redundant API calls; includes `vwap` column | (symbol, timestamp, timeframe) UNIQUE |
 | `journal_notes` | Free-form trader notes (not trade-linked): title, body (markdown), timestamps | note_id PK; user_id FK |
 
 ### Why `trade_annotations` is a separate table
@@ -193,8 +193,9 @@ and issues a single bulk UPSERT at the end — no per-trade commits, no per-trad
 
 ### 5.4 TradeCompletionEngine grouping algorithm
 
-Executions are grouped by `(account_id, symbol, instrument_type)` for equities, or by
-`(account_id, symbol, instrument_type, exp_date, strike_price, option_type)` for options.
+Executions are grouped by `(account_id, symbol, instrument_type)` for equities, by
+`(account_id, symbol, instrument_type, exp_date, strike_price, option_type)` for options,
+or by `(account_id, symbol, instrument_type, contract_expiry)` for futures.
 `account_id` is the outermost key, ensuring fills from different brokerage accounts for
 the same symbol are never merged into a single `CompletedTrade`.
 
@@ -256,11 +257,11 @@ fire-and-forget: if `grail_files` is unreachable the page renders normally with 
 | Feature | Route | Notes |
 |---|---|---|
 | Dashboard | `/` | Total P&L, win rate, profit factor, avg win/loss, avg trade, largest win/loss, max win/loss streak, trade counts, equity curve. Defaults to "All time" on load. Account filter dropdown. Profit factor = total winning P&L ÷ \|total losing P&L\|; null when no losers. |
-| Trades list | `/trades` | Sort by any column, filter by symbol/date range/account, pagination (per_page persisted in session). Account filter preserved across sort and pagination links. |
+| Trades list | `/trades` | Sort by any column, filter by symbol/date range/account, pagination (per_page persisted in session). Account filter preserved across sort and pagination links. Bulk delete: "Select to Delete" mode enables row checkboxes and a "Select All" toggle; confirms then permanently deletes selected trades, their executions, and their annotations, and reprocesses affected positions. |
 | Trade detail | `/trades/<id>` | Execution breakdown, annotation form, prev/next navigation, Grail plan link with copy-to-clipboard |
 | Trade annotation | `/trades/<id>/annotate` | Pattern (managed dropdown + inline create), source, stop price, notes |
 | Positions | `/positions` | All positions with open/closed status, filter by symbol/account |
-| CSV upload | `/ingest` | Drag-and-drop CSV; shows insert/update counts; inline error display |
+| CSV upload | `/ingest` | Drag-and-drop Schwab CSV, NinjaTrader `-exec.csv`, or NDJSON; file format auto-detected; shows insert/update counts; inline error display |
 | Admin: users | `/admin/users` | Create, deactivate, regenerate API key; pill sub-nav to export (admin-only) |
 | Admin: market data | `/admin/market-data` | Two tabs: (1) list option trades missing `underlying_at_entry` with one-click Polygon.io enrichment; (2) fetch 1m/5m/15m OHLCV bars for any symbol and date range. Admin-only. |
 | Admin: export | `/admin/export` | Export all manually entered data as JSON (format v3.0): trade annotations (grouped by account) + journal notes. Per-user selection. Natural keys documented in `export_metadata.schema` for re-import. Admin-only. |
@@ -355,7 +356,7 @@ the wrong trade.
 
 ```
 trading_journal/
-├── models.py               SQLAlchemy ORM — all 10 tables
+├── models.py               SQLAlchemy ORM — all 11 tables
 ├── ingestion.py            NdjsonIngester — ingest pipeline entry point
 ├── csv_parser.py           CsvParser — Schwab CSV → record dicts
 ├── ninjatrader_parser.py   NinjaTraderParser — NinjaTrader exec CSV → record dicts (FUTURES)
