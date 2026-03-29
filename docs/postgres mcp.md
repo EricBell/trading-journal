@@ -64,3 +64,39 @@ exec docker run -i --rm \
     -e "DATABASE_URI=${URI}" \
     crystaldba/postgres-mcp \
     --access-mode=restricted
+
+## new postgres mcp.md 
+
+#!/bin/bash
+# Wrapper for crystaldba/postgres-mcp that reads credentials from
+# ~/.config/postgres/default.toml so the password is never stored in
+# ~/.claude/.claude.json.
+#
+# Uses a fixed container name so only one instance ever runs at a time.
+# Any stale container from a prior session is removed before starting.
+#
+# Override the target database with:
+#   POSTGRES_MCP_DB=trading_journal_dev postgres-mcp
+set -euo pipefail
+
+read -r HOST PORT USER PW <<< "$(python3 - <<'EOF'
+import tomllib, os
+path = os.path.expanduser("~/.config/postgres/default.toml")
+with open(path, "rb") as f:
+    d = tomllib.load(f)
+s = d["server"]
+print(s["host"], s["port"], s["user"], s["password"])
+EOF
+)"
+
+DB="${POSTGRES_MCP_DB:-trading_journal}"
+URI="postgresql://${USER}:${PW}@${HOST}:${PORT}/${DB}"
+CONTAINER_NAME="postgres-mcp"
+
+# Remove any stale container from a previous session
+docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+
+exec docker run -i --rm --name "$CONTAINER_NAME" \
+    -e "DATABASE_URI=${URI}" \
+    crystaldba/postgres-mcp \
+    --access-mode=restricted

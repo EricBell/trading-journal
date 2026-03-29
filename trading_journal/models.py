@@ -411,6 +411,7 @@ class OhlcvPriceSeries(Base):
     low_price = Column(Numeric(18, 8))
     close_price = Column(Numeric(18, 8))
     volume = Column(Integer)
+    vwap = Column(Numeric(18, 8))
 
 
 class JournalNote(Base):

@@ -1,3 +1,10 @@
+## v1.18.2 - 2026-03-28
+
+### Improvements
+- **ohlcv_price_series** — Added `vwap` column (`NUMERIC(18,8)`) to the market data table.
+
+---
+
 ## v1.18.1 - 2026-03-27
 
 ### Improvements
