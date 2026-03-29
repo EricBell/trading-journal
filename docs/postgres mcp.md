@@ -1,102 +1,123 @@
-The live .claude.json doesn't exist─right─now─—─Claude─Code─manages─it─and─backs─it─up─each───
-  session. The cleanest path is to update the MCP entry via the /mcp dialog in Claude Code      
-  rather than editing a backup.                                                                 
-                                                                                                
-  Here's what to configure when you open /mcp → edit the postgres server:                       
-                                                                                                
-  - Command: /home/ericbell/.local/bin/postgres-mcp                                             
-  - Args: (empty)                                                                             
-  - Env: (empty)                                                                                
-                                                                                                
-  That replaces the current docker run ... DATABASE_URI=postgresql://postgres:f96CW7u!... entry 
-  with the wrapper script.                                                                    
-                                                                                                
-  ---                                                                                         
-  For the other workstation, the setup is:
-                                                                                                
-  1. Copy ~/.config/postgres/default.toml (with that machine's credentials)
-  2. Copy /home/ericbell/.local/bin/postgres-mcp (the script is identical — no machine-specific 
-  values)                                                                                       
-  3. chmod 750 ~/.local/bin/postgres-mcp                                                        
-  4. In Claude Code's /mcp, add a new postgres server with command ~/.local/bin/postgres-mcp, no
-   args, no env                                                                                 
-                                                                                                
-  The script auto-reads from default.toml so each machine just needs its own toml with the right
-   credentials.                                                                               
-                   
-##default.toml
+# PostgreSQL MCP Servers — Setup & Troubleshooting
 
-[server]
-host = "192.168..."
-port = 32...
-user = "post..."
-password = "f96CW..."
+## Current State (as of 2026-03-28)
 
-[metadata]
-created_at = "2025-12-12T19:42:09.502900"
-description = "Main PostgreSQL server"
+Two postgres MCP servers are configured and working. Both use the same wrapper
+script (`/home/ericbell/.local/bin/postgres-mcp`) but point to different
+databases via environment variables.
 
-##postgres-mcp
+### MCP Server Config (`~/.claude/settings.json`)
 
-#!/bin/bash
-# Wrapper for crystaldba/postgres-mcp that reads credentials from
-# ~/.config/postgres/default.toml so the password is never stored in
-# ~/.claude/.claude.json.
-#
-# Override the target database with:
-#   POSTGRES_MCP_DB=trading_journal_dev postgres-mcp
-set -euo pipefail
+```json
+"mcpServers": {
+  "postgres": {
+    "command": "/home/ericbell/.local/bin/postgres-mcp",
+    "args": [],
+    "env": {}
+  },
+  "postgres_grail": {
+    "command": "/home/ericbell/.local/bin/postgres-mcp",
+    "args": [],
+    "env": {
+      "POSTGRES_MCP_DB": "grail_files",
+      "POSTGRES_MCP_CONTAINER": "postgres-mcp-grail"
+    }
+  }
+}
+```
 
-read -r HOST PORT USER PW <<< "$(python3 - <<'EOF'
-import tomllib, os
-path = os.path.expanduser("~/.config/postgres/default.toml")
-with open(path, "rb") as f:
-    d = tomllib.load(f)
-s = d["server"]
-print(s["host"], s["port"], s["user"], s["password"])
-EOF
-)"
+- `postgres` → `trading_journal` database, Docker container `postgres-mcp`
+- `postgres_grail` → `grail_files` database, Docker container `postgres-mcp-grail`
 
-DB="${POSTGRES_MCP_DB:-trading_journal}"
-URI="postgresql://${USER}:${PW}@${HOST}:${PORT}/${DB}"
+The total MCP server count in Claude Code's /mcp dialog should be **4**:
+postgres, postgres_grail, telegram, skill-creator.
 
-exec docker run -i --rm \
-    -e "DATABASE_URI=${URI}" \
-    crystaldba/postgres-mcp \
-    --access-mode=restricted
+---
 
-## new postgres mcp.md 
+## How the Wrapper Works
 
-#!/bin/bash
-# Wrapper for crystaldba/postgres-mcp that reads credentials from
-# ~/.config/postgres/default.toml so the password is never stored in
-# ~/.claude/.claude.json.
-#
-# Uses a fixed container name so only one instance ever runs at a time.
-# Any stale container from a prior session is removed before starting.
-#
-# Override the target database with:
-#   POSTGRES_MCP_DB=trading_journal_dev postgres-mcp
-set -euo pipefail
+`/home/ericbell/.local/bin/postgres-mcp`:
 
-read -r HOST PORT USER PW <<< "$(python3 - <<'EOF'
-import tomllib, os
-path = os.path.expanduser("~/.config/postgres/default.toml")
-with open(path, "rb") as f:
-    d = tomllib.load(f)
-s = d["server"]
-print(s["host"], s["port"], s["user"], s["password"])
-EOF
-)"
+1. Reads credentials from `~/.config/postgres/default.toml` (never hardcoded)
+2. Reads `POSTGRES_MCP_DB` env var (default: `trading_journal`)
+3. Reads `POSTGRES_MCP_CONTAINER` env var (default: `postgres-mcp`)
+4. **If stdin is a terminal** (interactive run): prints config info and exits —
+   does NOT touch any running container
+5. If stdin is a pipe (invoked by Claude Code): runs `docker rm -f <name>` to
+   clear any stale container, then `exec docker run -i --rm --name <name>`
 
-DB="${POSTGRES_MCP_DB:-trading_journal}"
-URI="postgresql://${USER}:${PW}@${HOST}:${PORT}/${DB}"
-CONTAINER_NAME="postgres-mcp"
+The `exec docker run -i` keeps the process alive; Claude Code communicates with
+the MCP server over stdin/stdout of that process.
 
-# Remove any stale container from a previous session
-docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+---
 
-exec docker run -i --rm --name "$CONTAINER_NAME" \
-    -e "DATABASE_URI=${URI}" \
-    crystaldba/postgres-mcp \
-    --access-mode=restricted
+## Known Issue: Orphaned Containers
+
+**Symptom:** `/mcp` dialog shows only 1 postgres server instead of 2.
+
+**Root cause:** The `postgres_grail` MCP server's `docker run` client process
+died (for unknown reasons — possibly a startup race condition), but the Docker
+container kept running because `--rm` only removes the container when the
+*container itself* exits, not when the client disconnects.
+
+**Evidence:**
+- `docker ps` shows both `postgres-mcp` and `postgres-mcp-grail` containers
+- `ps aux | grep "docker run"` shows NO ericbell-owned `docker run` for
+  `postgres-mcp-grail`
+- `mcp__postgres_grail__*` tools never appear in Claude's tool list
+
+**Fix:** Restart Claude Code. Before restarting, clear orphaned containers:
+```bash
+docker rm -f postgres-mcp postgres-mcp-grail
+```
+Then reopen Claude Code — both MCP servers will reinitialize cleanly.
+
+---
+
+## Known Issue: Test Commands Kill Live MCP Containers
+
+**Symptom:** `mcp__postgres__*` tools disconnect mid-session.
+
+**Root cause (now fixed):** Running `postgres-mcp` from a terminal (e.g. to
+test it) used to run `docker rm -f postgres-mcp`, killing the live container
+that Claude Code was using for its MCP connection. This triggered
+mid-conversation tool disconnection.
+
+**Fix applied 2026-03-28:** The wrapper script now checks `[ -t 0 ]`. If stdin
+is a terminal, it prints config info and exits without touching any container.
+
+---
+
+## Verifying Both Servers Are Connected
+
+At the start of a Claude Code session, the deferred tools list should include
+both `mcp__postgres__*` AND `mcp__postgres_grail__*` tool families. If only
+`mcp__postgres__*` is present, `postgres_grail` failed to connect.
+
+Quick checks:
+```bash
+# Both containers should be running
+docker ps | grep postgres-mcp
+
+# Two ericbell-owned docker run processes should exist (one per server)
+ps aux | grep "docker run" | grep -v grep
+```
+
+---
+
+## Supporting Files
+
+- Wrapper script: `/home/ericbell/.local/bin/postgres-mcp`
+- DB credentials: `~/.config/postgres/default.toml`
+- MCP server config: `~/.claude/settings.json` → `mcpServers`
+- Docker image: `crystaldba/postgres-mcp` (must be locally pulled)
+
+---
+
+## Setup on a New Machine
+
+1. Copy `~/.config/postgres/default.toml` (machine-specific credentials)
+2. Copy `/home/ericbell/.local/bin/postgres-mcp`
+3. `chmod 750 ~/.local/bin/postgres-mcp`
+4. Edit `~/.claude/settings.json` to add both `mcpServers` entries (see above)
+5. Pull the Docker image: `docker pull crystaldba/postgres-mcp`
