@@ -100,4 +100,3 @@ exec docker run -i --rm --name "$CONTAINER_NAME" \
     -e "DATABASE_URI=${URI}" \
     crystaldba/postgres-mcp \
     --access-mode=restricted
-
