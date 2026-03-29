@@ -16,15 +16,16 @@ databases via environment variables.
     "env": {}
   },
   "postgres_grail": {
-    "command": "/home/ericbell/.local/bin/postgres-mcp",
+    "command": "/home/ericbell/.local/bin/postgres-mcp-grail",
     "args": [],
-    "env": {
-      "POSTGRES_MCP_DB": "grail_files",
-      "POSTGRES_MCP_CONTAINER": "postgres-mcp-grail"
-    }
+    "env": {}
   }
 }
 ```
+
+**Note:** Each server uses a dedicated wrapper script. Claude Code does NOT pass
+`env` vars from `mcpServers` config to the subprocess (confirmed 2026-03-28).
+The grail-specific DB name and container name are hardcoded in `postgres-mcp-grail`.
 
 - `postgres` → `trading_journal` database, Docker container `postgres-mcp`
 - `postgres_grail` → `grail_files` database, Docker container `postgres-mcp-grail`
@@ -48,6 +49,22 @@ postgres, postgres_grail, telegram, skill-creator.
 
 The `exec docker run -i` keeps the process alive; Claude Code communicates with
 the MCP server over stdin/stdout of that process.
+
+---
+
+## Root Cause: Claude Code Does Not Pass `env` Vars to MCP Subprocesses
+
+**Confirmed 2026-03-28.** The `env` block in `mcpServers` config is silently ignored —
+subprocesses receive no extra environment variables from it.
+
+**Evidence:** Added debug logging to wrapper; after Claude Code restart both invocations
+showed `DB=<unset> CONTAINER=<unset>`, causing both servers to default to the same
+`trading_journal`/`postgres-mcp` container name. The second `docker run --name postgres-mcp`
+failed silently, so `postgres_grail` never connected.
+
+**Fix applied 2026-03-28:** Created `/home/ericbell/.local/bin/postgres-mcp-grail` — a
+dedicated wrapper with `DB=grail_files` and `CONTAINER=postgres-mcp-grail` hardcoded.
+Updated `~/.claude/settings.json` to point `postgres_grail` at this new script.
 
 ---
 
@@ -107,7 +124,7 @@ ps aux | grep "docker run" | grep -v grep
 
 ## Supporting Files
 
-- Wrapper script: `/home/ericbell/.local/bin/postgres-mcp`
+- Wrapper scripts: `/home/ericbell/.local/bin/postgres-mcp` and `postgres-mcp-grail`
 - DB credentials: `~/.config/postgres/default.toml`
 - MCP server config: `~/.claude/settings.json` → `mcpServers`
 - Docker image: `crystaldba/postgres-mcp` (must be locally pulled)
@@ -117,7 +134,7 @@ ps aux | grep "docker run" | grep -v grep
 ## Setup on a New Machine
 
 1. Copy `~/.config/postgres/default.toml` (machine-specific credentials)
-2. Copy `/home/ericbell/.local/bin/postgres-mcp`
-3. `chmod 750 ~/.local/bin/postgres-mcp`
+2. Copy `/home/ericbell/.local/bin/postgres-mcp` and `/home/ericbell/.local/bin/postgres-mcp-grail`
+3. `chmod 750 ~/.local/bin/postgres-mcp ~/.local/bin/postgres-mcp-grail`
 4. Edit `~/.claude/settings.json` to add both `mcpServers` entries (see above)
 5. Pull the Docker image: `docker pull crystaldba/postgres-mcp`
