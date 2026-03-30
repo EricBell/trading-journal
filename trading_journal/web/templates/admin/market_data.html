@@ -12,6 +12,9 @@
   <li class="nav-item">
     <a class="nav-link active" href="{{ url_for('admin.market_data') }}">Market Data</a>
   </li>
+  <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('admin.hg_analysis') }}">HG Analysis</a>
+  </li>
 </ul>
 
 {% if not api_key_set %}

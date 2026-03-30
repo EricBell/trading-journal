@@ -1,3 +1,12 @@
+## v1.22.0 - 2026-03-29
+
+### New Features
+- **HG plan analysis UI (Phase 4)** — Full linked-trade comparison view and batch backfill.
+  - **Trade detail page** — When a grail plan is linked to a trade, an "HG Plan Analysis" card appears at the bottom. It shows: entry zone touch type (badge: `top of zone` / `in zone` / `bottom of zone` / `through zone` / `never touched`), TP1/TP2 reached with bar counts, MFE/MAE, and a trade-vs-plan comparison (actual fill vs zone, actual exit vs TP1). A single "Analyze HG Plan" button (or "Re-analyze") triggers bar hydration + evaluation and redirects back with results shown immediately.
+  - **Admin → HG Analysis** — New admin page (`/admin/market-data/hg-analysis`) lists all past HG analyses with fetch status, entry touch, TP1/TP2 outcome, MFE/MAE, and a link to the associated trade. A "Run Batch (up to 20)" button iterates all trades, finds grail matches, and runs hydration + evaluation for any not yet analyzed. "HG Analysis" tab added to all admin nav pills.
+
+---
+
 ## v1.21.0 - 2026-03-29
 
 ### New Features

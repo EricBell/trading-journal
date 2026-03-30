@@ -321,6 +321,134 @@ def market_data_enrich():
     return redirect(url_for('admin.market_data'))
 
 
+_HG_BATCH_CAP = 20  # max new analyses per batch run
+
+
+@bp.route('/market-data/hg-analysis')
+@admin_required
+def hg_analysis():
+    """Show all HG analyses in the DB and batch-trigger controls."""
+    from sqlalchemy import desc
+    from ...models import HgAnalysisResult, HgMarketDataRequest
+
+    current_user = AuthContext.get_current_user()
+    user_id = current_user.user_id
+
+    with db_manager.get_session() as session:
+        requests = (
+            session.query(HgMarketDataRequest)
+            .filter_by(user_id=user_id)
+            .order_by(desc(HgMarketDataRequest.created_at))
+            .all()
+        )
+        request_ids = [r.hg_market_data_request_id for r in requests]
+        analyses = (
+            session.query(HgAnalysisResult)
+            .filter(HgAnalysisResult.hg_market_data_request_id.in_(request_ids))
+            .all()
+        ) if request_ids else []
+
+        # Build index: request_id → analysis
+        analysis_by_request = {a.hg_market_data_request_id: a for a in analyses}
+
+        rows = [
+            {
+                'request_id': r.hg_market_data_request_id,
+                'grail_plan_id': r.grail_plan_id,
+                'symbol': r.symbol,
+                'timeframe': r.timeframe,
+                'fetch_status': r.status,
+                'bars_received': r.bars_received,
+                'window_rule': r.window_rule,
+                'created_at': r.created_at,
+                'analysis': analysis_by_request.get(r.hg_market_data_request_id),
+            }
+            for r in requests
+        ]
+
+    return render_template(
+        'admin/hg_analysis.html',
+        user=current_user,
+        rows=rows,
+        batch_cap=_HG_BATCH_CAP,
+    )
+
+
+@bp.route('/market-data/hg-batch', methods=['POST'])
+@admin_required
+def hg_batch():
+    """Run hydration + evaluation for all unanalyzed grail-linked trades (capped)."""
+    from ...database import db_manager as _db
+    from ...grail_connector import find_grail_match
+    from ...hg_evaluator import evaluate_hg_plan
+    from ...hg_hydration import hydrate_hg_plan
+    from ...models import CompletedTrade, HgMarketDataRequest
+
+    current_user = AuthContext.get_current_user()
+    user_id = current_user.user_id
+
+    import os
+    if not os.environ.get('MASSIVE_API_KEY'):
+        flash('MASSIVE_API_KEY is not set — cannot fetch bars.', 'warning')
+        return redirect(url_for('admin.hg_analysis'))
+
+    # Load all trades for this user, ordered newest first
+    with _db.get_session() as session:
+        trades = (
+            session.query(CompletedTrade)
+            .filter_by(user_id=user_id)
+            .order_by(CompletedTrade.opened_at.desc())
+            .all()
+        )
+        # Collect already-analyzed grail plan IDs to avoid re-querying
+        analyzed_plan_ids = set(
+            row[0]
+            for row in session.query(HgMarketDataRequest.grail_plan_id)
+            .filter_by(user_id=user_id, status='success')
+            .all()
+        )
+
+    analyzed = 0
+    skipped = 0
+    failed = 0
+    no_match = 0
+
+    for trade in trades:
+        if analyzed >= _HG_BATCH_CAP:
+            break
+
+        match_symbol = trade.symbol.split()[0] if trade.instrument_type == 'OPTION' else trade.symbol
+        grail_record = find_grail_match(match_symbol, trade.opened_at)
+        if grail_record is None:
+            no_match += 1
+            continue
+
+        grail_plan_id = str(grail_record['id'])
+        if grail_plan_id in analyzed_plan_ids:
+            skipped += 1
+            continue
+
+        hydration = hydrate_hg_plan(user_id, grail_plan_id, completed_trade_id=trade.completed_trade_id)
+        if hydration['status'] == 'failed':
+            failed += 1
+            continue
+
+        evaluation = evaluate_hg_plan(hydration['request_id'])
+        if evaluation['status'] not in ('ok', 'skipped'):
+            failed += 1
+            continue
+
+        analyzed_plan_ids.add(grail_plan_id)
+        analyzed += 1
+
+    flash(
+        f"Batch complete: {analyzed} analyzed, {skipped} already done, "
+        f"{failed} failed, {no_match} trades had no grail match.",
+        'success' if analyzed > 0 else 'info',
+    )
+    return redirect(url_for('admin.hg_analysis'))
+
+
 @bp.route('/export')
 @admin_required
 def export_page():

@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Account, CompletedTrade, SetupPattern, SetupSource, Trade, TradeAnnotation
+from ...models import Account, CompletedTrade, HgAnalysisResult, SetupPattern, SetupSource, Trade, TradeAnnotation
 from ...positions import PositionTracker
 
 bp = Blueprint('trades', __name__)
@@ -227,6 +227,14 @@ def detail(trade_id: int):
             .all()
         )
 
+        # Load most recent HG analysis result for this trade (if any)
+        hg_analysis = (
+            db_session.query(HgAnalysisResult)
+            .filter_by(completed_trade_id=trade_id)
+            .order_by(HgAnalysisResult.evaluated_at.desc())
+            .first()
+        )
+
         # Build navigation: fetch ordered IDs for the current filter/sort context
         nav_query = _build_trades_query(
             db_session, user.user_id, symbol, range_filter, account_filter, sort_col, sort_dir
@@ -286,6 +294,7 @@ def detail(trade_id: int):
         sources=sources,
         user=user,
         grail_record=grail_record,
+        hg_analysis=hg_analysis,
         nav=nav,
         back_url=back_url,
         annotate_url=annotate_url,
@@ -509,6 +518,55 @@ def annotate(trade_id: int):
         if _v:
             detail_kwargs[_p] = _v
     return redirect(url_for('trades.detail', **detail_kwargs))
+
+
+@bp.route('/trades/<int:trade_id>/analyze-hg', methods=['POST'])
+@login_required
+def analyze_hg(trade_id: int):
+    """Hydrate bars and evaluate the linked HG plan for this trade."""
+    from ...grail_connector import find_grail_match
+    from ...hg_evaluator import evaluate_hg_plan
+    from ...hg_hydration import hydrate_hg_plan
+
+    user = AuthContext.require_user()
+
+    with db_manager.get_session() as session:
+        trade = session.query(CompletedTrade).filter_by(
+            completed_trade_id=trade_id, user_id=user.user_id
+        ).one_or_none()
+        if trade is None:
+            flash('Trade not found.', 'warning')
+            return redirect(url_for('trades.index'))
+        # For options, match grail on the underlying symbol
+        match_symbol = trade.symbol.split()[0] if trade.instrument_type == 'OPTION' else trade.symbol
+        opened_at = trade.opened_at
+
+    grail_record = find_grail_match(match_symbol, opened_at)
+    if grail_record is None:
+        flash('No grail plan found for this trade.', 'warning')
+        return redirect(url_for('trades.detail', trade_id=trade_id))
+
+    grail_plan_id = str(grail_record['id'])
+
+    hydration = hydrate_hg_plan(user.user_id, grail_plan_id, completed_trade_id=trade_id)
+    if hydration['status'] == 'failed':
+        flash(f"Bar fetch failed: {hydration['message']}", 'danger')
+        return redirect(url_for('trades.detail', trade_id=trade_id))
+
+    evaluation = evaluate_hg_plan(hydration['request_id'])
+    if evaluation['status'] == 'failed':
+        flash(f"Evaluation failed: {evaluation['message']}", 'danger')
+        return redirect(url_for('trades.detail', trade_id=trade_id))
+
+    touch = evaluation['entry_touch_type'].replace('_', ' ')
+    tp1_icon = '✓' if evaluation['tp1_reached'] else '✗'
+    tp2_icon = '✓' if evaluation['tp2_reached'] else '✗'
+    msg = (
+        f"HG Analysis complete — entry: {touch} | TP1: {tp1_icon} | TP2: {tp2_icon}"
+        f" ({evaluation['bars_scanned']} bars scanned)"
+    )
+    flash(msg, 'success' if evaluation['entry_touched'] else 'info')
+    return redirect(url_for('trades.detail', trade_id=trade_id))
 
 
 @bp.route('/trades/<int:trade_id>/set-stop', methods=['POST'])

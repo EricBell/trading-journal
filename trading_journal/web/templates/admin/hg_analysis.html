@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}HG Analysis — Admin{% endblock %}
+
+{% block content %}
+<ul class="nav nav-pills mb-4">
+  <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('admin.users') }}">Users</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('admin.export_page') }}">Export Annotations</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('admin.market_data') }}">Market Data</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link active" href="{{ url_for('admin.hg_analysis') }}">HG Analysis</a>
+  </li>
+</ul>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">HG Plan Analyses</h5>
+  <form method="post" action="{{ url_for('admin.hg_batch') }}"
+        onsubmit="return confirm('Run batch analysis for up to {{ batch_cap }} unanalyzed grail-linked trades?')">
+    <button type="submit" class="btn btn-primary btn-sm">
+      Run Batch (up to {{ batch_cap }})
+    </button>
+  </form>
+</div>
+
+{% if rows %}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th>Plan ID</th>
+          <th>Symbol</th>
+          <th>TF</th>
+          <th>Bars</th>
+          <th>Fetch</th>
+          <th>Entry Touch</th>
+          <th>TP1</th>
+          <th>TP2</th>
+          <th>MFE</th>
+          <th>MAE</th>
+          <th>Analyzed</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="font-monospace small text-muted">{{ row.grail_plan_id }}</td>
+          <td class="fw-semibold">{{ row.symbol }}</td>
+          <td>{{ row.timeframe }}</td>
+          <td>{{ row.bars_received or '—' }}</td>
+          <td>
+            <span class="badge
+              {% if row.fetch_status == 'success' %}bg-success
+              {% elif row.fetch_status == 'failed' %}bg-danger
+              {% elif row.fetch_status == 'partial' %}bg-warning text-dark
+              {% else %}bg-secondary{% endif %}">
+              {{ row.fetch_status }}
+            </span>
+          </td>
+          {% if row.analysis %}
+          <td>
+            {% if row.analysis.entry_touched %}
+              <span class="badge
+                {% if row.analysis.entry_touch_type == 'through_zone' %}bg-success
+                {% elif row.analysis.entry_touch_type == 'bottom_of_zone' %}bg-success
+                {% elif row.analysis.entry_touch_type == 'in_zone' %}bg-info text-dark
+                {% else %}bg-warning text-dark{% endif %}">
+                {{ row.analysis.entry_touch_type | replace('_', ' ') }}
+              </span>
+            {% else %}
+              <span class="badge bg-secondary">never</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.analysis.tp1_reached %}
+              <span class="badge bg-success">✓</span>
+            {% else %}
+              <span class="text-muted">✗</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.analysis.tp2_reached %}
+              <span class="badge bg-success">✓</span>
+            {% else %}
+              <span class="text-muted">✗</span>
+            {% endif %}
+          </td>
+          <td class="text-success small">
+            {% if row.analysis.max_favorable_excursion is not none %}
+              +{{ "%.2f"|format(row.analysis.max_favorable_excursion|float) }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-danger small">
+            {% if row.analysis.max_adverse_excursion is not none %}
+              -{{ "%.2f"|format(row.analysis.max_adverse_excursion|float) }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-muted small">
+            {{ row.analysis.evaluated_at.strftime('%m-%d %H:%M') if row.analysis.evaluated_at else '—' }}
+          </td>
+          <td>
+            {% if row.analysis.completed_trade_id %}
+            <a href="{{ url_for('trades.detail', trade_id=row.analysis.completed_trade_id) }}"
+               class="btn btn-sm btn-outline-secondary py-0">trade</a>
+            {% endif %}
+          </td>
+          {% else %}
+          <td colspan="7" class="text-muted small">not yet evaluated</td>
+          <td></td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+  No HG analyses yet. Click <strong>Run Batch</strong> to analyze trades that have linked grail plans,
+  or open any trade detail page and click <strong>Analyze HG Plan</strong>.
+</div>
+{% endif %}
+
+{% endblock %}

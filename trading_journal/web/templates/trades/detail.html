@@ -228,6 +228,191 @@
     </div>
   </div>
 </div>
+
+{% if grail_record %}
+<div class="row g-3 mt-0">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span>HG Plan Analysis</span>
+        <form method="post" action="{{ url_for('trades.analyze_hg', trade_id=trade.completed_trade_id) }}">
+          <button type="submit" class="btn btn-sm btn-outline-primary">
+            {% if hg_analysis %}Re-analyze{% else %}Analyze HG Plan{% endif %}
+          </button>
+        </form>
+      </div>
+
+      {% if hg_analysis %}
+      <div class="card-body p-0">
+        <div class="row g-0">
+
+          {# ── Left: Plan outcome ── #}
+          <div class="col-md-6 border-end">
+            <div class="p-3">
+              <h6 class="text-muted small text-uppercase mb-2">Plan Outcomes</h6>
+              <table class="table table-sm mb-0">
+                <tr>
+                  <th>Symbol</th>
+                  <td>{{ hg_analysis.symbol }}
+                    <span class="badge bg-secondary ms-1">{{ hg_analysis.timeframe }}</span>
+                    <span class="badge bg-secondary ms-1">{{ hg_analysis.side }}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Entry Zone</th>
+                  <td>
+                    {{ "%.2f"|format(hg_analysis.entry_zone_low|float) }} –
+                    {{ "%.2f"|format(hg_analysis.entry_zone_high|float) }}
+                    {% if hg_analysis.entry_touched %}
+                      <span class="badge ms-1
+                        {% if hg_analysis.entry_touch_type == 'through_zone' %}bg-success
+                        {% elif hg_analysis.entry_touch_type == 'bottom_of_zone' %}bg-success
+                        {% elif hg_analysis.entry_touch_type == 'in_zone' %}bg-info text-dark
+                        {% else %}bg-warning text-dark{% endif %}">
+                        {{ hg_analysis.entry_touch_type | replace('_', ' ') }}
+                      </span>
+                    {% else %}
+                      <span class="badge bg-secondary ms-1">never touched</span>
+                    {% endif %}
+                    {% if hg_analysis.entry_touch_price %}
+                      <span class="text-muted small ms-1">@ {{ "%.2f"|format(hg_analysis.entry_touch_price|float) }}</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% if hg_analysis.target_1_price %}
+                <tr>
+                  <th>TP1</th>
+                  <td>
+                    {{ "%.2f"|format(hg_analysis.target_1_price|float) }}
+                    {% if hg_analysis.tp1_reached %}
+                      <span class="badge bg-success ms-1">reached</span>
+                      {% if hg_analysis.bars_from_entry_to_tp1 %}
+                        <span class="text-muted small ms-1">({{ hg_analysis.bars_from_entry_to_tp1 }} bars)</span>
+                      {% endif %}
+                    {% else %}
+                      <span class="badge bg-secondary ms-1">not reached</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endif %}
+                {% if hg_analysis.target_2_price %}
+                <tr>
+                  <th>TP2</th>
+                  <td>
+                    {{ "%.2f"|format(hg_analysis.target_2_price|float) }}
+                    {% if hg_analysis.tp2_reached %}
+                      <span class="badge bg-success ms-1">reached</span>
+                      {% if hg_analysis.bars_from_entry_to_tp2 %}
+                        <span class="text-muted small ms-1">({{ hg_analysis.bars_from_entry_to_tp2 }} bars)</span>
+                      {% endif %}
+                    {% else %}
+                      <span class="badge bg-secondary ms-1">not reached</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endif %}
+                <tr>
+                  <th>Bars to Entry</th>
+                  <td>{{ hg_analysis.bars_to_entry if hg_analysis.bars_to_entry is not none else '—' }}
+                    <span class="text-muted small">of {{ hg_analysis.bars_scanned }} scanned</span>
+                  </td>
+                </tr>
+                {% if hg_analysis.max_favorable_excursion is not none %}
+                <tr>
+                  <th>MFE</th>
+                  <td class="text-success">+{{ "%.2f"|format(hg_analysis.max_favorable_excursion|float) }}</td>
+                </tr>
+                {% endif %}
+                {% if hg_analysis.max_adverse_excursion is not none %}
+                <tr>
+                  <th>MAE</th>
+                  <td class="text-danger">-{{ "%.2f"|format(hg_analysis.max_adverse_excursion|float) }}</td>
+                </tr>
+                {% endif %}
+              </table>
+            </div>
+          </div>
+
+          {# ── Right: Trade vs plan comparison ── #}
+          <div class="col-md-6">
+            <div class="p-3">
+              <h6 class="text-muted small text-uppercase mb-2">Trade vs Plan</h6>
+              <table class="table table-sm mb-0">
+                {% if hg_analysis.entry_zone_low and trade.entry_avg_price %}
+                <tr>
+                  <th>Entry</th>
+                  <td>
+                    <span class="text-muted small">Plan zone:</span>
+                    {{ "%.2f"|format(hg_analysis.entry_zone_low|float) }} – {{ "%.2f"|format(hg_analysis.entry_zone_high|float) }}
+                    <br>
+                    <span class="text-muted small">Actual fill:</span>
+                    {{ "%.4f"|format(trade.entry_avg_price|float) }}
+                    {% set fill = trade.entry_avg_price|float %}
+                    {% set zl = hg_analysis.entry_zone_low|float %}
+                    {% set zh = hg_analysis.entry_zone_high|float %}
+                    {% if fill >= zl and fill <= zh %}
+                      <span class="badge bg-success ms-1">in zone</span>
+                    {% elif (hg_analysis.side == 'long' and fill > zh) or (hg_analysis.side == 'short' and fill < zl) %}
+                      <span class="badge bg-warning text-dark ms-1">missed zone</span>
+                    {% else %}
+                      <span class="badge bg-info text-dark ms-1">past zone</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endif %}
+                {% if trade.exit_avg_price %}
+                <tr>
+                  <th>Exit</th>
+                  <td>
+                    <span class="text-muted small">Actual:</span>
+                    {{ "%.4f"|format(trade.exit_avg_price|float) }}
+                    {% if hg_analysis.target_1_price %}
+                      <br><span class="text-muted small">vs TP1:</span>
+                      {{ "%.2f"|format(hg_analysis.target_1_price|float) }}
+                      {% set exit_p = trade.exit_avg_price|float %}
+                      {% set tp1_p = hg_analysis.target_1_price|float %}
+                      {% if hg_analysis.side == 'long' %}
+                        {% if exit_p >= tp1_p %}
+                          <span class="badge bg-success ms-1">at/past TP1</span>
+                        {% else %}
+                          <span class="badge bg-warning text-dark ms-1">before TP1</span>
+                        {% endif %}
+                      {% else %}
+                        {% if exit_p <= tp1_p %}
+                          <span class="badge bg-success ms-1">at/past TP1</span>
+                        {% else %}
+                          <span class="badge bg-warning text-dark ms-1">before TP1</span>
+                        {% endif %}
+                      {% endif %}
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endif %}
+                <tr>
+                  <th>P&L</th>
+                  <td class="{% if trade.net_pnl and trade.net_pnl > 0 %}text-success{% elif trade.net_pnl and trade.net_pnl < 0 %}text-danger{% endif %}">
+                    ${{ "%.2f"|format(trade.net_pnl|float) if trade.net_pnl else '0.00' }}
+                  </td>
+                </tr>
+              </table>
+              <div class="text-muted small mt-2">
+                Analyzed {{ hg_analysis.evaluated_at.strftime('%Y-%m-%d %H:%M') if hg_analysis.evaluated_at else '—' }}
+                &nbsp;·&nbsp; v{{ hg_analysis.analysis_version }}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      {% else %}
+      <div class="card-body text-muted small">
+        No analysis yet. Click "Analyze HG Plan" to fetch historical bars and evaluate plan outcomes.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
