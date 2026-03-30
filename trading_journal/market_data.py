@@ -199,7 +199,88 @@ class MassiveClient:
         logger.debug("Daily fallback %s on %s → open=%.4f", symbol, date_str, price)
         return price
 
-    def _cache_bars(self, symbol: str, bars: list) -> None:
+    def fetch_window_bars(
+        self, symbol: str, from_ts: datetime, to_ts: datetime, timeframe: str = "1m"
+    ) -> dict:
+        """
+        Fetch all bars for *symbol* in [from_ts, to_ts] and upsert into ohlcv_price_series.
+
+        Returns:
+            {
+                'bars_received': int,
+                'first_bar_at': datetime | None,
+                'last_bar_at':  datetime | None,
+                'error': str | None,
+            }
+        """
+        if not self.enabled:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "MASSIVE_API_KEY not set"}
+
+        # Normalize to UTC-aware
+        if from_ts.tzinfo is None:
+            from_ts = from_ts.replace(tzinfo=timezone.utc)
+        if to_ts.tzinfo is None:
+            to_ts = to_ts.replace(tzinfo=timezone.utc)
+
+        _TF_MAP = {
+            "1m":  (1,  "minute"),
+            "5m":  (5,  "minute"),
+            "15m": (15, "minute"),
+            "1d":  (1,  "day"),
+        }
+        if timeframe not in _TF_MAP:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": f"unsupported timeframe: {timeframe}"}
+
+        multiplier, span = _TF_MAP[timeframe]
+        from_ms = int(from_ts.timestamp() * 1000)
+        to_ms = int(to_ts.timestamp() * 1000)
+
+        url = (
+            f"{_MASSIVE_BASE}/v2/aggs/ticker/{symbol}/range/{multiplier}/{span}"
+            f"/{from_ms}/{to_ms}"
+            f"?adjusted=false&sort=asc&limit=50000&apiKey={self.api_key}"
+        )
+
+        try:
+            data = self._http_get(url, symbol, from_ts, timeframe=timeframe)
+        except _UnavailableError:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "403 Forbidden — bars unavailable for this symbol/timeframe"}
+        except _RateLimitError:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "429 Rate limited"}
+
+        if data is None:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "API call failed"}
+
+        if data.get("status") not in ("OK", "DELAYED"):
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": f"unexpected API status: {data.get('status')}"}
+
+        bars = data.get("results") or []
+        if not bars:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": None}
+
+        self._cache_bars(symbol, bars, timeframe=timeframe)
+
+        first_bar_at = datetime.fromtimestamp(bars[0]["t"] / 1000, tz=timezone.utc)
+        last_bar_at = datetime.fromtimestamp(bars[-1]["t"] / 1000, tz=timezone.utc)
+        logger.info(
+            "fetch_window_bars: %s %s %s→%s → %d bars",
+            symbol, timeframe, from_ts.isoformat(), to_ts.isoformat(), len(bars),
+        )
+        return {
+            "bars_received": len(bars),
+            "first_bar_at": first_bar_at,
+            "last_bar_at": last_bar_at,
+            "error": None,
+        }
+
+    def _cache_bars(self, symbol: str, bars: list, timeframe: str = "1m") -> None:
         """Insert bars into ohlcv_price_series, ignoring conflicts."""
         if not bars:
             return

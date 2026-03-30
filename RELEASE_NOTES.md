@@ -1,3 +1,10 @@
+## v1.20.0 - 2026-03-29
+
+### New Features
+- **HG bar hydration (Phase 2)** — `trading_journal/hg_hydration.py` adds `hydrate_hg_plan(user_id, grail_plan_id, completed_trade_id=None, timeframe='1m')`. Looks up the grail plan from `grail_files`, computes the fetch window (plan_time − 30m through plan_time + 90m, extended to linked trade exit when applicable), fetches the full bar range from Massive/Polygon in a single API call, upserts bars into the shared `ohlcv_price_series` cache, and records the request lifecycle in `hg_market_data_requests` (pending → success/partial/failed). Idempotent: a successful request for the same window is returned as-is; failed/partial requests are retried. `MassiveClient` gains a new `fetch_window_bars(symbol, from_ts, to_ts, timeframe)` method that fetches a wide time window (vs the existing narrow ±3-minute fetch).
+
+---
+
 ## v1.19.0 - 2026-03-29
 
 ### New Features
