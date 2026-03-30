@@ -1,3 +1,10 @@
+## v1.21.0 - 2026-03-29
+
+### New Features
+- **HG plan evaluator (Phase 3)** — `trading_journal/hg_evaluator.py` adds `evaluate_hg_plan(request_id)`. Reads 1-minute bars from `ohlcv_price_series` for an already-hydrated request, runs a deterministic bar-scan, and writes a versioned row to `hg_analysis_results`. Evaluated fields include: entry zone touch (with type classification: `never` / `top_of_zone` / `in_zone` / `bottom_of_zone` / `through_zone`), TP1/TP2 reached (checked only on bars after the entry bar), MFE/MAE with timestamps, `bars_to_entry`, `bars_from_entry_to_tp1/tp2`, and linked-trade comparison prices. Plan parameters (zone, targets, stop) are snapshotted at eval time so results remain stable if grail plan data changes. All prices use `stock_price_range` when present (option plans store option premium in `price_range` but underlying prices in `stock_price_range`). Idempotent: an existing result for the same `(request_id, analysis_version)` is returned as-is.
+
+---
+
 ## v1.20.0 - 2026-03-29
 
 ### New Features
