@@ -87,6 +87,8 @@ class User(Base):
     processing_logs = relationship("ProcessingLog", back_populates="user")
     trade_annotations = relationship("TradeAnnotation", back_populates="user")
     journal_notes = relationship("JournalNote", back_populates="user", order_by="JournalNote.created_at.desc()")
+    hg_market_data_requests = relationship("HgMarketDataRequest", back_populates="user")
+    hg_analysis_results = relationship("HgAnalysisResult", back_populates="user")
 
     # Constraints
     __table_args__ = (
@@ -427,3 +429,158 @@ class JournalNote(Base):
     updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="journal_notes")
+
+
+class HgMarketDataRequest(Base):
+    """Audit trail of historical market-data fetches requested for a specific HG plan."""
+
+    __tablename__ = "hg_market_data_requests"
+
+    hg_market_data_request_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+
+    # External grail plan identity
+    grail_plan_id = Column(Text, nullable=False)
+    grail_plan_created_at = Column(TIMESTAMP(timezone=True), nullable=False)
+
+    # Optional local link to a matched trade
+    completed_trade_id = Column(
+        BigInteger,
+        ForeignKey("completed_trades.completed_trade_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Market data request identity
+    symbol = Column(String(50), nullable=False)
+    timeframe = Column(String(10), nullable=False)
+    fetch_start_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    fetch_end_at = Column(TIMESTAMP(timezone=True), nullable=False)
+
+    # Window provenance
+    request_source = Column(String(20), nullable=False, default="manual")
+    window_rule = Column(String(50), nullable=False)
+    linked_trade_exit_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    # Fetch result bookkeeping
+    status = Column(String(20), nullable=False, default="pending")
+    bars_expected = Column(Integer, nullable=True)
+    bars_received = Column(Integer, nullable=True)
+    first_bar_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_bar_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    provider = Column(String(50), nullable=False, default="massive")
+    provider_request_meta = Column(JSONB, nullable=False, default=dict)
+    error_text = Column(Text, nullable=True)
+    fetched_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("timeframe IN ('1m', '5m', '15m', '1d')", name="chk_hg_mdr_timeframe"),
+        CheckConstraint("status IN ('pending', 'success', 'partial', 'failed')", name="chk_hg_mdr_status"),
+        CheckConstraint("request_source IN ('manual', 'batch', 'trade_linked')", name="chk_hg_mdr_source"),
+        CheckConstraint("fetch_end_at > fetch_start_at", name="chk_hg_mdr_window"),
+        UniqueConstraint(
+            "user_id", "grail_plan_id", "timeframe", "fetch_start_at", "fetch_end_at",
+            name="uq_hg_market_data_request_window",
+        ),
+    )
+
+    user = relationship("User", back_populates="hg_market_data_requests")
+    analysis_results = relationship("HgAnalysisResult", back_populates="market_data_request")
+
+
+class HgAnalysisResult(Base):
+    """Versioned, deterministic evaluation results for an HG plan against fetched market data."""
+
+    __tablename__ = "hg_analysis_results"
+
+    hg_analysis_result_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    hg_market_data_request_id = Column(
+        BigInteger,
+        ForeignKey("hg_market_data_requests.hg_market_data_request_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Denormalized external identity for easy querying
+    grail_plan_id = Column(Text, nullable=False)
+    grail_plan_created_at = Column(TIMESTAMP(timezone=True), nullable=False)
+
+    completed_trade_id = Column(
+        BigInteger,
+        ForeignKey("completed_trades.completed_trade_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    symbol = Column(String(50), nullable=False)
+    timeframe = Column(String(10), nullable=False)
+    analysis_version = Column(Integer, nullable=False, default=1)
+    evaluated_at = Column(TIMESTAMP(timezone=True), default=func.now())
+
+    # Plan parameters captured at evaluation time
+    side = Column(String(10), nullable=False)
+    instrument_type = Column(String(10), nullable=False)
+    entry_zone_low = Column(Numeric(18, 8), nullable=False)
+    entry_zone_high = Column(Numeric(18, 8), nullable=False)
+    target_1_price = Column(Numeric(18, 8), nullable=True)
+    target_2_price = Column(Numeric(18, 8), nullable=True)
+    stop_price = Column(Numeric(18, 8), nullable=True)
+
+    # Evaluation window
+    eval_start_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    eval_end_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    bars_scanned = Column(Integer, nullable=False, default=0)
+
+    # Entry behavior
+    entry_touched = Column(Boolean, nullable=False, default=False)
+    entry_first_touch_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    entry_touch_type = Column(String(20), nullable=False, default="never")
+    entry_touch_price = Column(Numeric(18, 8), nullable=True)
+
+    # Target behavior
+    tp1_reached = Column(Boolean, nullable=False, default=False)
+    tp1_reached_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    tp2_reached = Column(Boolean, nullable=False, default=False)
+    tp2_reached_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    # Excursion metrics
+    max_favorable_excursion = Column(Numeric(18, 8), nullable=True)
+    max_adverse_excursion = Column(Numeric(18, 8), nullable=True)
+    mfe_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    mae_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    # Timing metrics
+    bars_to_entry = Column(Integer, nullable=True)
+    bars_from_entry_to_tp1 = Column(Integer, nullable=True)
+    bars_from_entry_to_tp2 = Column(Integer, nullable=True)
+
+    # Trade comparison hooks for later UI
+    linked_trade_opened_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    linked_trade_closed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    linked_trade_entry_price = Column(Numeric(18, 8), nullable=True)
+    linked_trade_exit_price = Column(Numeric(18, 8), nullable=True)
+
+    notes = Column(JSONB, nullable=False, default=dict)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("timeframe IN ('1m', '5m', '15m', '1d')", name="chk_hg_ar_timeframe"),
+        CheckConstraint("side IN ('long', 'short')", name="chk_hg_ar_side"),
+        CheckConstraint("instrument_type IN ('equity', 'option')", name="chk_hg_ar_instrument_type"),
+        CheckConstraint(
+            "entry_touch_type IN ('never', 'top_of_zone', 'in_zone', 'bottom_of_zone', 'through_zone')",
+            name="chk_hg_ar_touch_type",
+        ),
+        CheckConstraint("eval_end_at > eval_start_at", name="chk_hg_ar_eval_window"),
+        CheckConstraint("entry_zone_high >= entry_zone_low", name="chk_hg_ar_entry_zone"),
+        UniqueConstraint(
+            "hg_market_data_request_id", "analysis_version",
+            name="uq_hg_analysis_results_version",
+        ),
+    )
+
+    user = relationship("User", back_populates="hg_analysis_results")
+    market_data_request = relationship("HgMarketDataRequest", back_populates="analysis_results")

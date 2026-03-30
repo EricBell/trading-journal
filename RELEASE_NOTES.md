@@ -1,3 +1,13 @@
+## v1.19.0 - 2026-03-29
+
+### New Features
+- **HG historical analysis schema (Phase 1)** — Two new tables added via Alembic migration:
+  - `hg_market_data_requests` — audit trail of bar-fetch requests for a given HG plan (symbol, timeframe, window, status, bar counts, provider metadata).
+  - `hg_analysis_results` — versioned, deterministic evaluation results per HG: entry-zone touch type (`never`/`top_of_zone`/`in_zone`/`bottom_of_zone`/`through_zone`), TP1/TP2 reached, MFE/MAE with timestamps, bars-to-entry, and linked-trade comparison hooks. Results are stored, not live-computed, and keyed by `analysis_version` so logic can evolve without losing historical rows.
+  - Raw bars continue to live in the shared `ohlcv_price_series` cache (unchanged).
+
+---
+
 ## v1.18.2 - 2026-03-28
 
 ### Improvements
