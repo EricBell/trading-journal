@@ -1,3 +1,15 @@
+## v1.23.0 - 2026-03-30
+
+### New Features
+- **OHLCV Explorer** — New "Explore OHLCV" sub-tab on Admin → Market Data. Provides a read-only data exploration interface for the `ohlcv_price_series` table:
+  - **Summary stats** — total bar count, distinct symbol count, earliest/latest bar date, row counts by timeframe.
+  - **HG Plan Coverage table** — one row per `hg_market_data_requests` entry (newest first), showing symbol, grail plan ID, timeframe, fetch window, bars stored, status badge, and whether an `HgAnalysisResult` exists.
+  - **Schema Reference** — collapsible reference card showing all columns and types for both `ohlcv_price_series` and key columns of `hg_market_data_requests`.
+  - **SQL Query box** — free-form SELECT query textarea (SELECT-only enforced server-side; multi-statement blocked) with results table capped at 500 rows.
+  - Pre-filled starter query JOINs bars back to their source HG plan.
+
+---
+
 ## v1.22.0 - 2026-03-29
 
 ### New Features

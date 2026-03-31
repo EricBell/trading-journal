@@ -43,6 +43,13 @@
       Fetch Sample Data
     </button>
   </li>
+  <li class="nav-item" role="presentation">
+    <a class="nav-link {% if active_tab == 'explore' %}active{% endif %}"
+       href="{{ url_for('admin.market_data', tab='explore') }}"
+       id="tab-explore" role="tab">
+      Explore OHLCV
+    </a>
+  </li>
 </ul>
 
 <div class="tab-content">
@@ -222,6 +229,213 @@
     {% endif %}
 
   </div>{# /pane-sample #}
+
+  {# ── Tab 3: Explore OHLCV ── #}
+  <div class="tab-pane fade {% if active_tab == 'explore' %}show active{% endif %}"
+       id="pane-explore" role="tabpanel">
+
+    {# Summary stats #}
+    {% if ohlcv_summary is not none %}
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-lg-3">
+        <div class="card text-center">
+          <div class="card-body py-2">
+            <div class="fs-4 fw-bold">{{ ohlcv_summary.total }}</div>
+            <div class="text-muted small">Total Bars</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card text-center">
+          <div class="card-body py-2">
+            <div class="fs-4 fw-bold">{{ ohlcv_summary.symbol_count }}</div>
+            <div class="text-muted small">Symbols</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card text-center">
+          <div class="card-body py-2">
+            <div class="fs-6 fw-bold font-monospace">{{ ohlcv_summary.earliest.strftime('%Y-%m-%d') if ohlcv_summary.earliest else '—' }}</div>
+            <div class="text-muted small">Earliest Bar</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card text-center">
+          <div class="card-body py-2">
+            <div class="fs-6 fw-bold font-monospace">{{ ohlcv_summary.latest.strftime('%Y-%m-%d') if ohlcv_summary.latest else '—' }}</div>
+            <div class="text-muted small">Latest Bar</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% if ohlcv_summary.timeframes %}
+    <div class="mb-4">
+      <span class="text-muted small me-2">Rows by timeframe:</span>
+      {% for tf, cnt in ohlcv_summary.timeframes.items() | sort %}
+      <span class="badge bg-secondary me-1">{{ tf }}: {{ cnt }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {# HG Coverage table #}
+    {% if hg_coverage is not none %}
+    <div class="card mb-4">
+      <div class="card-header">HG Plan Coverage</div>
+      {% if hg_coverage %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Symbol</th>
+              <th>Grail Plan ID</th>
+              <th>TF</th>
+              <th>Fetch Window</th>
+              <th class="text-end">Bars</th>
+              <th>Status</th>
+              <th class="text-center">Analysis</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in hg_coverage %}
+            <tr>
+              <td class="fw-semibold">{{ row.symbol }}</td>
+              <td class="font-monospace small text-truncate" style="max-width:10rem" title="{{ row.grail_plan_id }}">{{ row.grail_plan_id }}</td>
+              <td><span class="badge bg-secondary">{{ row.timeframe }}</span></td>
+              <td class="small text-muted">
+                {{ row.fetch_start_at.strftime('%m/%d %H:%M') if row.fetch_start_at else '—' }}
+                →
+                {{ row.fetch_end_at.strftime('%H:%M') if row.fetch_end_at else '—' }}
+              </td>
+              <td class="text-end">{{ row.bars_received if row.bars_received is not none else '—' }}</td>
+              <td>
+                {% if row.status == 'success' %}<span class="badge bg-success">success</span>
+                {% elif row.status == 'failed' %}<span class="badge bg-danger">failed</span>
+                {% elif row.status == 'partial' %}<span class="badge bg-warning text-dark">partial</span>
+                {% else %}<span class="badge bg-secondary">{{ row.status }}</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if row.has_analysis %}<span class="text-success fw-bold">✓</span>{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card-body text-muted">No HG market data requests found.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# Schema Reference #}
+    <details class="mb-4">
+      <summary class="fw-semibold mb-2" style="cursor:pointer">Schema Reference</summary>
+      <div class="row g-3 mt-1">
+        <div class="col-md-5">
+          <div class="card">
+            <div class="card-header small fw-semibold font-monospace">ohlcv_price_series</div>
+            <div class="table-responsive">
+              <table class="table table-sm mb-0 small">
+                <thead class="table-secondary"><tr><th>Column</th><th>Type</th><th>Nullable</th></tr></thead>
+                <tbody>
+                  <tr><td class="font-monospace">series_id</td><td>bigint</td><td>No (PK)</td></tr>
+                  <tr><td class="font-monospace">symbol</td><td>varchar(50)</td><td>No</td></tr>
+                  <tr><td class="font-monospace">timestamp</td><td>timestamptz</td><td>No</td></tr>
+                  <tr><td class="font-monospace">timeframe</td><td>varchar(10)</td><td>No</td></tr>
+                  <tr><td class="font-monospace">open_price</td><td>numeric(18,8)</td><td>Yes</td></tr>
+                  <tr><td class="font-monospace">high_price</td><td>numeric(18,8)</td><td>Yes</td></tr>
+                  <tr><td class="font-monospace">low_price</td><td>numeric(18,8)</td><td>Yes</td></tr>
+                  <tr><td class="font-monospace">close_price</td><td>numeric(18,8)</td><td>Yes</td></tr>
+                  <tr><td class="font-monospace">volume</td><td>integer</td><td>Yes</td></tr>
+                  <tr><td class="font-monospace">vwap</td><td>numeric(18,8)</td><td>Yes</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-7">
+          <div class="card">
+            <div class="card-header small fw-semibold font-monospace">hg_market_data_requests <span class="text-muted fw-normal">(key columns)</span></div>
+            <div class="table-responsive">
+              <table class="table table-sm mb-0 small">
+                <thead class="table-secondary"><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td class="font-monospace">hg_market_data_request_id</td><td>bigint</td><td>PK</td></tr>
+                  <tr><td class="font-monospace">grail_plan_id</td><td>text</td><td>External plan ID</td></tr>
+                  <tr><td class="font-monospace">symbol</td><td>varchar(50)</td><td></td></tr>
+                  <tr><td class="font-monospace">timeframe</td><td>varchar(10)</td><td></td></tr>
+                  <tr><td class="font-monospace">fetch_start_at</td><td>timestamptz</td><td>Window start</td></tr>
+                  <tr><td class="font-monospace">fetch_end_at</td><td>timestamptz</td><td>Window end</td></tr>
+                  <tr><td class="font-monospace">bars_received</td><td>integer</td><td>Bars fetched</td></tr>
+                  <tr><td class="font-monospace">status</td><td>varchar(20)</td><td>pending/success/partial/failed</td></tr>
+                  <tr><td class="font-monospace">window_rule</td><td>varchar(50)</td><td>e.g. t-30_to_t+90</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    {# SQL Query Box #}
+    <div class="card mb-4">
+      <div class="card-header">SQL Query <span class="text-muted small fw-normal">(SELECT only · max {{ 500 }} rows)</span></div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('admin.market_data') }}">
+          <input type="hidden" name="action" value="explore">
+          <textarea class="form-control font-monospace mb-3" name="sql" rows="9"
+                    style="font-size:0.85rem">{{ explore_sql }}</textarea>
+          <button type="submit" class="btn btn-primary">Execute</button>
+        </form>
+      </div>
+    </div>
+
+    {# Results #}
+    {% if explore_error %}
+    <div class="alert alert-danger">{{ explore_error }}</div>
+    {% endif %}
+
+    {% if explore_columns is not none %}
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Results</span>
+        <span class="text-muted small">
+          {{ explore_row_count }} row{% if explore_row_count != 1 %}s{% endif %}
+          {% if explore_capped %}<span class="badge bg-warning text-dark ms-2">capped at 500</span>{% endif %}
+        </span>
+      </div>
+      {% if explore_rows %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped table-hover mb-0 small">
+          <thead class="table-dark">
+            <tr>
+              {% for col in explore_columns %}
+              <th>{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in explore_rows %}
+            <tr>
+              {% for col in explore_columns %}
+              <td class="font-monospace">{{ row[col] if row[col] is not none else '—' }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card-body text-muted">Query returned no results.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>{# /pane-explore #}
 
 </div>{# /tab-content #}
 

@@ -139,6 +139,85 @@ def set_timezone(target_user_id: int):
     return redirect(url_for('admin.users'))
 
 
+_EXPLORE_ROW_LIMIT = 500
+
+_EXPLORE_STARTER_SQL = """\
+SELECT r.symbol, r.grail_plan_id, r.timeframe,
+       r.fetch_start_at, r.fetch_end_at,
+       COUNT(o.series_id) AS bars_cached,
+       r.status
+FROM hg_market_data_requests r
+LEFT JOIN ohlcv_price_series o
+  ON o.symbol = r.symbol
+ AND o.timeframe = r.timeframe
+ AND o.timestamp BETWEEN r.fetch_start_at AND r.fetch_end_at
+GROUP BY r.hg_market_data_request_id, r.symbol, r.grail_plan_id,
+         r.timeframe, r.fetch_start_at, r.fetch_end_at, r.status
+ORDER BY r.fetch_start_at DESC"""
+
+
+def _validate_select_only(sql: str):
+    stripped = sql.strip().lstrip(';').strip()
+    if not stripped.upper().startswith('SELECT'):
+        return "Only SELECT statements are allowed."
+    if ';' in stripped[:-1]:
+        return "Multiple statements are not allowed."
+    return None
+
+
+def _get_ohlcv_summary(session):
+    from sqlalchemy import func as sa_func
+    from ...models import OhlcvPriceSeries
+
+    total = session.query(sa_func.count()).select_from(OhlcvPriceSeries).scalar() or 0
+    symbol_count = session.query(sa_func.count(sa_func.distinct(OhlcvPriceSeries.symbol))).scalar() or 0
+    date_range = session.query(
+        sa_func.min(OhlcvPriceSeries.timestamp),
+        sa_func.max(OhlcvPriceSeries.timestamp),
+    ).one()
+    timeframe_counts = session.query(
+        OhlcvPriceSeries.timeframe,
+        sa_func.count(),
+    ).group_by(OhlcvPriceSeries.timeframe).all()
+    return {
+        'total': total,
+        'symbol_count': symbol_count,
+        'earliest': date_range[0],
+        'latest': date_range[1],
+        'timeframes': dict(timeframe_counts),
+    }
+
+
+def _get_hg_coverage(session, user_id):
+    from sqlalchemy import desc
+    from ...models import HgAnalysisResult, HgMarketDataRequest
+
+    rows = (
+        session.query(HgMarketDataRequest, HgAnalysisResult)
+        .outerjoin(
+            HgAnalysisResult,
+            HgAnalysisResult.hg_market_data_request_id == HgMarketDataRequest.hg_market_data_request_id,
+        )
+        .filter(HgMarketDataRequest.user_id == user_id)
+        .order_by(desc(HgMarketDataRequest.created_at))
+        .all()
+    )
+    return [
+        {
+            'request_id': r.hg_market_data_request_id,
+            'grail_plan_id': r.grail_plan_id,
+            'symbol': r.symbol,
+            'timeframe': r.timeframe,
+            'fetch_start_at': r.fetch_start_at,
+            'fetch_end_at': r.fetch_end_at,
+            'bars_received': r.bars_received,
+            'status': r.status,
+            'has_analysis': a is not None,
+        }
+        for r, a in rows
+    ]
+
+
 @bp.route('/market-data', methods=['GET', 'POST'])
 @admin_required
 def market_data():
@@ -152,6 +231,7 @@ def market_data():
     from ...market_data import get_unenriched_option_trades
 
     current_user = AuthContext.get_current_user()
+    user_id = current_user.user_id
     api_key = os.environ.get('MASSIVE_API_KEY', '')
     user_tz_str = current_user.timezone or 'US/Eastern'
     try:
@@ -168,7 +248,39 @@ def market_data():
     _VALID_TIMEFRAMES = {'1': 'minute', '5': 'minute', '15': 'minute'}
     form_timeframe = '5'
 
-    if request.method == 'POST':
+    # Explore tab state
+    explore_sql = _EXPLORE_STARTER_SQL
+    explore_columns = None
+    explore_rows = None
+    explore_row_count = None
+    explore_capped = False
+    explore_error = None
+    ohlcv_summary = None
+    hg_coverage = None
+
+    action = request.form.get('action') if request.method == 'POST' else None
+
+    if action == 'explore':
+        explore_sql = request.form.get('sql', '').strip() or _EXPLORE_STARTER_SQL
+        explore_error = _validate_select_only(explore_sql)
+        if not explore_error:
+            try:
+                from sqlalchemy import text as sa_text
+                with db_manager.get_session() as session:
+                    result_proxy = session.execute(sa_text(explore_sql))
+                    explore_columns = list(result_proxy.keys())
+                    fetched = result_proxy.mappings().fetchmany(_EXPLORE_ROW_LIMIT + 1)
+                    explore_capped = len(fetched) > _EXPLORE_ROW_LIMIT
+                    explore_rows = [dict(r) for r in fetched[:_EXPLORE_ROW_LIMIT]]
+                    explore_row_count = len(explore_rows)
+            except Exception as exc:
+                explore_error = str(exc)
+        with db_manager.get_session() as session:
+            ohlcv_summary = _get_ohlcv_summary(session)
+            hg_coverage = _get_hg_coverage(session, user_id)
+        active_tab = 'explore'
+
+    elif request.method == 'POST':
         form_symbol = request.form.get('symbol', '').strip().upper()
         form_date = request.form.get('date', '').strip()
         form_timeframe = request.form.get('timeframe', '5')
@@ -224,11 +336,20 @@ def market_data():
                         result = data
             except Exception as exc:
                 error = str(exc)
+        active_tab = 'sample'
 
-    user_id = current_user.user_id
+    else:  # GET
+        tab = request.args.get('tab', '')
+        if tab == 'explore':
+            active_tab = 'explore'
+            with db_manager.get_session() as session:
+                ohlcv_summary = _get_ohlcv_summary(session)
+                hg_coverage = _get_hg_coverage(session, user_id)
+        else:
+            active_tab = 'resolve'
 
     # Load unenriched trades for the missing-data panel
-    cutoff = datetime.now(dt_timezone.utc) - timedelta(days=730)
+    cutoff_dt = datetime.now(dt_timezone.utc) - timedelta(days=730)
     raw_trades = get_unenriched_option_trades(user_id)
     # Annotate each with user-tz display time and "too_old" flag
     missing_trades = []
@@ -241,7 +362,7 @@ def market_data():
             display_dt = naive.strftime("%Y-%m-%d %H:%M") + f" {user_tz_str}"
             # For "too old" check, reinterpret as the app timezone to get real UTC
             ts_real_utc = naive.replace(tzinfo=user_tz).astimezone(dt_timezone.utc)
-            too_old = ts_real_utc < cutoff
+            too_old = ts_real_utc < cutoff_dt
         else:
             display_dt = "—"
             too_old = False
@@ -259,7 +380,15 @@ def market_data():
         form_timeframe=form_timeframe,
         missing_trades=missing_trades,
         max_per_fetch=4,
-        active_tab='sample' if request.method == 'POST' else 'resolve',
+        active_tab=active_tab,
+        explore_sql=explore_sql,
+        explore_columns=explore_columns,
+        explore_rows=explore_rows,
+        explore_row_count=explore_row_count,
+        explore_capped=explore_capped,
+        explore_error=explore_error,
+        ohlcv_summary=ohlcv_summary,
+        hg_coverage=hg_coverage,
     )
 
 
