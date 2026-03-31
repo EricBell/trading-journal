@@ -395,15 +395,7 @@ RELEASE_NOTES.md            Release history; parsed by /about route
 
 ---
 
-## 12. MCP Tools
-
-See **`docs/postgres mcp.md`** for instructions on using the PostgreSQL MCP server to query
-the trading journal database directly from Claude Code. **Always read that file as part of
-`prime app` — it is required context for every session.**
-
----
-
-## 13. Sibling Projects
+## 12. Sibling Projects
 
 | Project | Location | Role |
 |---|---|---|
