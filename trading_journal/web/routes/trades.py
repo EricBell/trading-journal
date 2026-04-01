@@ -157,7 +157,10 @@ def index():
         page = min(page, total_pages)
         trades = (
             query
-            .options(joinedload(CompletedTrade.account))
+            .options(
+                joinedload(CompletedTrade.account),
+                joinedload(CompletedTrade.trade_annotation),
+            )
             .offset((page - 1) * per_page)
             .limit(per_page)
             .all()
@@ -180,6 +183,42 @@ def index():
             .all()
         )
 
+    # Build grail plan indicators for the current page (one batch query to grail_files)
+    from datetime import timezone as _tz
+    from ...grail_connector import batch_grail_coverage
+
+    def _utc_date(dt):
+        if dt is None:
+            return None
+        return dt.astimezone(_tz.utc).date() if dt.tzinfo else dt.date()
+
+    symbol_date_directions = []
+    for t in trades:
+        ms = t.symbol.split()[0] if t.instrument_type == 'OPTION' else t.symbol
+        td = _utc_date(t.opened_at)
+        if td is not None:
+            symbol_date_directions.append((ms, td, t.trade_type))
+
+    coverage = batch_grail_coverage(symbol_date_directions)
+
+    grail_indicators: dict[int, str] = {}
+    for t in trades:
+        ann = t.trade_annotation
+        if ann is not None and ann.grail_plan_rejected:
+            grail_indicators[t.completed_trade_id] = ''
+        elif ann is not None and ann.grail_plan_id is not None:
+            grail_indicators[t.completed_trade_id] = '!'
+        else:
+            ms = t.symbol.split()[0] if t.instrument_type == 'OPTION' else t.symbol
+            td = _utc_date(t.opened_at)
+            cov = coverage.get((ms, td), {})
+            if cov.get('has_match'):
+                grail_indicators[t.completed_trade_id] = '!'
+            elif cov.get('has_candidates'):
+                grail_indicators[t.completed_trade_id] = '?'
+            else:
+                grail_indicators[t.completed_trade_id] = ''
+
     return render_template(
         'trades/index.html',
         trades=trades,
@@ -196,6 +235,7 @@ def index():
         total=total,
         total_pages=total_pages,
         per_page_options=PER_PAGE_OPTIONS,
+        grail_indicators=grail_indicators,
     )
 
 

@@ -1,3 +1,14 @@
+## v1.25.0 - 2026-04-01
+
+### New Features
+- **Grail plan indicator column on trades list** — A narrow column between ID and Symbol shows the grail plan status for each trade at a glance:
+  - `!` (cyan) — a plan is matched (auto-matched by direction or manually selected)
+  - `?` (yellow) — grail plans exist for that ticker/day but none is currently matched
+  - blank — no grail plans available for that ticker/day, or match was explicitly rejected
+  - Status is computed in a single batch query per page load (one round-trip to grail_files regardless of page size).
+
+---
+
 ## v1.24.0 - 2026-04-01
 
 ### New Features

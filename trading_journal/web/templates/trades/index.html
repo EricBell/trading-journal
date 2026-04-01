@@ -91,6 +91,7 @@
                  onchange="toggleSelectAll(this.checked)">
         </th>
         {{ sort_th('ID', 'id') }}
+        <th style="width:1.5rem" title="Grail plan: ! = plan matched, ? = candidates available but none selected"></th>
         {{ sort_th('Symbol', 'symbol') }}
         {{ sort_th('Type', 'type') }}
         {{ sort_th('Qty', 'qty') }}
@@ -122,6 +123,12 @@
                  onchange="rowCbChanged(this)" onclick="event.stopPropagation()">
         </td>
         <td>{{ t.completed_trade_id }}</td>
+        <td class="text-center px-0">
+          {% set _gi = grail_indicators.get(t.completed_trade_id, '') %}
+          {% if _gi == '!' %}<span class="fw-bold" style="color:#0dcaf0" title="Trade plan matched">!</span>
+          {% elif _gi == '?' %}<span class="fw-bold text-warning" title="Trade plan candidates available — no selection made">?</span>
+          {% endif %}
+        </td>
         <td>
           <strong>{{ t.symbol }}</strong>
           {% if t.instrument_type == 'OPTION' and t.option_details_dict %}

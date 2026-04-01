@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import bindparam, create_engine, text
 from sqlalchemy.engine.url import make_url
 
 from .config import db_config
@@ -96,6 +96,68 @@ def fetch_grail_by_id(plan_id) -> dict | None:
     except Exception as exc:
         logger.warning("grail_files DB unreachable or query failed: %s", exc)
         return None
+
+
+def batch_grail_coverage(symbol_date_directions: list[tuple]) -> dict:
+    """Batch query grail_files for a page of trades — one DB round-trip.
+
+    Args:
+        symbol_date_directions: list of (symbol, trade_date, trade_direction) tuples
+            symbol:          ticker string (options should already be mapped to underlying)
+            trade_date:      datetime.date in UTC
+            trade_direction: "LONG", "SHORT", or None
+
+    Returns:
+        dict keyed by (symbol, trade_date) ->
+            {'has_match': bool,       # direction-matching plan exists
+             'has_candidates': bool}  # any plan exists on that day
+        Missing keys mean grail DB was unreachable; treat as no coverage.
+    """
+    if not symbol_date_directions:
+        return {}
+
+    try:
+        symbols = list({s for s, _, _ in symbol_date_directions})
+        dates = list({d for _, d, _ in symbol_date_directions})
+
+        engine = _grail_engine()
+        with engine.connect() as conn:
+            result = conn.execute(
+                text(
+                    "SELECT ticker, DATE(file_created_at) AS trade_date,"
+                    "       json_content->'trade_plan'->'entry'->>'direction' AS direction"
+                    " FROM grail_files"
+                    " WHERE ticker IN :symbols"
+                    "   AND DATE(file_created_at) IN :dates"
+                ).bindparams(
+                    bindparam("symbols", expanding=True),
+                    bindparam("dates", expanding=True),
+                ),
+                {"symbols": symbols, "dates": dates},
+            )
+            rows = result.mappings().all()
+
+        # Build (ticker, date) → [directions] index from raw results
+        plan_index: dict[tuple, list[str]] = {}
+        for row in rows:
+            key = (row["ticker"], row["trade_date"])
+            plan_index.setdefault(key, []).append((row["direction"] or "").upper())
+
+        coverage: dict[tuple, dict] = {}
+        for symbol, trade_date, trade_direction in symbol_date_directions:
+            key = (symbol, trade_date)
+            directions = plan_index.get(key, [])
+            has_candidates = bool(directions)
+            has_match = has_candidates and (
+                trade_direction is None or trade_direction.upper() in directions
+            )
+            coverage[key] = {"has_match": has_match, "has_candidates": has_candidates}
+
+        return coverage
+
+    except Exception as exc:
+        logger.warning("grail_files batch coverage query failed: %s", exc)
+        return {}
 
 
 def list_grail_candidates(symbol: str, opened_at) -> list[dict]:
