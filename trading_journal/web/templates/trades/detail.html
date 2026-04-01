@@ -65,13 +65,71 @@
           {% else %}
             <span class="badge bg-danger ms-1">LOSS</span>
           {% endif %}
-          {% if grail_record %}
-          <a href="{{ url_for('trades.grail_plan', trade_id=trade.completed_trade_id) }}"
-             class="btn btn-sm btn-outline-info ms-2">View Trade Plan</a>
+          {% if annotation and annotation.grail_plan_rejected %}
+            <span class="badge bg-secondary ms-2">No plan (manually set)</span>
+            <form method="post" action="{{ url_for('trades.set_grail_plan', trade_id=trade.completed_trade_id) }}" class="d-inline ms-1">
+              <input type="hidden" name="action" value="reset">
+              <button type="submit" class="btn btn-sm btn-outline-secondary">Reset</button>
+            </form>
+          {% else %}
+            {% if grail_record %}
+              <a href="{{ url_for('trades.grail_plan', trade_id=trade.completed_trade_id) }}"
+                 class="btn btn-sm btn-outline-info ms-2">View Trade Plan</a>
+              {% if annotation and annotation.grail_plan_id %}
+                <span class="badge bg-warning text-dark ms-1" title="Manually selected plan">manual</span>
+              {% endif %}
+            {% else %}
+              <span class="text-muted small ms-2">No plan matched</span>
+            {% endif %}
+            {% if grail_candidates %}
+              <button class="btn btn-sm btn-outline-secondary ms-1" type="button"
+                      data-bs-toggle="collapse" data-bs-target="#grailCandidates" aria-expanded="false">
+                {{ 'Change Plan' if grail_record else 'Select Plan' }} &#9660;
+              </button>
+              {% if grail_record %}
+              <form method="post" action="{{ url_for('trades.set_grail_plan', trade_id=trade.completed_trade_id) }}" class="d-inline ms-1">
+                <input type="hidden" name="action" value="reject">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+              </form>
+              {% endif %}
+            {% endif %}
           {% endif %}
         </div>
         <button id="copyJsonBtn" type="button" class="btn btn-sm btn-outline-secondary">Copy JSON</button>
       </div>
+      {% if grail_candidates %}
+      <div class="collapse border-top" id="grailCandidates">
+        <div class="px-3 py-2">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr><th>Time (UTC)</th><th>Direction</th><th>Type</th><th></th></tr>
+            </thead>
+            <tbody>
+            {% for c in grail_candidates %}
+            <tr {% if annotation and annotation.grail_plan_id == c.id %}class="table-info"{% endif %}>
+              <td class="font-monospace">{{ c.file_created_at.strftime('%H:%M') if c.file_created_at else '—' }}</td>
+              <td>
+                {% if c.direction == 'LONG' %}<span class="badge bg-success">LONG</span>
+                {% elif c.direction == 'SHORT' %}<span class="badge bg-danger">SHORT</span>
+                {% else %}<span class="badge bg-secondary">?</span>{% endif %}
+              </td>
+              <td class="text-muted small">{{ c.asset_type or '—' }}</td>
+              <td>
+                <form method="post" action="{{ url_for('trades.set_grail_plan', trade_id=trade.completed_trade_id) }}" class="d-inline">
+                  <input type="hidden" name="action" value="select">
+                  <input type="hidden" name="grail_plan_id" value="{{ c.id }}">
+                  <button type="submit" class="btn btn-sm {% if annotation and annotation.grail_plan_id == c.id %}btn-info{% else %}btn-outline-primary{% endif %}">
+                    {{ 'Selected' if annotation and annotation.grail_plan_id == c.id else 'Select' }}
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
       <div class="card-body">
         <table class="table table-sm mb-0">
           <tr><th>Trade ID</th><td>{{ trade.completed_trade_id }}</td></tr>

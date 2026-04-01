@@ -41,6 +41,24 @@ def _get_or_create_annotation(session, trade):
         session.add(ann)
     return ann
 
+def _resolve_grail_record(trade, annotation) -> dict | None:
+    """Determine the grail plan for a trade, respecting manual overrides.
+
+    Priority:
+      1. annotation.grail_plan_rejected=True  → None (user explicitly rejected all plans)
+      2. annotation.grail_plan_id is set      → fetch that specific plan by ID
+      3. Otherwise                             → auto-match by symbol/date/direction
+    """
+    from ...grail_connector import fetch_grail_by_id, find_grail_match
+
+    if annotation is not None and annotation.grail_plan_rejected:
+        return None
+    if annotation is not None and annotation.grail_plan_id is not None:
+        return fetch_grail_by_id(annotation.grail_plan_id)
+    match_symbol = trade.symbol.split()[0] if trade.instrument_type == 'OPTION' else trade.symbol
+    return find_grail_match(match_symbol, trade.opened_at, trade.trade_type)
+
+
 SORT_COLUMNS = {
     'id':      CompletedTrade.completed_trade_id,
     'symbol':  CompletedTrade.symbol,
@@ -279,8 +297,10 @@ def detail(trade_id: int):
             'first_url': None, 'prev_url': None, 'next_url': None, 'last_url': None,
         }
 
-    from ...grail_connector import find_grail_match
-    grail_record = find_grail_match(trade.symbol, trade.opened_at)
+    from ...grail_connector import list_grail_candidates
+    match_symbol = trade.symbol.split()[0] if trade.instrument_type == 'OPTION' else trade.symbol
+    grail_record = _resolve_grail_record(trade, annotation)
+    grail_candidates = list_grail_candidates(match_symbol, trade.opened_at)
 
     back_url = url_for('trades.index', **list_params)
     annotate_url = url_for('trades.annotate', trade_id=trade_id, **list_params)
@@ -294,6 +314,7 @@ def detail(trade_id: int):
         sources=sources,
         user=user,
         grail_record=grail_record,
+        grail_candidates=grail_candidates,
         hg_analysis=hg_analysis,
         nav=nav,
         back_url=back_url,
@@ -312,9 +333,11 @@ def grail_plan(trade_id: int):
         if trade is None:
             flash('Trade not found.', 'warning')
             return redirect(url_for('trades.index'))
+        annotation = session.query(TradeAnnotation).filter_by(
+            completed_trade_id=trade_id
+        ).one_or_none()
 
-    from ...grail_connector import find_grail_match
-    grail_record = find_grail_match(trade.symbol, trade.opened_at)
+    grail_record = _resolve_grail_record(trade, annotation)
     if grail_record is None:
         flash('No trade plan found for this trade.', 'warning')
         return redirect(url_for('trades.detail', trade_id=trade_id))
@@ -524,7 +547,6 @@ def annotate(trade_id: int):
 @login_required
 def analyze_hg(trade_id: int):
     """Hydrate bars and evaluate the linked HG plan for this trade."""
-    from ...grail_connector import find_grail_match
     from ...hg_evaluator import evaluate_hg_plan
     from ...hg_hydration import hydrate_hg_plan
 
@@ -537,11 +559,11 @@ def analyze_hg(trade_id: int):
         if trade is None:
             flash('Trade not found.', 'warning')
             return redirect(url_for('trades.index'))
-        # For options, match grail on the underlying symbol
-        match_symbol = trade.symbol.split()[0] if trade.instrument_type == 'OPTION' else trade.symbol
-        opened_at = trade.opened_at
+        annotation = session.query(TradeAnnotation).filter_by(
+            completed_trade_id=trade_id
+        ).one_or_none()
 
-    grail_record = find_grail_match(match_symbol, opened_at)
+    grail_record = _resolve_grail_record(trade, annotation)
     if grail_record is None:
         flash('No grail plan found for this trade.', 'warning')
         return redirect(url_for('trades.detail', trade_id=trade_id))
@@ -592,6 +614,46 @@ def set_stop(trade_id: int):
                 return redirect(url_for('trades.detail', trade_id=trade_id))
         else:
             ann.stop_price = None
+        session.commit()
+
+    return redirect(url_for('trades.detail', trade_id=trade_id))
+
+
+@bp.route('/trades/<int:trade_id>/set-grail-plan', methods=['POST'])
+@login_required
+def set_grail_plan(trade_id: int):
+    """Override the grail plan matched to a trade, or reject all matches."""
+    user = AuthContext.require_user()
+    action = request.form.get('action', '').strip()
+
+    with db_manager.get_session() as session:
+        trade = session.query(CompletedTrade).filter_by(
+            completed_trade_id=trade_id, user_id=user.user_id
+        ).one_or_none()
+        if trade is None:
+            flash('Trade not found.', 'warning')
+            return redirect(url_for('trades.index'))
+
+        ann = _get_or_create_annotation(session, trade)
+
+        if action == 'select':
+            plan_id_raw = request.form.get('grail_plan_id', '').strip()
+            try:
+                ann.grail_plan_id = int(plan_id_raw)
+                ann.grail_plan_rejected = False
+            except (ValueError, TypeError):
+                flash('Invalid plan ID.', 'warning')
+                return redirect(url_for('trades.detail', trade_id=trade_id))
+        elif action == 'reject':
+            ann.grail_plan_id = None
+            ann.grail_plan_rejected = True
+        elif action == 'reset':
+            ann.grail_plan_id = None
+            ann.grail_plan_rejected = False
+        else:
+            flash('Unknown action.', 'warning')
+            return redirect(url_for('trades.detail', trade_id=trade_id))
+
         session.commit()
 
     return redirect(url_for('trades.detail', trade_id=trade_id))

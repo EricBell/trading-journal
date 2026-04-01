@@ -1,3 +1,20 @@
+## v1.24.0 - 2026-04-01
+
+### New Features
+- **Grail plan direction filtering** — Auto-matching now filters by trade direction (`LONG`/`SHORT`) when querying the grail_files database. A SHORT plan will no longer be matched to a LONG trade and vice versa when multiple plans exist for the same ticker on the same day.
+- **Manual grail plan override** — Trade detail page now shows grail plan controls:
+  - **Change Plan / Select Plan** — expands an inline candidate list of all grail plans for that ticker on the trade date, each showing time, direction (LONG/SHORT badge), and asset type. Click **Select** to pin a specific plan.
+  - **Reject** — explicitly marks the trade as having no matching plan; suppresses auto-matching.
+  - **Reset** — clears any override and re-enables direction-filtered auto-matching.
+  - A "manual" badge appears when a plan is pinned; "No plan (manually set)" badge when rejected.
+  - HG analysis respects the manual override — the "Analyze HG Plan" button uses the pinned plan instead of re-running auto-match.
+
+### Database Migration
+- `trade_annotations`: added `grail_plan_id` (integer, nullable) and `grail_plan_rejected` (boolean, default false).
+- Run `trading-journal db migrate` to apply.
+
+---
+
 ## v1.23.0 - 2026-03-30
 
 ### New Features

@@ -289,6 +289,10 @@ class TradeAnnotation(Base):
     exit_reason = Column(String(30), nullable=True)
     underlying_at_entry = Column(Numeric(18, 8), nullable=True)
 
+    # Grail plan override — user-selected plan ID or explicit rejection flag
+    grail_plan_id = Column(Integer, nullable=True)
+    grail_plan_rejected = Column(Boolean, nullable=False, server_default="false", default=False)
+
     created_at = Column(TIMESTAMP(timezone=True), default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
 
