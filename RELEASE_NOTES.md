@@ -1,3 +1,11 @@
+## v1.25.1 - 2026-04-01
+
+### Bug Fixes
+- **Grail plan "Skip" action** — when candidates exist but no plan is matched, a **Skip** button now appears alongside "Select Plan". Clicking it records the deliberate choice to use no plan (`grail_plan_rejected = true`). Previously, the Reject button only appeared when a plan was already matched.
+- **Trades list indicator for skipped plans** — `grail_plan_rejected = true` now shows `!` in the trades list (decision made) instead of blank. Blank is now reserved strictly for trades where no grail plan candidates exist at all.
+
+---
+
 ## v1.25.0 - 2026-04-01
 
 ### New Features

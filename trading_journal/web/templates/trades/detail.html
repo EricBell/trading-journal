@@ -86,12 +86,10 @@
                       data-bs-toggle="collapse" data-bs-target="#grailCandidates" aria-expanded="false">
                 {{ 'Change Plan' if grail_record else 'Select Plan' }} &#9660;
               </button>
-              {% if grail_record %}
               <form method="post" action="{{ url_for('trades.set_grail_plan', trade_id=trade.completed_trade_id) }}" class="d-inline ms-1">
                 <input type="hidden" name="action" value="reject">
-                <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                <button type="submit" class="btn btn-sm btn-outline-danger">{{ 'Reject' if grail_record else 'Skip' }}</button>
               </form>
-              {% endif %}
             {% endif %}
           {% endif %}
         </div>

@@ -205,7 +205,7 @@ def index():
     for t in trades:
         ann = t.trade_annotation
         if ann is not None and ann.grail_plan_rejected:
-            grail_indicators[t.completed_trade_id] = ''
+            grail_indicators[t.completed_trade_id] = '!'  # decision made: skip all plans
         elif ann is not None and ann.grail_plan_id is not None:
             grail_indicators[t.completed_trade_id] = '!'
         else:
