@@ -1,0 +1,421 @@
+<section class="module" id="module-5" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+
+    <header class="module-header animate-in">
+      <span class="module-number">05</span>
+      <h1 class="module-title">The Web Layer</h1>
+      <p class="module-subtitle">How a URL becomes a web page — and how the app knows who you are</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1: Post Office Metaphor + Flask Overview -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Post Office</h2>
+        <p class="screen-intro">You type a URL. Somewhere, a Python function is about to run. But first — a letter has to find the right department.</p>
+
+        <div class="callout callout-info" style="margin: var(--space-6) 0">
+          <div class="callout-icon">📬</div>
+          <div class="callout-content">
+            <strong class="callout-title">The Metaphor</strong>
+            <p>Every web request is a letter arriving at the post office. <span class="term" data-definition="Flask is a lightweight Python web framework — it is the glue that receives incoming web requests, figures out which Python function should handle them, and sends responses back to the browser.">Flask</span> is the sorting room. It reads the address on the envelope (the URL path like <code>/trades</code>) and hands it to the right department. Each department prepares a response and sends it back. The letter never reaches the wrong department.</p>
+          </div>
+        </div>
+
+        <div class="flow-steps" style="margin: var(--space-8) 0">
+          <div class="flow-step">
+            <div class="flow-step-num">1</div>
+            <p>Browser sends a request to the server</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="flow-step-num">2</div>
+            <p>Flask reads the URL path and finds the matching department</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="flow-step-num">3</div>
+            <p>That department queries the database and builds a response</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="flow-step-num">4</div>
+            <p>The response — a fully rendered HTML page — travels back to your browser</p>
+          </div>
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-6)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Why this matters for you</strong>
+            <p>When you want to add a new page, knowing the sorting room structure means you can tell AI <em>"add a new route in the journal blueprint"</em> — not just <em>"add a page somewhere."</em> Precision saves you a dozen back-and-forth messages.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2: Blueprint Map Architecture Diagram -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Blueprint Map</h2>
+        <p>Flask uses a <span class="term" data-definition="A blueprint is a Flask concept — it is a mini sub-application that groups related routes into one file. Think of it as a department within the post office: auth.py handles all login/logout mail, trades.py handles all trade-related mail, and so on.">blueprint</span> pattern to divide the web app into departments. There are 10 departments, each in its own Python file inside <code>trading_journal/web/routes/</code>. Here is the building map:</p>
+
+        <div class="arch-diagram" style="margin: var(--space-8) 0">
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-4)">
+
+            <div class="arch-component" style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-5); border-left: 4px solid var(--color-actor-2); box-shadow: var(--shadow-sm); cursor: pointer"
+                 data-desc="Handles /login and /logout. Checks username/password, sets the session cookie on success." onclick="showArchDesc(this)">
+              <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2)">
+                <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-actor-2); display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-sm); font-family: var(--font-mono); font-weight: 600">🔐</div>
+                <code style="font-size: var(--text-sm); color: var(--color-accent)">auth.py</code>
+              </div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">/login &nbsp; /logout</p>
+            </div>
+
+            <div class="arch-component" style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-5); border-left: 4px solid var(--color-actor-4); box-shadow: var(--shadow-sm); cursor: pointer"
+                 data-desc="Handles / (the home page). Shows the dashboard: P&L summary, win rate, equity curve chart, account filter." onclick="showArchDesc(this)">
+              <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2)">
+                <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-actor-4); display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-sm)">📊</div>
+                <code style="font-size: var(--text-sm); color: var(--color-accent)">dashboard.py</code>
+              </div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">/ (home)</p>
+            </div>
+
+            <div class="arch-component" style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-5); border-left: 4px solid var(--color-actor-5); box-shadow: var(--shadow-sm); cursor: pointer"
+                 data-desc="Handles /trades (paginated list of completed trades) and /trades/<id> (the detail view with annotation form, Grail plan link, and HG analysis card)." onclick="showArchDesc(this)">
+              <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2)">
+                <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-actor-5); display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-sm)">📈</div>
+                <code style="font-size: var(--text-sm); color: var(--color-accent)">trades.py</code>
+              </div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">/trades &nbsp; /trades/&lt;id&gt;</p>
+            </div>
+
+            <div class="arch-component" style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-5); border-left: 4px solid var(--color-actor-3); box-shadow: var(--shadow-sm); cursor: pointer"
+                 data-desc="Handles /positions — shows open and closed positions with average cost basis. Supports pagination and account filter." onclick="showArchDesc(this)">
+              <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2)">
+                <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-actor-3); display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-sm)">📦</div>
+                <code style="font-size: var(--text-sm); color: var(--color-accent)">positions.py</code>
+              </div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">/positions</p>
+            </div>
+
+            <div class="arch-component" style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-5); border-left: 4px solid var(--color-actor-1); box-shadow: var(--shadow-sm); cursor: pointer"
+                 data-desc="Handles /ingest — the file upload form. Accepts CSV or NDJSON, auto-detects the format, runs the ingestion pipeline, and shows a results summary." onclick="showArchDesc(this)">
+              <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2)">
+                <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-actor-1); display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-sm)">⬆️</div>
+                <code style="font-size: var(--text-sm); color: var(--color-accent)">ingest.py</code>
+              </div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">/ingest</p>
+            </div>
+
+            <div class="arch-component" style="background: #FFF8F5; border-radius: var(--radius-md); padding: var(--space-5); border-left: 4px solid #C93B3B; box-shadow: var(--shadow-sm); cursor: pointer"
+                 data-desc="ADMIN ONLY. Handles /admin/users (user management), /admin/market-data (OHLCV data tools), /admin/market-data/hg-analysis (HG plan analysis), and /admin/export. Requires @admin_required decorator." onclick="showArchDesc(this)">
+              <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2)">
+                <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: #C93B3B; display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-sm)">🔒</div>
+                <code style="font-size: var(--text-sm); color: var(--color-accent)">admin.py</code>
+              </div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">/admin/* &nbsp; <span style="font-size: var(--text-xs); background: #FDE8E8; color: #C93B3B; padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono)">@admin_required</span></p>
+            </div>
+
+            <div class="arch-component" style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-5); border-left: 4px solid var(--color-actor-2); box-shadow: var(--shadow-sm); cursor: pointer"
+                 data-desc="Handles /journal — a free-form note-taking area with markdown support (powered by EasyMDE editor). Notes are timestamped." onclick="showArchDesc(this)">
+              <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2)">
+                <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-actor-2); display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-sm)">📓</div>
+                <code style="font-size: var(--text-sm); color: var(--color-accent)">journal.py</code>
+              </div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">/journal</p>
+            </div>
+
+            <div class="arch-component" style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-5); border-left: 4px solid var(--color-actor-4); box-shadow: var(--shadow-sm); cursor: pointer"
+                 data-desc="Handles /about (release notes accordion parsed from RELEASE_NOTES.md), /settings (user preferences), and /api/dashboard + /api/trades (JSON endpoints for scripts and external tools)." onclick="showArchDesc(this)">
+              <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2)">
+                <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-actor-4); display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-sm)">⚙️</div>
+                <code style="font-size: var(--text-sm); color: var(--color-accent)">about · settings · api</code>
+              </div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">/about &nbsp; /settings &nbsp; /api/*</p>
+            </div>
+
+          </div>
+
+          <div class="arch-description" id="arch-desc" style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-4); border-left: 4px solid var(--color-accent); font-size: var(--text-sm); color: var(--color-text-secondary); min-height: 3rem; transition: all var(--duration-normal)">
+            Click any department card to learn what it handles
+          </div>
+        </div>
+
+        <p style="font-size: var(--text-sm); color: var(--color-text-muted); text-align: center">All 10 blueprints are registered in <code>trading_journal/web/__init__.py</code> inside the <code>create_app()</code> function</p>
+      </section>
+
+      <!-- SCREEN 3: Data Flow Animation — "A request to /trades" -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Tracing a Request: <code>/trades</code></h2>
+        <p>When you click "Trades" in the navbar, here is the exact journey your request takes — through 8 actors — before the page appears in your browser.</p>
+
+        <div class="flow-animation" id="flow-trades-request" data-steps='[
+          {"highlight":"flow-actor-1","label":"Browser sends GET /trades to the server"},
+          {"highlight":"flow-actor-2","label":"Nginx receives the request. It is the front door — a traffic director that decides where to send each request","packet":true,"from":"actor-1","to":"actor-2"},
+          {"highlight":"flow-actor-3","label":"Nginx forwards to Gunicorn — the Python process manager that keeps Flask running 24/7","packet":true,"from":"actor-2","to":"actor-3"},
+          {"highlight":"flow-actor-4","label":"Gunicorn passes the request to Flask. Flask reads the URL path and matches it to trades blueprint","packet":true,"from":"actor-3","to":"actor-4"},
+          {"highlight":"flow-actor-5","label":"@login_required runs first. It checks: does this request have a valid session cookie? If not, redirect to /login"},
+          {"highlight":"flow-actor-6","label":"Session cookie is valid — user_id=7. The trades.py route function runs and calls SQLAlchemy","packet":true,"from":"actor-5","to":"actor-6"},
+          {"highlight":"flow-actor-7","label":"SQLAlchemy queries PostgreSQL: SELECT completed_trades WHERE user_id = 7 ORDER BY opened_at DESC","packet":true,"from":"actor-6","to":"actor-7"},
+          {"highlight":"flow-actor-8","label":"PostgreSQL returns the rows. SQLAlchemy hands them to the Jinja2 template as Python objects","packet":true,"from":"actor-7","to":"actor-8"},
+          {"highlight":"flow-actor-1","label":"Jinja2 renders trades.html — fills in the table with real data — and sends the finished HTML page back to the browser","packet":true,"from":"actor-8","to":"actor-1"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-actor-1">
+              <div class="flow-actor-icon" style="background: var(--color-actor-2)">🌐</div>
+              <span>Browser</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-2">
+              <div class="flow-actor-icon" style="background: var(--color-actor-3)">🚦</div>
+              <span><span class="term" data-definition="Nginx (pronounced &quot;engine-x&quot;) is a high-performance web server that acts as a traffic director. It sits in front of your Python application, handles HTTPS, and forwards requests to the right service. Think of it as the security guard at the building entrance.">Nginx</span></span>
+            </div>
+            <div class="flow-actor" id="flow-actor-3">
+              <div class="flow-actor-icon" style="background: var(--color-actor-4)">⚙️</div>
+              <span><span class="term" data-definition="Gunicorn (Green Unicorn) is a Python web server. It keeps your Flask app running as a process and handles multiple requests simultaneously. Flask alone can only handle one request at a time; Gunicorn gives it workers to handle many.">Gunicorn</span></span>
+            </div>
+            <div class="flow-actor" id="flow-actor-4">
+              <div class="flow-actor-icon" style="background: var(--color-actor-2)">🐍</div>
+              <span>Flask Router</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-5">
+              <div class="flow-actor-icon" style="background: var(--color-actor-1)">🛡️</div>
+              <span><span class="term" data-definition="A decorator is a Python annotation (written with @) that wraps a function to add extra behavior. @login_required wraps every protected route — before the real function runs, it checks whether the user is authenticated.">@login_required</span></span>
+            </div>
+            <div class="flow-actor" id="flow-actor-6">
+              <div class="flow-actor-icon" style="background: var(--color-actor-5)">📋</div>
+              <span>trades.py</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-7">
+              <div class="flow-actor-icon" style="background: var(--color-actor-4)">🗄️</div>
+              <span>PostgreSQL</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-8">
+              <div class="flow-actor-icon" style="background: var(--color-actor-3)">🖼️</div>
+              <span><span class="term" data-definition="Jinja2 is a Python HTML templating engine — like mail merge for web pages. You write an HTML file with placeholder variables like {{ trade.symbol }}, and Jinja2 fills them in with real data from the database before sending the page to the browser.">Jinja2</span></span>
+            </div>
+          </div>
+
+          <div class="flow-packet" id="flow-packet"></div>
+          <div class="flow-step-label" id="flow-label">Click "Next Step" to trace the request</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4: Group Chat — Auth Challenge -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">"Who Are You?" — Two Auth Paths</h2>
+        <p>Every protected route asks the same question: <em>who is making this request?</em> The answer depends on whether you are a browser or a script. Watch both conversations unfold.</p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); margin: var(--space-8) 0">
+
+          <div>
+            <div style="text-align: center; margin-bottom: var(--space-4)">
+              <span style="font-size: var(--text-xs); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); background: var(--color-accent-light); padding: 4px 10px; border-radius: var(--radius-full)">Path 1: Browser</span>
+            </div>
+            <div class="chat-window" id="chat-auth-browser">
+              <div class="chat-messages">
+                <div class="chat-message" data-msg="0" data-sender="browser" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-2)">🌐</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-2)">Browser</span>
+                    <p>GET /trades</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="1" data-sender="auth" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-1)">🛡️</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-1)">@login_required</span>
+                    <p>Show me your <span class="term" data-definition="A session cookie is a small piece of data stored in your browser that identifies you to the server. When you log in, the server creates a session, assigns it an ID, and stores that ID in an encrypted cookie in your browser. Every subsequent request sends that cookie automatically.">session cookie</span>.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="2" data-sender="browser" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-2)">🌐</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-2)">Browser</span>
+                    <p>Here: session_id=abc123 <em>(sent automatically with every request)</em></p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="3" data-sender="auth" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-1)">🛡️</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-1)">@login_required</span>
+                    <p>Decrypting... session has user_id=7. Looking up in database... that is Eric. You are in.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="4" data-sender="trades" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-5)">📋</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-5)">trades.py</span>
+                    <p>Loading Eric's trades now...</p>
+                  </div>
+                </div>
+              </div>
+              <div class="chat-typing" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-1)">🛡️</div>
+                <div class="chat-typing-dots">
+                  <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+                </div>
+              </div>
+              <div class="chat-controls">
+                <button class="btn chat-next-btn">Next</button>
+                <button class="btn chat-all-btn">Play All</button>
+                <button class="btn chat-reset-btn">Replay</button>
+                <span class="chat-progress"></span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="text-align: center; margin-bottom: var(--space-4)">
+              <span style="font-size: var(--text-xs); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); background: var(--color-accent-light); padding: 4px 10px; border-radius: var(--radius-full)">Path 2: API Script</span>
+            </div>
+            <div class="chat-window" id="chat-auth-api">
+              <div class="chat-messages">
+                <div class="chat-message" data-msg="0" data-sender="script" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-3)">💻</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-3)">API Script</span>
+                    <p>GET /api/trades<br><code>X-API-Key: sk_xyz789abc</code></p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="1" data-sender="auth" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-1)">🛡️</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-1)">@login_required</span>
+                    <p>No session cookie. But I see an <span class="term" data-definition="An API key is a secret string of characters (like a password for scripts). Instead of logging in with a username/password form, a script includes this key in a request header. The server validates it and grants access.">API key</span> header. Let me hash it with <span class="term" data-definition="SHA256 is a cryptographic hashing algorithm — a one-way blender. You put in a string and get back a fixed-length fingerprint. The server never stores your actual API key — only its SHA256 hash. This way, even if the database leaks, your real key stays secret.">SHA256</span>...</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="2" data-sender="auth" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-1)">🛡️</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-1)">@login_required</span>
+                    <p>Hash matches user_id=7 in <code>users.api_key_hash</code>. You are in.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="3" data-sender="api" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-4)">📡</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-4)">api.py</span>
+                    <p>Returning JSON response with Eric's trades. No HTML — just clean data.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="4" data-sender="script" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-3)">💻</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-3)">API Script</span>
+                    <p>Thanks. Processing the data now.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="chat-typing" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-1)">🛡️</div>
+                <div class="chat-typing-dots">
+                  <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+                </div>
+              </div>
+              <div class="chat-controls">
+                <button class="btn chat-next-btn">Next</button>
+                <button class="btn chat-all-btn">Play All</button>
+                <button class="btn chat-reset-btn">Replay</button>
+                <span class="chat-progress"></span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-6)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">One decorator, two strategies</strong>
+            <p><code>@login_required</code> handles both paths. If a session cookie is present, it uses that. If an API key header is present, it hashes and looks it up. Admin routes additionally require <code>@admin_required</code> — which checks that <code>users.is_admin == True</code> in the database.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5: Quiz -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check Your Understanding</h2>
+        <p>Apply what you have learned about the web layer. These scenarios test whether you can navigate the architecture — not memorize file names.</p>
+
+        <div class="quiz-container" id="quiz-module5">
+
+          <div class="quiz-question-block"
+               data-correct="q1-b"
+               data-explanation-right="Exactly. Every new page needs two things: a new blueprint file in web/routes/ with the route logic, and a registration call in web/__init__.py so Flask knows it exists. This is true for any new page in the app."
+               data-explanation-wrong="Not quite. Think about how the existing pages are structured — each one lives in a dedicated file inside web/routes/ AND must be registered in web/__init__.py. Both steps are required.">
+            <h3 class="quiz-question">You want to add a <code>/watchlist</code> page to the app. What is the right approach?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q1-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Add the route directly inside <code>trades.py</code> — it is trade-related content</span>
+              </button>
+              <button class="quiz-option" data-value="q1-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Create a new <code>watchlist.py</code> in <code>trading_journal/web/routes/</code>, then register it as a blueprint in <code>web/__init__.py</code></span>
+              </button>
+              <button class="quiz-option" data-value="q1-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Add the route to <code>web/__init__.py</code> directly — that is where Flask is configured</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="q2-c"
+               data-explanation-right="Right. The web browser login and the API are completely separate auth paths. Being logged in via the browser gives you a session cookie — but scripts don't send cookies. The script needs to pass X-API-Key in a request header. The two mechanisms are independent."
+               data-explanation-wrong="Think about the two auth paths. Browser login creates a session cookie. API calls use a completely different mechanism — the X-API-Key header. One does not imply the other. The script has never been authenticated via the API key path.">
+            <h3 class="quiz-question">A user is logged in to the web UI successfully, but their Python script hitting <code>/api/trades</code> keeps getting 401 Unauthorized errors. Why?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q2-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Their account is suspended — the admin would need to reactivate it</span>
+              </button>
+              <button class="quiz-option" data-value="q2-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The session cookie has expired — they need to log in again via the browser</span>
+              </button>
+              <button class="quiz-option" data-value="q2-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The script is not sending an <code>X-API-Key</code> header — browser sessions and API key auth are completely separate mechanisms</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="q3-b"
+               data-explanation-right="Correct. The @admin_required decorator is what gates admin routes. If it is missing or misconfigured on the /admin/export route handler in admin.py, the route will only apply @login_required (any logged-in user can access) instead of checking is_admin. This is a missing decorator bug, not a database or config issue."
+               data-explanation-wrong="The is_admin field in the database is fine — that data is correct. The issue is on the route itself. Every admin route must have @admin_required applied as a decorator in admin.py. If it is missing from one route, that route only checks login, not admin status.">
+            <h3 class="quiz-question">The <code>/admin/export</code> route is accessible to regular (non-admin) logged-in users. Where is the bug?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q3-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The <code>is_admin</code> flag in the database is not being set correctly when users are created</span>
+              </button>
+              <button class="quiz-option" data-value="q3-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The <code>@admin_required</code> decorator is missing from the export route in <code>admin.py</code> — only <code>@login_required</code> is checking access</span>
+              </button>
+              <button class="quiz-option" data-value="q3-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The <code>web/__init__.py</code> blueprint registration is applying the wrong URL prefix to the admin blueprint</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module5')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module5')">Try Again</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>

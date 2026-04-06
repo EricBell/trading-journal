@@ -1,0 +1,522 @@
+<section class="module" id="module-6" style="background: var(--color-bg)">
+  <div class="module-content">
+
+    <header class="module-header animate-in">
+      <span class="module-number">06</span>
+      <h1 class="module-title">Steering the AI</h1>
+      <p class="module-subtitle">Five modules of architecture knowledge — now put to work</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1: Navigator Metaphor + Module Framing -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">You Are the Navigator</h2>
+
+        <div class="callout callout-info" style="margin: var(--space-6) 0">
+          <div class="callout-icon">🧭</div>
+          <div class="callout-content">
+            <strong class="callout-title">The Metaphor</strong>
+            <p>A ship's navigator does not touch the engine or the rudder. They hold the chart. They know where the rocks are, where the currents run, and how to read the compass. They tell the engine room: <em>"left 10 degrees — there is a reef ahead."</em> You are the navigator. The AI is the engine room. This module is your chart.</p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); margin: var(--space-8) 0">
+          <div style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-6); box-shadow: var(--shadow-sm); border-top: 3px solid #C93B3B">
+            <div style="font-size: 1.5rem; margin-bottom: var(--space-3)">🙅</div>
+            <h4 style="font-family: var(--font-display); font-weight: 600; margin-bottom: var(--space-2); color: #C93B3B">Without this course</h4>
+            <p style="font-size: var(--text-sm); color: var(--color-text-secondary); line-height: var(--leading-normal)">"Add a confidence score column to completed trades."</p>
+            <p style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2); font-style: italic">AI adds it to the wrong table. Your data gets wiped on the next upload. Confusion follows.</p>
+          </div>
+          <div style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-6); box-shadow: var(--shadow-sm); border-top: 3px solid var(--color-success)">
+            <div style="font-size: 1.5rem; margin-bottom: var(--space-3)">✅</div>
+            <h4 style="font-family: var(--font-display); font-weight: 600; margin-bottom: var(--space-2); color: var(--color-success)">With this course</h4>
+            <p style="font-size: var(--text-sm); color: var(--color-text-secondary); line-height: var(--leading-normal)">"Add <code>confidence_score</code> to <code>trade_annotations</code>, not <code>completed_trades</code>. It is user-entered and must survive the full rebuild."</p>
+            <p style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2); font-style: italic">AI does it right the first time. No lost data.</p>
+          </div>
+        </div>
+
+        <p style="color: var(--color-text-secondary); font-size: var(--text-base)">The most valuable thing you can do with technical knowledge is not write code — it is make <em>better decisions</em>. Every module you have completed has been building toward this one practical skill: translating architecture understanding into precise AI instructions.</p>
+      </section>
+
+      <!-- SCREEN 2: Before/After Group Chat -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Before &amp; After: The Same Feature Request</h2>
+        <p>Watch what happens when you ask AI to add a risk/reward ratio feature — once with vague instructions, and once armed with architecture knowledge.</p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); margin: var(--space-8) 0">
+
+          <div>
+            <div style="text-align: center; margin-bottom: var(--space-4)">
+              <span style="font-size: var(--text-xs); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 10px; border-radius: var(--radius-full); background: #FDE8E8; color: #C93B3B">BEFORE — vague</span>
+            </div>
+            <div class="chat-window" id="chat-before">
+              <div class="chat-messages">
+                <div class="chat-message" data-msg="0" data-sender="user" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-3)">🧑</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-3)">You</span>
+                    <p>Add a feature where I can save a risk/reward ratio for each trade.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="1" data-sender="ai" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-4)">🤖</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-4)">AI</span>
+                    <p>Sure! I will add a <code>risk_reward</code> column to <code>completed_trades</code>. That is where trade data lives.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="2" data-sender="user" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-3)">🧑</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-3)">You</span>
+                    <p>...I uploaded a new CSV and all my risk/reward ratios are gone.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="3" data-sender="ai" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-4)">🤖</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-4)">AI</span>
+                    <p>Ah — <code>completed_trades</code> is wiped and rebuilt on every upload. Sorry, I should have known that.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="chat-typing" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-4)">🤖</div>
+                <div class="chat-typing-dots">
+                  <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+                </div>
+              </div>
+              <div class="chat-controls">
+                <button class="btn chat-next-btn">Next</button>
+                <button class="btn chat-all-btn">Play All</button>
+                <button class="btn chat-reset-btn">Replay</button>
+                <span class="chat-progress"></span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="text-align: center; margin-bottom: var(--space-4)">
+              <span style="font-size: var(--text-xs); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 10px; border-radius: var(--radius-full); background: var(--color-success-light); color: var(--color-success)">AFTER — precise</span>
+            </div>
+            <div class="chat-window" id="chat-after">
+              <div class="chat-messages">
+                <div class="chat-message" data-msg="0" data-sender="user" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-3)">🧑</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-3)">You</span>
+                    <p>Add a <code>risk_reward_ratio</code> field to <code>trade_annotations</code>, not <code>completed_trades</code>. It is user-entered and must survive the full rebuild. Use the <span class="term" data-definition="A natural key is an identifier made from real-world data that already uniquely identifies something — no artificial ID needed. For trade_annotations, the natural key is (user_id, symbol, opened_at) — together these three values uniquely identify a trade, even after completed_trades is rebuilt.">natural key</span> (user_id, symbol, opened_at). Add a number input to the trade detail annotation form.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="1" data-sender="ai" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-4)">🤖</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-4)">AI</span>
+                    <p>Got it. Adding <code>risk_reward_ratio</code> to <code>trade_annotations</code> with the (user_id, symbol, opened_at) <span class="term" data-definition="A foreign key is a column in one table that points to a row in another table. It is how tables are linked. For example, trade_annotations.user_id is a foreign key pointing to users.id.">foreign key</span> constraint. Creating an <span class="term" data-definition="An Alembic migration is a versioned script that describes a database schema change — adding a column, creating a table, changing a type. Running migrations updates the real database to match the new code. Think of it as version control for your database structure.">Alembic migration</span>. Adding the input field to the annotation form template now.</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="2" data-sender="user" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-3)">🧑</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-3)">You</span>
+                    <p>Uploaded a new CSV. All my ratios are still there!</p>
+                  </div>
+                </div>
+                <div class="chat-message" data-msg="3" data-sender="ai" style="display:none">
+                  <div class="chat-avatar" style="background: var(--color-actor-4)">🤖</div>
+                  <div class="chat-bubble">
+                    <span class="chat-sender" style="color: var(--color-actor-4)">AI</span>
+                    <p>Exactly as designed. <code>trade_annotations</code> is never touched by the rebuild — it re-links to the new completed_trades rows via the natural key.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="chat-typing" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-4)">🤖</div>
+                <div class="chat-typing-dots">
+                  <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+                </div>
+              </div>
+              <div class="chat-controls">
+                <button class="btn chat-next-btn">Next</button>
+                <button class="btn chat-all-btn">Play All</button>
+                <button class="btn chat-reset-btn">Replay</button>
+                <span class="chat-progress"></span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-4)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">The key insight</strong>
+            <p>You did not write any code. You just knew <em>where things belong</em>. That architectural knowledge is what turned a broken instruction into a correct one.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3: Pattern Cards — Known Limitations -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Four Known Limitations</h2>
+        <p>Every codebase has known rough edges. The best engineers document them honestly. Here are the four in this app — understanding them helps you ask AI to solve the <em>right</em> problem, not work around the wrong one.</p>
+
+        <div class="pattern-cards stagger-children" style="margin: var(--space-8) 0">
+
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)">
+            <div class="pattern-icon" style="background: var(--color-actor-1)">⏱️</div>
+            <h4 class="pattern-title">Full Rebuild Bottleneck</h4>
+            <p class="pattern-desc"><code>TradeCompletionEngine</code> rebuilds <em>all</em> completed trades for a user on every CSV upload — not just the new ones. Fine now. Will slow down at scale.</p>
+            <p style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); font-family: var(--font-mono)">Fix direction: scope to affected symbols, like <code>PositionTracker</code> already does.</p>
+          </div>
+
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">🏦</div>
+            <h4 class="pattern-title">Single Broker Format</h4>
+            <p class="pattern-desc"><code>CsvParser</code> only understands Schwab CSV. Supporting a new broker (TD Ameritrade, IBKR) means writing a new parser class.</p>
+            <p style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); font-family: var(--font-mono)">Fix direction: new parser outputs same <span class="term" data-definition="NdjsonRecord is the Pydantic schema (data shape contract) that every parser must produce. It defines the exact fields an execution record needs — symbol, side, qty, price, etc. The rest of the pipeline only speaks NdjsonRecord.">NdjsonRecord</span> schema — rest of pipeline is already format-agnostic.</p>
+          </div>
+
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">📡</div>
+            <h4 class="pattern-title">No Live Data</h4>
+            <p class="pattern-desc">Everything is file-import only. There is no live broker connection. Historical OHLCV bars come from Polygon.io on demand — not in real time.</p>
+            <p style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); font-family: var(--font-mono)">Fix direction: requires a broker API integration — a separate, substantial project.</p>
+          </div>
+
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">🔗</div>
+            <h4 class="pattern-title">Annotation Re-linking is Best-Effort</h4>
+            <p class="pattern-desc"><code>trade_annotations</code> re-links to rebuilt trades using (user_id, symbol, opened_at). If two trades for the same symbol open at the exact same millisecond, one annotation might link to the wrong trade.</p>
+            <p style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); font-family: var(--font-mono)">Extremely rare in practice. Not worth fixing until it causes a real problem.</p>
+          </div>
+
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-icon">🧭</div>
+          <div class="callout-content">
+            <strong class="callout-title">Navigator tip</strong>
+            <p>When AI suggests a fix for one of these limitations, ask it to explain how the fix handles the edge case. If it cannot, it may not understand the constraint fully.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4: Data Flow Animation — Feature Addition Checklist -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Feature-Addition Checklist</h2>
+        <p>Before you tell AI to add something new, run through this decision tree. Each step maps to a specific part of the architecture you have already learned.</p>
+
+        <div class="flow-animation" id="flow-feature-checklist" data-steps='[
+          {"highlight":"flow-actor-1","label":"Step 1 — Identify the data tier. Is this data derived from fills (calculated automatically) or entered manually by the user?"},
+          {"highlight":"flow-actor-2","label":"Step 2a — If derived from fills: the data lives in completed_trades or positions. It is rebuilt every upload. Do NOT store it in trade_annotations."},
+          {"highlight":"flow-actor-3","label":"Step 2b — If manually entered: the data MUST live in trade_annotations. This table survives the full rebuild via the natural key (user_id, symbol, opened_at)."},
+          {"highlight":"flow-actor-4","label":"Step 3 — Pick the right class to own the logic. Matching fills? TradeCompletionEngine. Position math? PositionTracker. Dashboard metrics? DashboardEngine. New page? A new Blueprint file."},
+          {"highlight":"flow-actor-5","label":"Step 4 — Update the web route and Jinja2 template. The route queries the data; the template renders it. Add the form field or display element."},
+          {"highlight":"flow-actor-6","label":"Step 5 — If you added a new database column: create an Alembic migration. This is the version-controlled script that updates the real database schema. Never skip this step."},
+          {"highlight":"flow-actor-1","label":"Done. Tell AI all five decisions explicitly. The more context you give, the fewer back-and-forths you need."}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-actor-1">
+              <div class="flow-actor-icon" style="background: var(--color-actor-3)">❓</div>
+              <span>Identify Tier</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-2">
+              <div class="flow-actor-icon" style="background: var(--color-actor-4)">🔄</div>
+              <span>Derived Data</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-3">
+              <div class="flow-actor-icon" style="background: var(--color-actor-5)">✍️</div>
+              <span>Manual Entry</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-4">
+              <div class="flow-actor-icon" style="background: var(--color-actor-2)">🏛️</div>
+              <span>Pick Class</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-5">
+              <div class="flow-actor-icon" style="background: var(--color-actor-1)">🖼️</div>
+              <span>Route + Template</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-6">
+              <div class="flow-actor-icon" style="background: var(--color-actor-3)">🗃️</div>
+              <span><span class="term" data-definition="An Alembic migration is a versioned Python script that describes a database schema change. Running it updates the live database to match your new code — adding the column, creating the table, etc. Think of it as version control for your database.">Migration</span></span>
+            </div>
+          </div>
+
+          <div class="flow-packet" id="flow-packet"></div>
+          <div class="flow-step-label" id="flow-label">Click "Next Step" to walk through the checklist</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+
+        <div class="translation-block animate-in" style="margin-top: var(--space-8)">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-keyword">def</span> <span class="code-function">reprocess_all_completed_trades</span>(</span>
+<span class="code-line">    <span class="code-keyword">self</span>, user_id: <span class="code-function">int</span></span>
+<span class="code-line">) -> Dict[<span class="code-function">str</span>, Any]:</span>
+<span class="code-line">    <span class="code-string">"""Clear and rebuild all completed</span></span>
+<span class="code-line">    <span class="code-string">trades for a user from scratch."""</span></span>
+<span class="code-line">    <span class="code-keyword">with</span> <span class="code-keyword">self</span>.db_manager.<span class="code-function">get_session</span>() <span class="code-keyword">as</span> session:</span>
+<span class="code-line">        session.<span class="code-function">query</span>(Trade).<span class="code-function">filter</span>(</span>
+<span class="code-line">            Trade.user_id == user_id</span>
+<span class="code-line">        ).<span class="code-function">update</span>(...)</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">A method on TradeCompletionEngine...</p>
+              <p class="tl">...that takes a user ID...</p>
+              <p class="tl">...and returns a summary dictionary.</p>
+              <p class="tl">The docstring says it all: <em>clear and rebuild from scratch.</em> Every completed trade for this user is deleted and recalculated.</p>
+              <p class="tl">Open a database session...</p>
+              <p class="tl">...find ALL trades for this user...</p>
+              <p class="tl">...and unlink them from their completed_trades. The rebuild wipes the slate completely.</p>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: var(--text-sm); color: var(--color-text-muted); text-align: center; margin-top: var(--space-3)">From <code>trading_journal/trade_completion.py</code> — the documented future bottleneck</p>
+      </section>
+
+      <!-- SCREEN 5: Quiz + Navigator's Chart -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Apply Your Navigation Skills</h2>
+        <p>Four scenarios. Use the architecture knowledge from all six modules to pick the right course.</p>
+
+        <div class="quiz-container" id="quiz-module6">
+
+          <div class="quiz-question-block"
+               data-correct="q1-b"
+               data-explanation-right="Exactly right. A confidence score is something you enter manually — it is your subjective rating, not a number derived from the fills. That means it must live in trade_annotations, which survives the completed_trades rebuild via the natural key. If it went in completed_trades, every upload would wipe it."
+               data-explanation-wrong="Think about the two types of data: derived (calculated from fills, lives in completed_trades) vs manually entered (must survive rebuilds, lives in trade_annotations). Which type is a confidence score you assign yourself?">
+            <h3 class="quiz-question">You want to add a "confidence score" (1–5 stars) you enter manually for each trade. Where does it go and why?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q1-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>In <code>completed_trades</code> — that is where all trade data belongs</span>
+              </button>
+              <button class="quiz-option" data-value="q1-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>In <code>trade_annotations</code> — it is manually entered and must survive the completed_trades rebuild</span>
+              </button>
+              <button class="quiz-option" data-value="q1-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>In the <code>users</code> table — it is a personal preference, not trade data</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="q2-b"
+               data-explanation-right="Correct. PositionTracker is symbol-scoped — it only reprocesses positions for the symbols in the upload. If a bug is causing wrong position values for uploaded symbols, that is where to look. The upload itself succeeded, so ingestion is fine. The symptom (wrong positions for those 10 symbols) points directly to PositionTracker."
+               data-explanation-wrong="The upload succeeded, so the ingestion pipeline is not the culprit. Think about what happens after ingestion — specifically, what is responsible for calculating position values, and whether that process is symbol-scoped or user-scoped.">
+            <h3 class="quiz-question">A user uploads a CSV with 10 symbols. The upload succeeds, but their positions for those 10 symbols are wrong. Where do you look first?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q2-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The CSV parser — the upload probably imported bad data</span>
+              </button>
+              <button class="quiz-option" data-value="q2-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span><code>PositionTracker</code> — it is symbol-scoped and runs for those exact 10 symbols after the upload</span>
+              </button>
+              <button class="quiz-option" data-value="q2-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The positions blueprint route — it might be querying the wrong user</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="q2c-b"
+               data-explanation-right="Right. The rest of the pipeline — TradeCompletionEngine, PositionTracker, all the web routes — speaks NdjsonRecord. If your new parser outputs NdjsonRecord, it plugs right in with zero changes to anything else. That is the power of a well-designed schema contract."
+               data-explanation-wrong="Think about what makes the pipeline format-agnostic. The ingestion step converts raw CSV into a standard NdjsonRecord format. Everything downstream only talks to NdjsonRecord — not to the raw CSV. So a new broker only needs a new converter to that same format.">
+            <h3 class="quiz-question">You want to add support for TD Ameritrade CSV files. What is the minimum change needed?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q2c-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Update <code>TradeCompletionEngine</code> to handle the different column names from TD Ameritrade</span>
+              </button>
+              <button class="quiz-option" data-value="q2c-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Write a new parser class that reads TD Ameritrade format and outputs the same <code>NdjsonRecord</code> <span class="term" data-definition="A schema is the defined shape of your data — what fields exist, what types they are. NdjsonRecord is a Pydantic schema that acts as a contract: any parser (Schwab, TD Ameritrade, IBKR) must produce this exact shape. The rest of the pipeline only needs to know this one shape.">schema</span> — the rest of the pipeline already works</span>
+              </button>
+              <button class="quiz-option" data-value="q2c-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Modify the database schema to add TD Ameritrade-specific columns</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="q3-c"
+               data-explanation-right="Exactly. Win rate is derived data — it is a calculation over existing trade records, not new source data. Storing it in the users table would mean it needs to be updated (and kept in sync) every time a trade is added, closed, or deleted. That is maintenance debt with no upside. DashboardEngine already calculates metrics like this on demand. Derived data should always be calculated, never stored."
+               data-explanation-wrong="Think about the difference between source data and derived data. Win rate is not something that gets entered — it is calculated from the completed_trades table. Storing a calculated value means you have to keep it updated forever. What already calculates dashboard metrics in this codebase?">
+            <h3 class="quiz-question">AI suggests adding a <code>win_rate</code> column to the <code>users</code> table, updated on every trade close. Is this a good idea?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q3-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Yes — storing it means the dashboard loads faster since it does not need to calculate on every page view</span>
+              </button>
+              <button class="quiz-option" data-value="q3-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Yes — win_rate belongs with the user since it is a property of the user, not a specific trade</span>
+              </button>
+              <button class="quiz-option" data-value="q3-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>No — win_rate is derived data and should be calculated on demand by <code>DashboardEngine</code>, not stored. Storing it creates a maintenance burden to keep it in sync.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module6')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module6')">Try Again</button>
+        </div>
+      </section>
+
+      <!-- SCREEN 6: Navigator's Chart — Final Reference Card -->
+      <section class="screen animate-in" style="padding-bottom: var(--space-20)">
+        <div style="text-align: center; margin-bottom: var(--space-10)">
+          <span style="font-size: var(--text-xs); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent); background: var(--color-accent-light); padding: 6px 16px; border-radius: var(--radius-full)">Course Complete</span>
+          <h2 class="screen-heading" style="margin-top: var(--space-4)">The Navigator's Chart</h2>
+          <p style="color: var(--color-text-secondary); max-width: 540px; margin: 0 auto">Every architectural fact you need in one reference. Keep this in mind whenever you are directing AI to extend or debug this codebase.</p>
+        </div>
+
+        <!-- Six Actors -->
+        <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-8); box-shadow: var(--shadow-md); margin-bottom: var(--space-6); border-top: 4px solid var(--color-accent)">
+          <h3 style="font-family: var(--font-display); font-weight: 700; font-size: var(--text-xl); margin-bottom: var(--space-6); color: var(--color-accent)">6 Actors in the System</h3>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4)">
+            <div style="display: flex; align-items: center; gap: var(--space-3)">
+              <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-actor-2); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0">🌐</div>
+              <div><strong style="font-size: var(--text-sm)">Browser</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-muted)">The user interface</span></div>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-3)">
+              <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-actor-3); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0">🚦</div>
+              <div><strong style="font-size: var(--text-sm)">Nginx + Gunicorn</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-muted)">Traffic director + Python server</span></div>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-3)">
+              <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-actor-2); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0">🐍</div>
+              <div><strong style="font-size: var(--text-sm)">Flask + Blueprints</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-muted)">The web layer router</span></div>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-3)">
+              <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-actor-4); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0">⚙️</div>
+              <div><strong style="font-size: var(--text-sm)">Engine Classes</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-muted)">TradeCompletion · Position · Dashboard</span></div>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-3)">
+              <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-actor-4); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0">🗄️</div>
+              <div><strong style="font-size: var(--text-sm)">PostgreSQL</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-muted)">13 tables, remote at 192.168.1.249</span></div>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-3)">
+              <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--color-actor-1); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0">📡</div>
+              <div><strong style="font-size: var(--text-sm)">Polygon.io</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-muted)">External OHLCV data source</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Three Tiers + Four Patterns in 2-col -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); margin-bottom: var(--space-6)">
+
+          <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-md); border-top: 4px solid var(--color-actor-5)">
+            <h3 style="font-family: var(--font-display); font-weight: 700; font-size: var(--text-xl); margin-bottom: var(--space-5); color: var(--color-actor-5)">3 Data Tiers</h3>
+            <div style="display: flex; flex-direction: column; gap: var(--space-4)">
+              <div style="border-left: 3px solid var(--color-actor-1); padding-left: var(--space-4)">
+                <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-actor-1); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px">Tier 1 — Executions</div>
+                <code style="font-size: var(--text-sm)">trades</code> table. Individual broker fills from NDJSON. <em>Never modified.</em>
+              </div>
+              <div style="border-left: 3px solid var(--color-actor-4); padding-left: var(--space-4)">
+                <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-actor-4); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px">Tier 2 — Completed Trades</div>
+                <code style="font-size: var(--text-sm)">completed_trades</code> table. Rebuilt on every upload. <em>No user data here.</em>
+              </div>
+              <div style="border-left: 3px solid var(--color-actor-5); padding-left: var(--space-4)">
+                <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-actor-5); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px">Tier 3 — Positions</div>
+                <code style="font-size: var(--text-sm)">positions</code> table. Running totals, avg cost basis. Symbol-scoped reprocessing.
+              </div>
+              <div style="border-left: 3px solid var(--color-actor-2); padding-left: var(--space-4)">
+                <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-actor-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px">Bonus — Annotations</div>
+                <code style="font-size: var(--text-sm)">trade_annotations</code>. User-entered. Survives rebuilds via natural key.
+              </div>
+            </div>
+          </div>
+
+          <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-md); border-top: 4px solid var(--color-actor-3)">
+            <h3 style="font-family: var(--font-display); font-weight: 700; font-size: var(--text-xl); margin-bottom: var(--space-5); color: var(--color-actor-3)">4 Engineering Patterns</h3>
+            <div style="display: flex; flex-direction: column; gap: var(--space-4)">
+              <div style="display: flex; gap: var(--space-3); align-items: flex-start">
+                <span style="font-size: 1.1rem; flex-shrink: 0">🔄</span>
+                <div><strong style="font-size: var(--text-sm)">UPSERT</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-secondary)">Insert or update in one step — prevents duplicate executions on re-upload</span></div>
+              </div>
+              <div style="display: flex; gap: var(--space-3); align-items: flex-start">
+                <span style="font-size: 1.1rem; flex-shrink: 0">⚖️</span>
+                <div><strong style="font-size: var(--text-sm)">Average Cost Basis</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-secondary)">Weighted average for P&amp;L — handles partial fills and position building</span></div>
+              </div>
+              <div style="display: flex; gap: var(--space-3); align-items: flex-start">
+                <span style="font-size: 1.1rem; flex-shrink: 0">🔑</span>
+                <div><strong style="font-size: var(--text-sm)">Natural Key Re-linking</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-secondary)">(user_id, symbol, opened_at) survives the full rebuild of completed_trades</span></div>
+              </div>
+              <div style="display: flex; gap: var(--space-3); align-items: flex-start">
+                <span style="font-size: 1.1rem; flex-shrink: 0">🏗️</span>
+                <div><strong style="font-size: var(--text-sm)">Blueprint Architecture</strong><br><span style="font-size: var(--text-xs); color: var(--color-text-secondary)">10 focused route files, each owning one area of the web app</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 10 Routes + 2 Auth Strategies -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); margin-bottom: var(--space-6)">
+
+          <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-md); border-top: 4px solid var(--color-actor-2)">
+            <h3 style="font-family: var(--font-display); font-weight: 700; font-size: var(--text-xl); margin-bottom: var(--space-5); color: var(--color-actor-2)">10 Web Routes</h3>
+            <div style="display: flex; flex-direction: column; gap: var(--space-2)">
+              <div class="badge-item"><code class="badge-code">auth.py</code><span class="badge-desc">/login · /logout</span></div>
+              <div class="badge-item"><code class="badge-code">dashboard.py</code><span class="badge-desc">/ (home)</span></div>
+              <div class="badge-item"><code class="badge-code">trades.py</code><span class="badge-desc">/trades · /trades/&lt;id&gt;</span></div>
+              <div class="badge-item"><code class="badge-code">positions.py</code><span class="badge-desc">/positions</span></div>
+              <div class="badge-item"><code class="badge-code">ingest.py</code><span class="badge-desc">/ingest</span></div>
+              <div class="badge-item" style="border-color: #FDE8E8; background: #FFF8F8"><code class="badge-code" style="color: #C93B3B">admin.py</code><span class="badge-desc" style="color: #C93B3B">/admin/* — @admin_required</span></div>
+              <div class="badge-item"><code class="badge-code">journal.py</code><span class="badge-desc">/journal</span></div>
+              <div class="badge-item"><code class="badge-code">about.py</code><span class="badge-desc">/about</span></div>
+              <div class="badge-item"><code class="badge-code">settings.py</code><span class="badge-desc">/settings</span></div>
+              <div class="badge-item"><code class="badge-code">api.py</code><span class="badge-desc">/api/dashboard · /api/trades</span></div>
+            </div>
+          </div>
+
+          <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-md); border-top: 4px solid var(--color-actor-1)">
+            <h3 style="font-family: var(--font-display); font-weight: 700; font-size: var(--text-xl); margin-bottom: var(--space-5); color: var(--color-actor-1)">2 Auth Strategies</h3>
+            <div style="display: flex; flex-direction: column; gap: var(--space-5)">
+              <div style="background: var(--color-accent-light); border-radius: var(--radius-md); padding: var(--space-4)">
+                <div style="font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-accent); margin-bottom: var(--space-2)">Browser (Session)</div>
+                <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">Login form → password checked → <code>session['user_id']</code> stored in encrypted cookie → <code>@login_required</code> checks on every request</p>
+              </div>
+              <div style="background: var(--color-info-light); border-radius: var(--radius-md); padding: var(--space-4)">
+                <div style="font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-info); margin-bottom: var(--space-2)">Script (API Key)</div>
+                <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0">Send <code>X-API-Key: sk_...</code> header → Flask SHA256-hashes it → looks for match in <code>users.api_key_hash</code></p>
+              </div>
+              <div style="background: var(--color-error-light); border-radius: var(--radius-md); padding: var(--space-4)">
+                <div style="font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-error); margin-bottom: var(--space-2)">Admin Gate</div>
+                <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0"><code>@admin_required</code> additionally checks <code>users.is_admin == True</code> in the database</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Closing callout -->
+        <div style="background: linear-gradient(135deg, var(--color-accent-light) 0%, var(--color-info-light) 100%); border-radius: var(--radius-lg); padding: var(--space-8); text-align: center; box-shadow: var(--shadow-md)">
+          <div style="font-size: 2rem; margin-bottom: var(--space-4)">🧭</div>
+          <h3 style="font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); margin-bottom: var(--space-3); color: var(--color-accent)">You have the chart now.</h3>
+          <p style="color: var(--color-text-secondary); max-width: 520px; margin: 0 auto; font-size: var(--text-base); line-height: var(--leading-normal)">You know the six actors, the three tiers, the four patterns, and the ten routes. You know where user data lives and why. You know the limitations and how to work around them. The AI is the engine room. You are the navigator. Go build something.</p>
+        </div>
+
+      </section>
+
+    </div>
+  </div>
+</section>

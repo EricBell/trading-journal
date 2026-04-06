@@ -1,0 +1,472 @@
+<section class="module" id="module-4" style="background: var(--color-bg)">
+  <div class="module-content">
+
+    <!-- ═══════════════════════════════════════════════════════
+         MODULE HEADER
+    ═══════════════════════════════════════════════════════ -->
+    <header class="module-header animate-in">
+      <span class="module-number">04</span>
+      <h1 class="module-title">The Clever Engineering</h1>
+      <p class="module-subtitle">Four hard problems that trip up most developers — and the elegant solutions baked into this codebase.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 1 — The Four Patterns Intro
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Four Problems. Four Patterns.</h2>
+
+        <p>Think of a chess grandmaster who has memorized the solutions to the 20 most common endgames. They do not recalculate from scratch — they recognize the pattern and apply the known answer. These four patterns appear in nearly every data-intensive application. Knowing their names makes you dramatically more effective at directing AI.</p>
+
+        <div class="pattern-cards stagger-children" style="margin-top: var(--space-8)">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">⬆️</div>
+            <h4 class="pattern-title">Idempotent UPSERT</h4>
+            <p class="pattern-desc">Upload the same file 10 times, get the same result once. No duplicates, ever.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">⚖️</div>
+            <h4 class="pattern-title">Average Cost Basis</h4>
+            <p class="pattern-desc">When you buy in multiple tranches, your P&amp;L uses the blended average price — not any single fill.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-5)">
+            <div class="pattern-icon" style="background: var(--color-actor-5)">🎯</div>
+            <h4 class="pattern-title">Symbol-Scoped Reprocessing</h4>
+            <p class="pattern-desc">Only rebuild the positions touched by this upload. Saved the app from a hard server timeout.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">✖️</div>
+            <h4 class="pattern-title">Contract Multiplier</h4>
+            <p class="pattern-desc">Options represent 100 shares; futures represent a fixed dollar value per point. The table converts fill price into real dollars.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-8)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Vocabulary Is Power</strong>
+            <p>If you can say "use an <span class="term" data-definition="Idempotent means: doing the same operation multiple times has the same effect as doing it once. Like pressing a crosswalk button — pressing it 10 times gets you the same result as pressing it once.">idempotent</span> <span class="term" data-definition="UPSERT is a portmanteau of UPDATE and INSERT. It means: try to insert a new row; if one already exists with the same key, update it instead. PostgreSQL implements this with INSERT ... ON CONFLICT DO UPDATE.">UPSERT</span> keyed on (user_id, unique_key)" instead of "make it not create duplicates," AI will write better code, faster.</p>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 2 — Pattern 1: Idempotent UPSERT
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in" style="margin-top: var(--space-16)">
+        <h2 class="screen-heading">Pattern 1: Idempotent UPSERT</h2>
+
+        <p>Every time a fill is ingested, the app uses <span class="term" data-definition="PostgreSQL is the open-source database this app uses. It is known for its reliability, feature set, and support for advanced operations like UPSERT.">PostgreSQL</span>'s <span class="term" data-definition="ON CONFLICT is a PostgreSQL clause that tells the database what to do if an INSERT would violate a uniqueness constraint — instead of throwing an error, it can update the existing row.">ON CONFLICT</span> to turn a potential duplicate into an update. This is the full pattern from the real file.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-comment"># Use PostgreSQL UPSERT</span></span>
+<span class="code-line">stmt = <span class="code-function">insert</span>(Trade).<span class="code-function">values</span>(**trade_data)</span>
+<span class="code-line">stmt = stmt.<span class="code-function">on_conflict_do_update</span>(</span>
+<span class="code-line">    index_elements=[<span class="code-string">'user_id'</span>, <span class="code-string">'unique_key'</span>],</span>
+<span class="code-line">    set_=<span class="code-function">dict</span>(</span>
+<span class="code-line">        exec_timestamp=stmt.excluded.exec_timestamp,</span>
+<span class="code-line">        net_price=stmt.excluded.net_price,</span>
+<span class="code-line">        realized_pnl=stmt.excluded.realized_pnl,</span>
+<span class="code-line">        account_id=stmt.excluded.account_id,</span>
+<span class="code-line">        processing_timestamp=stmt.excluded.processing_timestamp</span>
+<span class="code-line">    )</span>
+<span class="code-line">).<span class="code-function">returning</span>(Trade.trade_id)</span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label" style="position: static; opacity: 1; font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-muted); display: block; margin-bottom: var(--space-3);">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl"><strong>insert(Trade).values(...):</strong> Try to INSERT a new row into the trades table with all the fill data.</p>
+              <p class="tl"><strong>on_conflict_do_update(...):</strong> But if this exact (user_id + unique_key) combination already exists — don't create a duplicate. Instead, do an UPDATE.</p>
+              <p class="tl"><strong>index_elements=...:</strong> The fingerprint for "does this already exist?" is the combination of whose account it is AND the unique identifier of the fill.</p>
+              <p class="tl"><strong>set_=dict(...):</strong> When updating, refresh these specific fields with the new values from the file — in case prices or timestamps were corrected.</p>
+              <p class="tl"><strong>.returning(Trade.trade_id):</strong> Either way — new row or updated row — give back the trade ID so the rest of the code knows which row it is working with.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visual: Before/After comparison -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-top: var(--space-8)">
+          <div style="background: var(--color-error-light); border: 2px solid var(--color-error); border-radius: var(--radius-md); padding: var(--space-5)">
+            <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-error); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: var(--space-3);">Without UPSERT</div>
+            <p style="font-size: var(--text-sm); margin: 0; line-height: 1.6;">Upload same CSV twice → 2 copies of every fill → P&amp;L is double-counted → account looks twice as profitable (or twice as bad).</p>
+          </div>
+          <div style="background: var(--color-success-light); border: 2px solid var(--color-success); border-radius: var(--radius-md); padding: var(--space-5)">
+            <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-success); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: var(--space-3);">With UPSERT</div>
+            <p style="font-size: var(--text-sm); margin: 0; line-height: 1.6;">Upload same CSV 10 times → still exactly 1 copy of every fill → numbers are always accurate regardless of how many times a file is re-imported.</p>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 3 — Pattern 2: Symbol-Scoped + Group Chat
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in" style="margin-top: var(--space-16)">
+        <h2 class="screen-heading">Pattern 2: Symbol-Scoped Reprocessing</h2>
+
+        <p>This fix was born from a real production crisis. Before it existed, uploading a file caused the server to crash. Here is the code, then the story.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-comment"># Reprocess positions only for symbols present in this batch.</span></span>
+<span class="code-line"><span class="code-comment"># Scoping to affected symbols avoids rebuilding the entire</span></span>
+<span class="code-line"><span class="code-comment"># position history on every upload (which caused worker</span></span>
+<span class="code-line"><span class="code-comment"># timeouts with remote PostgreSQL).</span></span>
+<span class="code-line">affected_symbols = {r.symbol <span class="code-keyword">for</span> r <span class="code-keyword">in</span> records <span class="code-keyword">if</span> r.symbol}</span>
+<span class="code-line"><span class="code-property">self</span>.position_tracker.<span class="code-function">reprocess_positions_for_symbols</span>(</span>
+<span class="code-line">    user_id, affected_symbols</span>
+<span class="code-line">)</span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label" style="position: static; opacity: 1; font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-muted); display: block; margin-bottom: var(--space-3);">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl"><strong>affected_symbols = {r.symbol for ...}:</strong> Build a set of every distinct stock symbol in this batch of records — e.g., <code>{&quot;AAPL&quot;, &quot;TSLA&quot;, &quot;SPY&quot;}</code>. Duplicates are automatically removed because it is a <span class="term" data-definition="A set is a collection that contains no duplicates. If you add AAPL three times, the set still only contains one AAPL. In Python, curly braces {} create a set.">set</span>.</p>
+              <p class="tl"><strong>reprocess_positions_for_symbols(...):</strong> Rebuild positions ONLY for those 3 symbols — completely skip the other 200+ symbols already in your history.</p>
+              <p class="tl">This is called <span class="term" data-definition="Symbol-scoped means the operation is limited to the specific trading symbols (AAPL, TSLA, etc.) affected by the current action, rather than processing every symbol in the database.">symbol-scoped</span> reprocessing. The comment in the code says it all — without this, remote database calls caused a server timeout that killed user uploads.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Group chat: The 30-Second Crisis -->
+        <h3 style="margin-top: var(--space-10); font-family: var(--font-display); font-size: var(--text-xl);">The 30-Second Crisis</h3>
+        <p style="color: var(--color-text-secondary); font-size: var(--text-sm);">A dramatization of the bug — before and after the fix.</p>
+
+        <div class="chat-window" id="chat-module4">
+          <div class="chat-messages">
+
+            <div class="chat-message" data-msg="0" data-sender="narrator" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-text-muted); font-size: 0.7rem">OLD</div>
+              <div class="chat-bubble" style="background: var(--color-error-light); border-left: 3px solid var(--color-error)">
+                <span class="chat-sender" style="color: var(--color-error)">Old Code (before the fix)</span>
+                <p>User uploads a small CSV with 3 new AAPL trades.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="1" data-sender="PositionTracker" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-5)">PT</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-5)">PositionTracker (old)</span>
+                <p>Starting full position rebuild... scanning all 2,847 fills across 200 symbols... 5 seconds... 12 seconds... 22 seconds...</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="2" data-sender="gunicorn" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-error)">🔴</div>
+              <div class="chat-bubble" style="background: var(--color-error-light)">
+                <span class="chat-sender" style="color: var(--color-error)">Gunicorn (web server)</span>
+                <p>WORKER TIMEOUT. 30-second limit exceeded. Killing the process.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="3" data-sender="user" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">👤</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">User</span>
+                <p>Why did my upload fail?! The page just hung and then showed a 502 error. Did my trades get saved?!</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="4" data-sender="narrator" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-success); font-size: 0.7rem">NEW</div>
+              <div class="chat-bubble" style="background: var(--color-success-light); border-left: 3px solid var(--color-success)">
+                <span class="chat-sender" style="color: var(--color-success)">New Code (after the fix)</span>
+                <p>Same upload: CSV with 3 new AAPL trades.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="5" data-sender="PositionTracker" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-5)">PT</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-5)">PositionTracker (new)</span>
+                <p>Rebuilding positions only for symbols in this batch: <code>{AAPL}</code>. Scanning 47 AAPL fills... done. 0.4 seconds total.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="6" data-sender="gunicorn" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-success)">✅</div>
+              <div class="chat-bubble" style="background: var(--color-success-light)">
+                <span class="chat-sender" style="color: var(--color-success)">Gunicorn (web server)</span>
+                <p>Response sent in 0.4s. All good.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="chat-typing" id="chat-module4-typing" style="display:none">
+            <div class="chat-avatar" id="chat-module4-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+
+        <div class="callout callout-warning" style="margin-top: var(--space-6)">
+          <div class="callout-icon">⚠️</div>
+          <div class="callout-content">
+            <strong class="callout-title">Important Caveat</strong>
+            <p>Symbol-scoped reprocessing is only safe for <em>incremental</em> uploads where some history already exists. A brand-new account with no prior data needs a full reprocess — otherwise positions for symbols not in the first upload are never built. The code handles this automatically.</p>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 4 — Patterns 3 & 4: Avg Cost Basis + Multiplier
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in" style="margin-top: var(--space-16)">
+        <h2 class="screen-heading">Patterns 3 &amp; 4: The Math</h2>
+
+        <!-- Average cost basis visual -->
+        <h3 style="font-family: var(--font-display); font-size: var(--text-xl); margin-bottom: var(--space-4)">Average Cost Basis</h3>
+        <p>When you buy in multiple batches, no single fill price is "your price." The app blends them.</p>
+
+        <!-- Visual math breakdown -->
+        <div style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-6); box-shadow: var(--shadow-md); margin-top: var(--space-4)">
+          <div style="display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: var(--space-4); align-items: center; text-align: center;">
+            <div style="background: var(--color-accent-light); border-radius: var(--radius-sm); padding: var(--space-4)">
+              <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-accent); text-transform: uppercase; margin-bottom: var(--space-2)">Fill #1</div>
+              <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--color-accent)">100</div>
+              <div style="font-size: var(--text-sm); color: var(--color-text-secondary)">shares @ $10</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2)">Cost: $1,000</div>
+            </div>
+            <div style="font-size: var(--text-2xl); color: var(--color-text-muted)">+</div>
+            <div style="background: var(--color-info-light); border-radius: var(--radius-sm); padding: var(--space-4)">
+              <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-info); text-transform: uppercase; margin-bottom: var(--space-2)">Fill #2</div>
+              <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--color-info)">100</div>
+              <div style="font-size: var(--text-sm); color: var(--color-text-secondary)">shares @ $12</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2)">Cost: $1,200</div>
+            </div>
+            <div style="font-size: var(--text-2xl); color: var(--color-text-muted)">=</div>
+            <div style="background: var(--color-success-light); border: 2px solid var(--color-success); border-radius: var(--radius-sm); padding: var(--space-4)">
+              <div style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-success); text-transform: uppercase; margin-bottom: var(--space-2)">Avg Cost</div>
+              <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--color-success)">$11.00</div>
+              <div style="font-size: var(--text-sm); color: var(--color-text-secondary)">per share</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2)">($1,000 + $1,200) / 200</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Avg cost code translation -->
+        <div class="translation-block animate-in" style="margin-top: var(--space-6)">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line">trade_qty = trade.qty</span>
+<span class="code-line">multiplier = <span class="code-function">get_contract_multiplier</span>(</span>
+<span class="code-line">    trade.instrument_type, trade.symbol <span class="code-keyword">or</span> <span class="code-string">''</span></span>
+<span class="code-line">)</span>
+<span class="code-line">trade_cost = (<span class="code-function">Decimal</span>(<span class="code-function">str</span>(trade.net_price))</span>
+<span class="code-line">              * <span class="code-function">abs</span>(trade_qty) * multiplier)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-keyword">if</span> trade.side == <span class="code-string">"SELL"</span>:</span>
+<span class="code-line">    trade_qty = -trade_qty  <span class="code-comment"># Short position</span></span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label" style="position: static; opacity: 1; font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-muted); display: block; margin-bottom: var(--space-3);">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl"><strong>trade_qty:</strong> Start with the raw quantity from the broker fill.</p>
+              <p class="tl"><strong>get_contract_multiplier(...):</strong> Look up how many "real dollars" one unit represents. For stocks: 1. For options: 100. For futures: depends on the contract.</p>
+              <p class="tl"><strong>trade_cost = Decimal(...):</strong> Calculate the total dollar cost of this fill using precise <span class="term" data-definition="Decimal arithmetic avoids floating-point errors that occur with regular computer numbers. For example, 0.1 + 0.2 in normal arithmetic gives 0.30000000000000004. Decimal gives exactly 0.3. Always use Decimal for financial calculations.">Decimal</span> math — never regular floats for money.</p>
+              <p class="tl"><strong>if SELL, trade_qty = -trade_qty:</strong> Short positions are represented as negative quantities. Selling 100 shares becomes -100 to reduce the position count.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contract multiplier section -->
+        <h3 style="font-family: var(--font-display); font-size: var(--text-xl); margin-top: var(--space-10); margin-bottom: var(--space-4)">Contract Multiplier Lookup</h3>
+        <p>A fill price of "$3.50" means very different dollar amounts depending on what instrument you traded.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-keyword">def</span> <span class="code-function">get_contract_multiplier</span>(instrument_type, symbol=<span class="code-string">''</span>):</span>
+<span class="code-line">    <span class="code-keyword">if</span> instrument_type == <span class="code-string">'OPTION'</span>:</span>
+<span class="code-line">        <span class="code-keyword">return</span> <span class="code-function">Decimal</span>(<span class="code-string">'100'</span>)</span>
+<span class="code-line">    <span class="code-keyword">if</span> instrument_type == <span class="code-string">'FUTURES'</span>:</span>
+<span class="code-line">        root = symbol.<span class="code-function">split</span>()[<span class="code-number">0</span>].<span class="code-function">upper</span>() <span class="code-keyword">if</span> symbol <span class="code-keyword">else</span> <span class="code-string">''</span></span>
+<span class="code-line">        <span class="code-keyword">return</span> FUTURES_POINT_VALUES.<span class="code-function">get</span>(root, <span class="code-function">Decimal</span>(<span class="code-string">'1'</span>))</span>
+<span class="code-line">    <span class="code-keyword">return</span> <span class="code-function">Decimal</span>(<span class="code-string">'1'</span>)</span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label" style="position: static; opacity: 1; font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-muted); display: block; margin-bottom: var(--space-3);">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl"><strong>if OPTION → return 100:</strong> Every option <span class="term" data-definition="A contract is the unit you buy/sell for options and futures. One option contract represents the right to buy/sell 100 shares of stock. One futures contract represents a specific dollar amount per index point.">contract</span> represents 100 shares of the underlying stock. A $3.50 premium × 100 = $350 actual exposure per contract.</p>
+              <p class="tl"><strong>if FUTURES → look up by root symbol:</strong> Extract the base contract name (e.g., "MES" from "MES MAR25") and look it up in a table. MES (Micro E-mini S&amp;P) = $5 per point. ES (E-mini S&amp;P) = $50 per point.</p>
+              <p class="tl"><strong>return Decimal('1'):</strong> Stocks and ETFs are 1:1. A fill price of $150 per share means $150 per share. No conversion needed.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Multiplier table visual -->
+        <div class="badge-list" style="margin-top: var(--space-6)">
+          <div class="badge-item">
+            <code class="badge-code">EQUITY / ETF</code>
+            <span class="badge-desc">Multiplier: <strong>1×</strong> — fill price is actual dollar value per share</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">OPTION</code>
+            <span class="badge-desc">Multiplier: <strong>100×</strong> — one contract = 100 shares. $3.50 premium = $350 per contract</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">MES (Micro E-mini S&P)</code>
+            <span class="badge-desc">Multiplier: <strong>$5/point</strong> — a 10-point move = $50 per contract</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">ES (E-mini S&P)</code>
+            <span class="badge-desc">Multiplier: <strong>$50/point</strong> — a 10-point move = $500 per contract</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">MNQ (Micro Nasdaq)</code>
+            <span class="badge-desc">Multiplier: <strong>$2/point</strong> — scaled-down version of NQ ($20/point)</span>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 5 — All 4 Pattern Cards + Quiz
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in" style="margin-top: var(--space-16)">
+        <h2 class="screen-heading">The Four Tricks — Reference Card</h2>
+        <p>Memorize these patterns. When you see a similar problem in any app, you will recognize it immediately — and know the solution to ask for.</p>
+
+        <div class="pattern-cards stagger-children" style="margin-top: var(--space-8)">
+          <div class="pattern-card animate-in" style="border-top: 4px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">⬆️</div>
+            <h4 class="pattern-title">Idempotent UPSERT</h4>
+            <p class="pattern-desc">Upload the same file 10 times, get the same result once. The database fingerprints each row — if it exists, update it; if not, create it.</p>
+            <div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border-light)">
+              <code style="font-size: var(--text-xs); background: var(--color-bg-code); color: #CBA6F7; padding: 2px 8px; border-radius: 4px;">INSERT ... ON CONFLICT DO UPDATE</code>
+            </div>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 4px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">⚖️</div>
+            <h4 class="pattern-title">Average Cost Basis</h4>
+            <p class="pattern-desc">When you buy 100 shares at $10 then 100 more at $12, your average cost is $11. Every P&amp;L calculation uses this blended average, not any individual fill price.</p>
+            <div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border-light)">
+              <code style="font-size: var(--text-xs); background: var(--color-bg-code); color: #A6E3A1; padding: 2px 8px; border-radius: 4px;">(old_cost + new_cost) / new_qty</code>
+            </div>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 4px solid var(--color-actor-5)">
+            <div class="pattern-icon" style="background: var(--color-actor-5)">🎯</div>
+            <h4 class="pattern-title">Symbol-Scoped Reprocessing</h4>
+            <p class="pattern-desc">Only touch the data that changed. Rebuilding all 200 positions on every upload hit a 30-second server timeout. Rebuilding only 3 affected symbols takes milliseconds.</p>
+            <div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border-light)">
+              <code style="font-size: var(--text-xs); background: var(--color-bg-code); color: #89B4FA; padding: 2px 8px; border-radius: 4px;">{r.symbol for r in records}</code>
+            </div>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 4px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">✖️</div>
+            <h4 class="pattern-title">Contract Multiplier</h4>
+            <p class="pattern-desc">Options represent 100 shares; futures represent a fixed dollar amount per point. The lookup table converts a raw fill price into actual dollar exposure.</p>
+            <div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border-light)">
+              <code style="font-size: var(--text-xs); background: var(--color-bg-code); color: #FAB387; padding: 2px 8px; border-radius: 4px;">get_contract_multiplier(type, symbol)</code>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- ── QUIZ ── -->
+        <div style="margin-top: var(--space-12)">
+          <h2 class="screen-heading">Check Your Understanding</h2>
+          <p>Three scenarios. Each one tests whether you can apply a pattern to a situation you have not seen before.</p>
+
+          <div class="quiz-container" id="quiz-module4">
+
+            <!-- Q1: Avg cost math -->
+            <div class="quiz-question-block"
+                 data-correct="q4-1-b"
+                 data-explanation-right="Correct — average cost basis: (200 × $250 + 100 × $280) / 300 = ($50,000 + $28,000) / 300 = $78,000 / 300 = $260.00. The app uses this blended price for every P&amp;L calculation, not the price of any individual purchase."
+                 data-explanation-wrong="Not quite — work through the math: total cost = (200 × $250) + (100 × $280) = $50,000 + $28,000 = $78,000. Divide by total shares: $78,000 / 300. That is your average cost basis.">
+              <h3 class="quiz-question">You bought 200 TSLA at $250 last month, then 100 more at $280 today. The app needs to calculate your P&amp;L when you eventually sell. What average cost does it use?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="q4-1-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>$265 — the simple average of the two prices ($250 + $280) / 2</span>
+                </button>
+                <button class="quiz-option" data-value="q4-1-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>$260 — the weighted average based on how many shares at each price</span>
+                </button>
+                <button class="quiz-option" data-value="q4-1-c" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>$280 — the most recent purchase price (LIFO method)</span>
+                </button>
+              </div>
+              <div class="quiz-feedback"></div>
+            </div>
+
+            <!-- Q2: Full vs symbol-scoped -->
+            <div class="quiz-question-block"
+                 data-correct="q4-2-a"
+                 data-explanation-right="Exactly right. Symbol-scoped reprocessing is only safe when position history already exists in the database. For a first import, every symbol in the 5,000 fills is &quot;affected&quot; — you need a full rebuild to correctly calculate cost basis from the very beginning."
+                 data-explanation-wrong="Think about what symbol-scoped means. It rebuilds positions ONLY for symbols in the current upload. On a brand-new account, there are no existing positions — but symbol-scoped would only process the symbols in the first file, not everything. What if a later file references history that was never fully built?">
+              <h3 class="quiz-question">You add support for a new broker. On first import, a new user uploads 3 years of trading history (5,000 fills across 80 symbols). Which reprocessing approach should be used?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="q4-2-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Full reprocess — first import needs all history built correctly from scratch.</span>
+                </button>
+                <button class="quiz-option" data-value="q4-2-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Symbol-scoped — the code will figure out which symbols are affected.</span>
+                </button>
+                <button class="quiz-option" data-value="q4-2-c" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Neither — the first import does not need position calculation at all.</span>
+                </button>
+              </div>
+              <div class="quiz-feedback"></div>
+            </div>
+
+            <!-- Q3: Contract multiplier -->
+            <div class="quiz-question-block"
+                 data-correct="q4-3-c"
+                 data-explanation-right="Exactly. 5 contracts × $3.50 premium × 100 multiplier = $1,750. That is the actual dollar amount at stake. If the app used a multiplier of 1 instead of 100, it would show $17.50 — and every options P&amp;L calculation in the system would be off by 100x."
+                 data-explanation-wrong="Remember the contract multiplier. One option contract represents 100 shares. So you need to multiply: contracts × premium × 100. The raw fill price ($3.50) is per share, but you are buying rights over 100 shares per contract.">
+              <h3 class="quiz-question">You bought 5 TSLA call options at a premium of $3.50 each. What is the actual dollar amount at stake?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="q4-3-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>$17.50 — 5 contracts × $3.50</span>
+                </button>
+                <button class="quiz-option" data-value="q4-3-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>$350 — 1 contract × $3.50 × 100 multiplier</span>
+                </button>
+                <button class="quiz-option" data-value="q4-3-c" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>$1,750 — 5 contracts × $3.50 × 100 multiplier</span>
+                </button>
+              </div>
+              <div class="quiz-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('quiz-module4')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module4')">Try Again</button>
+          </div>
+        </div>
+
+      </section>
+
+    </div><!-- .module-body -->
+  </div><!-- .module-content -->
+</section>

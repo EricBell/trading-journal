@@ -1,0 +1,365 @@
+<section class="module" id="module-1" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+
+    <!-- ═══════════════════════════════════════════════════════
+         HEADER
+    ═══════════════════════════════════════════════════════ -->
+    <header class="module-header animate-in">
+      <span class="module-number">01</span>
+      <h1 class="module-title">The Big Picture</h1>
+      <p class="module-subtitle">You clicked "Ingest." Thirty seconds later you see P&amp;L, win rate, and your best trade. Here's what just happened.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 1 — The Problem Worth Solving
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Problem Worth Solving</h2>
+
+        <p class="screen-lead">
+          Your broker records every <span class="term" data-definition="A fill is a single execution — the moment your order was actually matched and traded. One trade might be filled in multiple pieces if the order is large.">fill</span> as a separate row.
+          Buy 200 shares of AAPL in the morning, sell 100 in the afternoon, sell the rest before close?
+          <strong>That's three rows</strong> — and your broker treats them as three unrelated events.
+        </p>
+
+        <div class="pattern-cards stagger-children" style="margin-top: var(--space-8)">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)">
+            <div class="pattern-icon" style="background: var(--color-actor-1)">🏦</div>
+            <h4 class="pattern-title">What Your Broker Gives You</h4>
+            <p class="pattern-desc">A raw ledger of every individual <span class="term" data-definition="An execution is another word for a fill — the moment a buy or sell order was completed by the exchange.">execution</span>. Like a bank statement that shows every individual card swipe, with no monthly totals.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">📊</div>
+            <h4 class="pattern-title">What You Actually Need</h4>
+            <p class="pattern-desc">Completed <span class="term" data-definition="A round-trip trade is a complete buy-then-sell (or short-then-cover) cycle. Entry + exit = one finished trade with a P&L result.">round-trip trades</span> with <span class="term" data-definition="P&amp;L stands for Profit and Loss — the dollar gain or loss on a completed trade.">P&amp;L</span>, win rates, and patterns. The accountant's summary, not the raw receipts.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">⚙️</div>
+            <h4 class="pattern-title">What This App Does</h4>
+            <p class="pattern-desc">Bridges the gap. Upload a <span class="term" data-definition="CSV stands for Comma-Separated Values — a plain-text file format that spreadsheet programs like Excel use to store tabular data. Each row is a record, each column is separated by a comma.">CSV</span> file from Schwab; get a structured trading journal with metrics, annotations, and a dashboard.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-8)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">The Core Insight</strong>
+            <p>Every number on your dashboard is derived from those raw broker fills. If you understand that transformation, you can debug any wrong number, ask AI to add any metric, and explain the whole system in one sentence.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 2 — The Journey of a CSV Upload (Data Flow)
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Journey of One Upload</h2>
+        <p>Click <strong>Next Step</strong> to trace exactly what happens after you hit the "Ingest" button.</p>
+
+        <div class="flow-animation" data-steps='[
+          {"highlight":"flow-actor-1","label":"You drag your Schwab CSV onto the upload page and click Ingest. The browser sends the file to the Flask /ingest route."},
+          {"highlight":"flow-actor-2","label":"Flask /ingest receives the file and hands it to CsvParser. Flask is the traffic cop — it does not parse anything itself.","packet":true,"from":"actor-1","to":"actor-2"},
+          {"highlight":"flow-actor-3","label":"CsvParser reads the Schwab format row-by-row, extracts the account number from line 1, and turns each row into a clean record dict.","packet":true,"from":"actor-2","to":"actor-3"},
+          {"highlight":"flow-actor-4","label":"NdjsonIngester validates every record with Pydantic and UPSERTs them into the trades table. Duplicates are silently skipped using the unique_key fingerprint.","packet":true,"from":"actor-3","to":"actor-4"},
+          {"highlight":"flow-actor-5","label":"TradeCompletionEngine groups all fills by symbol, type, and account — then seals any completed round-trip trades into the completed_trades table.","packet":true,"from":"actor-4","to":"actor-5"},
+          {"highlight":"flow-actor-6","label":"PositionTracker recalculates running cost basis and P&amp;L — but ONLY for the symbols in this upload, not your entire history. Performance optimization.","packet":true,"from":"actor-5","to":"actor-6"},
+          {"highlight":"flow-actor-7","label":"PostgreSQL stores everything durably. Flask returns the result: &apos;47 inserted, 3 updated.&apos; Your dashboard now reflects the new trades.","packet":true,"from":"actor-6","to":"actor-7"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-actor-1">
+              <div class="flow-actor-icon">👤</div>
+              <span>You</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-2">
+              <div class="flow-actor-icon">🌐</div>
+              <span>Flask /ingest</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-3">
+              <div class="flow-actor-icon">📋</div>
+              <span>CsvParser</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-4">
+              <div class="flow-actor-icon">🔒</div>
+              <span>NdjsonIngester</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-5">
+              <div class="flow-actor-icon">🔗</div>
+              <span>TradeEngine</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-6">
+              <div class="flow-actor-icon">📐</div>
+              <span>PositionTracker</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-7">
+              <div class="flow-actor-icon">🗄️</div>
+              <span>PostgreSQL</span>
+            </div>
+          </div>
+
+          <div class="flow-packet" id="flow-packet"></div>
+          <div class="flow-step-label" id="flow-label">Click "Next Step" to begin</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 3 — The Fingerprint (Code↔English Translation)
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Fingerprint That Prevents Duplicates</h2>
+
+        <p>
+          Upload the same file twice? Nothing bad happens. The app uses a
+          <span class="term" data-definition="A unique_key is a string built from several fields that uniquely identifies one record. If the app sees the same key twice, it updates the existing row instead of creating a duplicate.">unique_key</span>
+          as a fingerprint for each trade. Here's exactly how it's built — straight from
+          <code style="font-family: var(--font-mono); font-size: var(--text-sm); background: var(--color-bg-code); color: #CBA6F7; padding: 2px 6px; border-radius: 4px;">trading_journal/schemas.py</code>:
+        </p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-keyword">@property</span></span>
+<span class="code-line"><span class="code-keyword">def</span> <span class="code-function">unique_key</span>(<span class="code-keyword">self</span>) <span class="code-operator">-&gt;</span> <span class="code-function">str</span>:</span>
+<span class="code-line">    <span class="code-comment">"""Generate unique key for upsert logic."""</span></span>
+<span class="code-line">    <span class="code-comment"># Use source file, row index, and key trade details</span></span>
+<span class="code-line">    base_key <span class="code-operator">=</span> <span class="code-string">f"<span class="code-operator">{</span><span class="code-keyword">self</span>.source_file<span class="code-operator">}</span>:<span class="code-operator">{</span><span class="code-keyword">self</span>.row_index<span class="code-operator">}</span>"</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">if</span> <span class="code-keyword">self</span>.exec_time:</span>
+<span class="code-line">        base_key <span class="code-operator">+=</span> <span class="code-string">f":<span class="code-operator">{</span><span class="code-keyword">self</span>.exec_time.isoformat()<span class="code-operator">}</span>"</span></span>
+<span class="code-line">    <span class="code-keyword">elif</span> <span class="code-keyword">self</span>.time_canceled:</span>
+<span class="code-line">        base_key <span class="code-operator">+=</span> <span class="code-string">f":<span class="code-operator">{</span><span class="code-keyword">self</span>.time_canceled.isoformat()<span class="code-operator">}</span>"</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">if</span> <span class="code-keyword">self</span>.symbol:</span>
+<span class="code-line">        base_key <span class="code-operator">+=</span> <span class="code-string">f":<span class="code-operator">{</span><span class="code-keyword">self</span>.symbol<span class="code-operator">}</span>"</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">if</span> <span class="code-keyword">self</span>.side <span class="code-keyword">and</span> <span class="code-keyword">self</span>.qty:</span>
+<span class="code-line">        base_key <span class="code-operator">+=</span> <span class="code-string">f":<span class="code-operator">{</span><span class="code-keyword">self</span>.side<span class="code-operator">}</span>:<span class="code-operator">{</span><span class="code-keyword">self</span>.qty<span class="code-operator">}</span>"</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">return</span> base_key</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl"><strong>@property</strong> — This is a computed attribute. You read it like <code style="font-family:var(--font-mono);font-size:var(--text-xs)">record.unique_key</code> and Python runs this code to generate the value on the spot.</p>
+              <p class="tl"><strong>base_key = filename:row_number</strong> — Start the fingerprint with two things we already know: which file this came from, and which row in that file. This alone is often enough to identify a record.</p>
+              <p class="tl"><strong>if exec_time: append timestamp</strong> — If we have the exact time the trade was executed, glue it on. A timestamp makes the fingerprint even harder to fake-duplicate.</p>
+              <p class="tl"><strong>elif time_canceled: …</strong> — Some records are canceled orders, not fills. Use their cancellation time as the timestamp instead.</p>
+              <p class="tl"><strong>if symbol: append it</strong> — Add the ticker symbol (AAPL, TSLA, etc.) to the fingerprint.</p>
+              <p class="tl"><strong>if side and qty: append them</strong> — Finish with BUY or SELL and the number of shares. Now the fingerprint encodes: file + row + time + symbol + direction + size. Two rows with all the same values are the same trade. One difference anywhere = a different fingerprint.</p>
+              <p class="tl"><strong>return base_key</strong> — Hand back the finished fingerprint string. The <span class="term" data-definition="An UPSERT is a database operation that means &quot;UPDATE if the row already exists, INSERT if it does not.&quot; It prevents duplicate rows while still recording changes.">UPSERT</span> logic uses this to decide: insert new row or update existing one?</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-6)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">This Makes the App <span class="term" data-definition="Idempotent means: running the same operation multiple times produces the same result as running it once. Re-uploading the same CSV file should not create duplicate trades — that is idempotent behavior.">Idempotent</span></strong>
+            <p>Re-upload any file as many times as you want. The unique_key system guarantees you never get duplicate trades.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 4 — Group Chat Animation
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Live From the Inside: One Upload in Real Time</h2>
+        <p>Here's what's actually happening during a typical CSV upload — narrated by the components themselves.</p>
+
+        <div class="chat-window" id="chat-module1">
+          <div class="chat-messages">
+
+            <div class="chat-message" data-msg="0" data-sender="you" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-text-secondary)">👤</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-text-secondary)">You (the trader)</span>
+                <p>Just uploaded 2025-11-04-TradeActivity.csv. Let me know when it's done!</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="1" data-sender="flask" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">🌐</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">Flask /ingest</span>
+                <p>Got your file! It's a CSV, so I'll hand it straight to CsvParser. Not my job to read it — I just route traffic.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="2" data-sender="csvparser" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">📋</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">CsvParser</span>
+                <p>Line 1 says "Transactions for XXXSCHW (Individual)." Account number extracted. Now reading the trade rows... parsed 52 records. Passing them along.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="3" data-sender="ingester" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-4)">🔒</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-4)">NdjsonIngester</span>
+                <p>52 records received. Running <span class="term" data-definition="Validation means checking that data follows the expected rules — correct types, required fields present, values in valid ranges. If a record fails validation, it's rejected before touching the database.">validation</span>... all pass. Checking fingerprints against the database... 47 are new, 5 already exist. Inserting 47, updating 5. Done.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="4" data-sender="tradeengine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">🔗</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">TradeCompletionEngine</span>
+                <p>Scanning all unlinked fills for this user... grouping by symbol and account. Found 18 completed round-trips. Sealed them all into the completed_trades table.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="5" data-sender="positiontracker" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-5)">📐</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-5)">PositionTracker</span>
+                <p>This file touched AAPL, TSLA, and SPY. Rebuilding positions for those three only — not your entire history. Average cost and P&amp;L updated.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="6" data-sender="flask" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">🌐</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">Flask /ingest</span>
+                <p>All done! Sending response back to the browser: "47 inserted, 5 updated." Your dashboard should be showing fresh numbers now.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="7" data-sender="you" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-text-secondary)">👤</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-text-secondary)">You (the trader)</span>
+                <p>Win rate: 67%. P&amp;L: +$1,240. Best trade: TSLA +$380. Now THAT is a useful summary.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="chat-typing" id="chat-typing" style="display:none">
+            <div class="chat-avatar" id="chat-module1-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 5 — Quiz
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check Your Understanding</h2>
+        <p>These questions test whether you can <em>use</em> what you just learned — not whether you memorized it.</p>
+
+        <div class="quiz-container" id="quiz-module1">
+
+          <!-- Question 1 -->
+          <div class="quiz-question-block"
+               data-correct="option-a"
+               data-explanation-right="Exactly! The unique_key system means re-uploading is always safe. Each record gets a fingerprint built from filename + row + timestamp + symbol + direction + quantity. Same file = same fingerprints = the app updates the existing rows instead of creating new ones."
+               data-explanation-wrong="Not quite. Think about what the unique_key fingerprint is designed to do — it exists specifically to handle this situation. What happens when the app sees a key it has already stored?">
+            <h3 class="quiz-question">You upload the same CSV file twice by accident. What happens?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The app updates the existing records — no duplicates are created, because each trade has a unique fingerprint.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The app throws an error and refuses to process the second upload.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Every trade gets doubled — your P&amp;L is now inflated by 2x.</span>
+              </button>
+              <button class="quiz-option" data-value="option-d" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Nothing happens — the second upload is completely ignored.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <!-- Question 2 -->
+          <div class="quiz-question-block"
+               data-correct="option-b"
+               data-explanation-right="Correct. The completed_trades table is 100% derived data — it's built by scanning the trades table and grouping fills into round-trips. Running the process-trades command rebuilds it from scratch. Only the raw fills in the trades table are irreplaceable."
+               data-explanation-wrong="Think about which table contains the original broker data that you uploaded. The completed_trades table is built from that data — so if it was corrupted, could you reconstruct it from the original source?">
+            <h3 class="quiz-question">A teammate tells you the completed_trades table is corrupted. Should you be worried about losing data?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Yes — that table holds critical data that cannot be recovered once lost.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>No — it is fully derived from the trades table. Running process-trades rebuilds it completely.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Maybe — it depends on whether the positions table is also corrupted.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <!-- Question 3 -->
+          <div class="quiz-question-block"
+               data-correct="option-b"
+               data-explanation-right="Right! PositionTracker is scoped to only the symbols present in the uploaded file. This was a deliberate performance optimization — rebuilding every symbol on every upload caused worker timeouts. The code explicitly collects affected_symbols from the batch and reprocesses only those."
+               data-explanation-wrong="Look at Screen 2 again. The PositionTracker step has a specific optimization that limits how much work it does on each upload. Which symbols does it actually touch?">
+            <h3 class="quiz-question">You upload a file with trades for AAPL and TSLA. Your account also has older SPY and NVDA positions. Which symbols get their positions recalculated?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>All four — AAPL, TSLA, SPY, and NVDA. Every position is always recalculated.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Only AAPL and TSLA — the symbols in this specific upload.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>None — position updates only happen when you run a separate command.</span>
+              </button>
+              <button class="quiz-option" data-value="option-d" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Only AAPL — the first symbol alphabetically in the batch.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module1')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module1')">Try Again</button>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">→</div>
+          <div class="callout-content">
+            <strong class="callout-title">Up Next: The Cast of Characters</strong>
+            <p>Now that you know <em>what</em> happens end-to-end, Module 2 introduces the six Python <span class="term" data-definition="In Python, a class is a blueprint for creating objects that bundle related data and behavior together. Think of it like a job description — it defines what a worker knows and what they can do.">classes</span> responsible for each step — and gives each one a personality.</p>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- .module-body -->
+  </div><!-- .module-content -->
+</section>

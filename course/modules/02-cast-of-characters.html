@@ -1,0 +1,398 @@
+<section class="module" id="module-2" style="background: var(--color-bg)">
+  <div class="module-content">
+
+    <!-- ═══════════════════════════════════════════════════════
+         HEADER
+    ═══════════════════════════════════════════════════════ -->
+    <header class="module-header animate-in">
+      <span class="module-number">02</span>
+      <h1 class="module-title">The Cast of Characters</h1>
+      <p class="module-subtitle">Six Python classes. Each one obsessed with exactly one job. Meet the assembly line.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 1 — The Assembly Line Metaphor
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">One CSV In. A Dashboard Out.</h2>
+
+        <p class="screen-lead">
+          Think of a car factory assembly line. Raw steel enters at one end. A finished car rolls out the other.
+          Between them: six specialized stations, each doing one thing, each trusting the others to do theirs.
+        </p>
+        <p>
+          This app works the same way. A raw CSV enters at one end. Polished dashboard metrics exit the other.
+          Six <span class="term" data-definition="In Python, a class is a blueprint that bundles related data and behavior together. When the app runs, it creates instances of each class — like hiring workers from a job description.">classes</span> are the stations. Here they are, in order:
+        </p>
+
+        <!-- Assembly Line Flow Diagram -->
+        <div style="margin: var(--space-8) 0; overflow-x: auto;">
+          <div class="flow-steps" style="align-items: stretch; min-width: 600px;">
+            <div class="flow-step" style="border-top: 3px solid var(--color-actor-1); text-align: center; flex: 1">
+              <div class="flow-step-num" style="background: var(--color-actor-1)">📋</div>
+              <strong>CsvParser</strong>
+              <p style="font-size: var(--text-sm); margin-top: var(--space-2); color: var(--color-text-secondary)">Reads broker files</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step" style="border-top: 3px solid var(--color-actor-2); text-align: center; flex: 1">
+              <div class="flow-step-num" style="background: var(--color-actor-2)">🔒</div>
+              <strong>NdjsonIngester</strong>
+              <p style="font-size: var(--text-sm); margin-top: var(--space-2); color: var(--color-text-secondary)">Validates &amp; stores</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step" style="border-top: 3px solid var(--color-actor-1); text-align: center; flex: 1">
+              <div class="flow-step-num" style="background: var(--color-actor-1)">🔗</div>
+              <strong>TradeCompletion­Engine</strong>
+              <p style="font-size: var(--text-sm); margin-top: var(--space-2); color: var(--color-text-secondary)">Pairs buy + sell</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step" style="border-top: 3px solid var(--color-actor-3); text-align: center; flex: 1">
+              <div class="flow-step-num" style="background: var(--color-actor-3)">📐</div>
+              <strong>PositionTracker</strong>
+              <p style="font-size: var(--text-sm); margin-top: var(--space-2); color: var(--color-text-secondary)">Calculates P&amp;L</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step" style="border-top: 3px solid var(--color-actor-4); text-align: center; flex: 1">
+              <div class="flow-step-num" style="background: var(--color-actor-4)">📊</div>
+              <strong>DashboardEngine</strong>
+              <p style="font-size: var(--text-sm); margin-top: var(--space-2); color: var(--color-text-secondary)">Crunches metrics</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- MassiveClient sidebar callout -->
+        <div class="callout callout-info">
+          <div class="callout-icon">📡</div>
+          <div class="callout-content">
+            <strong class="callout-title">MassiveClient — The On-Call Specialist</strong>
+            <p>Not on the main line. MassiveClient talks to <span class="term" data-definition="Polygon.io is a market data provider — a service that gives you historical stock prices, OHLCV bars, and other financial data via an API.">Polygon.io</span> when you need historical price data. Think of it as the specialist you page when the regular line needs outside information.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-4)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Why Does This Matter For You?</strong>
+            <p>When you tell an AI to add a feature, you need to know <em>which station</em> to modify. "Update PositionTracker" is a precise instruction. "Update the position stuff" is a mystery. This module gives you the vocabulary.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 2 — Architecture Diagram (6 classes clickable)
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">What Each Class Actually Does</h2>
+        <p>Click any station card to see its job description, the file it lives in, and why it exists as a separate class.</p>
+
+        <div class="arch-diagram" style="margin-top: var(--space-6)">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-4)">
+
+            <div class="arch-component pattern-card"
+                 style="border-top: 3px solid var(--color-actor-1); cursor: pointer"
+                 data-desc="CsvParser — trading_journal/csv_parser.py. Job: translate the raw Schwab CSV format into clean Python dicts. It handles weird edge cases: column name differences between file types, parsing the account number from the very first line, and option/futures section headers. Everything format-specific lives here so the rest of the pipeline is format-agnostic."
+                 onclick="showArchDesc(this)">
+              <div class="pattern-icon" style="background: var(--color-actor-1)">📋</div>
+              <h4 class="pattern-title">CsvParser</h4>
+              <p class="pattern-desc" style="font-size: var(--text-sm)"><code style="font-family:var(--font-mono);font-size:var(--text-xs)">csv_parser.py</code> — Reads Schwab <span class="term" data-definition="A CSV (Comma-Separated Values) file stores tabular data as plain text. Each row is a record; columns are separated by commas. Schwab exports your trade history in this format.">CSV</span> files and translates broker format into clean Python records.</p>
+            </div>
+
+            <div class="arch-component pattern-card"
+                 style="border-top: 3px solid var(--color-actor-2); cursor: pointer"
+                 data-desc="NdjsonIngester — trading_journal/ingestion.py. Job: be the gatekeeper. Every record gets validated by Pydantic before touching the database. Handles duplicate detection via unique_key UPSERTs, manages account creation, and coordinates the downstream calls to TradeCompletionEngine and PositionTracker after records are saved."
+                 onclick="showArchDesc(this)">
+              <div class="pattern-icon" style="background: var(--color-actor-2)">🔒</div>
+              <h4 class="pattern-title">NdjsonIngester</h4>
+              <p class="pattern-desc" style="font-size: var(--text-sm)"><code style="font-family:var(--font-mono);font-size:var(--text-xs)">ingestion.py</code> — Validates every record with <span class="term" data-definition="Pydantic is a Python library that validates data against a defined schema. If a record is missing required fields or has the wrong data type, Pydantic rejects it before it ever reaches the database.">Pydantic</span> and UPSERTs into the database.</p>
+            </div>
+
+            <div class="arch-component pattern-card"
+                 style="border-top: 3px solid var(--color-actor-1); cursor: pointer"
+                 data-desc="TradeCompletionEngine — trading_journal/trade_completion.py. Job: find buy-sell pairs. It groups all unlinked fills by (symbol, instrument type, account). When a group's position returns to zero shares, it seals those fills into a completed_trades record. Handles stocks, options (grouped by expiration + strike + type), and futures."
+                 onclick="showArchDesc(this)">
+              <div class="pattern-icon" style="background: var(--color-actor-1)">🔗</div>
+              <h4 class="pattern-title">TradeCompletionEngine</h4>
+              <p class="pattern-desc" style="font-size: var(--text-sm)"><code style="font-family:var(--font-mono);font-size:var(--text-xs)">trade_completion.py</code> — Groups fills into round-trip trades. When position hits zero, the trade is sealed.</p>
+            </div>
+
+            <div class="arch-component pattern-card"
+                 style="border-top: 3px solid var(--color-actor-3); cursor: pointer"
+                 data-desc="PositionTracker — trading_journal/positions.py. Job: do the math. Calculates average cost basis using weighted average across all fills. Applies the correct contract multiplier (stocks=1x, options=100x, MES futures=5x). Computes unrealized and realized P&L. Scoped to only affected symbols per upload for performance."
+                 onclick="showArchDesc(this)">
+              <div class="pattern-icon" style="background: var(--color-actor-3)">📐</div>
+              <h4 class="pattern-title">PositionTracker</h4>
+              <p class="pattern-desc" style="font-size: var(--text-sm)"><code style="font-family:var(--font-mono);font-size:var(--text-xs)">positions.py</code> — Calculates <span class="term" data-definition="Average cost basis is the average price you paid per share, weighted by how many shares you bought at each price. Used to calculate your profit or loss when you sell.">average cost basis</span> and P&amp;L. Applies <span class="term" data-definition="A contract multiplier scales the value of a single contract. Options = 100x (one contract = 100 shares). Some futures = 5x or 50x. Stocks = 1x. Getting this wrong means every P&L calculation is off.">contract multipliers</span>.</p>
+            </div>
+
+            <div class="arch-component pattern-card"
+                 style="border-top: 3px solid var(--color-actor-4); cursor: pointer"
+                 data-desc="DashboardEngine — trading_journal/dashboard.py. Job: aggregate. Queries completed trades and positions to produce win rate, profit factor, average win/loss, largest win/loss, streak records, and equity curve data. All read-only — it reads the data but never writes it. Powers the / dashboard route."
+                 onclick="showArchDesc(this)">
+              <div class="pattern-icon" style="background: var(--color-actor-4)">📊</div>
+              <h4 class="pattern-title">DashboardEngine</h4>
+              <p class="pattern-desc" style="font-size: var(--text-sm)"><code style="font-family:var(--font-mono);font-size:var(--text-xs)">dashboard.py</code> — Aggregates metrics: win rate, profit factor, equity curve. Read-only — never writes data.</p>
+            </div>
+
+            <div class="arch-component pattern-card"
+                 style="border-top: 3px solid var(--color-actor-5); cursor: pointer"
+                 data-desc="MassiveClient — trading_journal/market_data.py. Job: talk to Polygon.io. Fetches historical OHLCV price bars and enriches trades with market context (underlying price at entry, historical bars for HG plan analysis). Lives outside the main upload pipeline — it's called on-demand for market data enrichment tasks."
+                 onclick="showArchDesc(this)">
+              <div class="pattern-icon" style="background: var(--color-actor-5)">📡</div>
+              <h4 class="pattern-title">MassiveClient</h4>
+              <p class="pattern-desc" style="font-size: var(--text-sm)"><code style="font-family:var(--font-mono);font-size:var(--text-xs)">market_data.py</code> — Fetches <span class="term" data-definition="OHLCV stands for Open, High, Low, Close, Volume — the five standard data points for a price bar covering a time period (e.g. 1 minute, 1 day).">OHLCV</span> bars from Polygon.io for price enrichment and analysis.</p>
+            </div>
+
+          </div>
+
+          <div class="arch-description" id="arch-desc" style="margin-top: var(--space-6)">
+            Click any class card above to read its full job description.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 3 — Code↔English: TradeCompletionEngine grouping loop
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Sorting Hat: How Trades Get Grouped</h2>
+
+        <p>
+          The hardest problem in the app: taking hundreds of individual fills and figuring out which ones belong together as a single round-trip trade.
+          Here's the exact code that does it — from
+          <code style="font-family: var(--font-mono); font-size: var(--text-sm); background: var(--color-bg-code); color: #CBA6F7; padding: 2px 6px; border-radius: 4px;">trading_journal/trade_completion.py</code>:
+        </p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line">trade_groups: <span class="code-function">Dict</span>[<span class="code-function">Any</span>, <span class="code-function">List</span>[<span class="code-function">Trade</span>]] <span class="code-operator">=</span> {}</span>
+<span class="code-line"><span class="code-keyword">for</span> trade <span class="code-keyword">in</span> unlinked_trades:</span>
+<span class="code-line">    key <span class="code-operator">=</span> (trade.symbol, trade.instrument_type, trade.account_id)</span>
+<span class="code-line">    <span class="code-keyword">if</span> trade.instrument_type <span class="code-operator">==</span> <span class="code-string">'OPTION'</span> <span class="code-keyword">and</span> trade.option_data:</span>
+<span class="code-line">        key <span class="code-operator">=</span> key <span class="code-operator">+</span> (trade.exp_date, trade.strike_price, trade.option_type)</span>
+<span class="code-line">    <span class="code-keyword">elif</span> trade.instrument_type <span class="code-operator">==</span> <span class="code-string">'FUTURES'</span>:</span>
+<span class="code-line">        key <span class="code-operator">=</span> key <span class="code-operator">+</span> (trade.exp_date,)</span>
+<span class="code-line">    trade_groups.setdefault(key, []).append(trade)</span>
+<span class="code-line"></span>
+<span class="code-line">completed_count <span class="code-operator">=</span> <span class="code-number">0</span></span>
+<span class="code-line"><span class="code-keyword">for</span> trades <span class="code-keyword">in</span> trade_groups.values():</span>
+<span class="code-line">    completed_count <span class="code-operator">+=</span> <span class="code-keyword">self</span>.<span class="code-function">_process_trade_group</span>(session, trades)</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl"><strong>trade_groups = {}</strong> — Create an empty set of buckets. Each bucket will hold fills that belong together. The bucket's label is a combination of identifying details.</p>
+              <p class="tl"><strong>for trade in unlinked_trades:</strong> — Loop through every fill that hasn't been matched to a completed trade yet.</p>
+              <p class="tl"><strong>key = (symbol, instrument_type, account_id)</strong> — Every fill gets sorted by: what ticker it is, what kind of asset (stock vs <span class="term" data-definition="An instrument type is the category of financial asset: STOCK/ETF (shares of a company), OPTION (the right to buy/sell at a specific price), or FUTURES (a contract to buy/sell at a future date).">instrument type</span>), and which brokerage account it came from. AAPL stock in Account A never mixes with AAPL stock in Account B.</p>
+              <p class="tl"><strong>if OPTION: extend key with exp_date + strike_price + option_type</strong> — Options need more precision. A $200 call expiring in January is a completely different contract from a $200 call expiring in March. The <span class="term" data-definition="An expiration date is the date an options contract expires and becomes worthless if not exercised. Two options on the same stock with different expiration dates are entirely different contracts.">expiration date</span>, <span class="term" data-definition="A strike price is the price at which an option contract gives you the right to buy or sell the underlying stock. A $200 AAPL call lets you buy AAPL at $200 regardless of the market price.">strike price</span>, and call-vs-put type are all added to the bucket label.</p>
+              <p class="tl"><strong>elif FUTURES: extend with exp_date</strong> — Futures contracts also have expiration dates that make them distinct.</p>
+              <p class="tl"><strong>trade_groups.setdefault(key, []).append(trade)</strong> — Drop this fill into the matching bucket. If no bucket exists for this key yet, create one first.</p>
+              <p class="tl"><strong>for trades in trade_groups.values():</strong> — Now process each bucket. Every bucket is a set of fills that all belong to the same trade.</p>
+              <p class="tl"><strong>_process_trade_group(session, trades)</strong> — Hand the bucket to the method that scans through the fills chronologically and seals completed round-trips when the position returns to zero shares.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 4 — Group Chat: The 6 Classes Introduce Themselves
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">First Day on the Job</h2>
+        <p>The six classes introduce themselves in the team workspace. Click through to meet everyone.</p>
+
+        <div class="chat-window" id="chat-module2">
+          <div class="chat-messages">
+
+            <div class="chat-message" data-msg="0" data-sender="csvparser" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">📋</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">CsvParser</span>
+                <p>Hey team! I'm CsvParser. I handle everything about reading your broker's file format — column name quirks, the account number buried on line 1, options section headers. Format weirdness? My problem, not yours. You give me a CSV; I give you clean records.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="1" data-sender="ingester" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">🔒</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">NdjsonIngester</span>
+                <p>NdjsonIngester here. I'm the gatekeeper. Every record gets validated by Pydantic before it touches the database — wrong data type, missing field, invalid symbol? I reject it cleanly. I also handle the unique_key deduplication so re-uploads are always safe.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="2" data-sender="tradeengine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">🔗</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">TradeCompletionEngine</span>
+                <p>TradeCompletionEngine. I find the buy-sell pairs. I sort every fill into buckets — by symbol, account, and (for options) the specific contract. When a bucket's position returns to zero, I seal it as a completed trade. That's the core problem I exist to solve.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="3" data-sender="positiontracker" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">📐</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">PositionTracker</span>
+                <p>I'm PositionTracker. I do the math — <span class="term" data-definition="Average cost basis is the average price paid per share, weighted across all fill prices. If you buy 100 shares at $10 and 100 more at $12, your average cost basis is $11/share.">average cost basis</span>, realized P&amp;L, unrealized P&amp;L. I also apply <span class="term" data-definition="A contract multiplier scales the dollar value of a position. One options contract represents 100 shares (100x multiplier), so buying 1 contract at $5 actually costs $500.">contract multipliers</span> — one options contract is worth 100 shares, not 1. Get that wrong and every P&amp;L number is garbage.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="4" data-sender="dashboardengine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-4)">📊</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-4)">DashboardEngine</span>
+                <p>DashboardEngine! I crunch your analytics — win rate, profit factor, average winner, average loser, longest win streak. I'm strictly read-only though. I analyze data, never write it. Think of me as the analyst who reads everyone else's reports.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="5" data-sender="massiveclient" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-5)">📡</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-5)">MassiveClient</span>
+                <p>MassiveClient here. I'm the outside contractor. When you need historical price bars from Polygon.io — for enriching trades with market context or running the HG plan analysis — you call me. I'm not in the main upload pipeline; I get called on-demand.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="6" data-sender="csvparser" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">📋</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">CsvParser</span>
+                <p>Great team! One thing worth noting: we each own exactly one concern. If you ever find yourself thinking "this class does too many things" — that's the signal to split it. That's what engineers call "separation of concerns."</p>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="chat-typing" id="chat-typing2" style="display:none">
+            <div class="chat-avatar" id="chat-module2-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-6)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Separation of Concerns</strong>
+            <p>Each class knows how to do one thing and trusts the others. This is the most important pattern in software engineering — and the reason you can tell AI "modify PositionTracker" instead of "change the math stuff."</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 5 — Quiz
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Apply What You Know</h2>
+        <p>Each question is a scenario you'd face as a developer directing an AI assistant. Which class do you point it at?</p>
+
+        <div class="quiz-container" id="quiz-module2">
+
+          <!-- Question 1 -->
+          <div class="quiz-question-block"
+               data-correct="option-c"
+               data-explanation-right="Exactly. PositionTracker owns all P&amp;L math — average cost basis, realized gains, unrealized gains, and contract multipliers. It is the single class responsible for &quot;what did I make or lose on this trade?&quot; Telling AI &quot;modify PositionTracker to use FIFO instead of average cost&quot; is a precise, actionable instruction."
+               data-explanation-wrong="Think about which class is specifically described as doing &quot;the math&quot; — average cost basis, P&amp;L calculations, contract multipliers. One class owns all of that. The others read the results but don&apos;t produce them.">
+            <h3 class="quiz-question">You want to change how P&amp;L is calculated when you close a position — switching from average cost to FIFO accounting. Which class do you tell AI to modify?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>TradeCompletionEngine — it creates the completed_trades records where P&amp;L is stored.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>DashboardEngine — it shows P&amp;L on the dashboard.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>PositionTracker — it owns the P&amp;L math: average cost, realized gains, contract multipliers.</span>
+              </button>
+              <button class="quiz-option" data-value="option-d" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>NdjsonIngester — it writes the trade records to the database.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <!-- Question 2 -->
+          <div class="quiz-question-block"
+               data-correct="option-b"
+               data-explanation-right="Right. The grouping logic — which fills belong to the same round-trip trade — lives entirely in TradeCompletionEngine. The bug is in how it builds the bucket key, specifically the part that adds exp_date + strike_price + option_type for options. That code is exactly what you saw in the translation block."
+               data-explanation-wrong="The grouping logic that decides which fills belong together lives in one specific class. Hint: you saw its code in Screen 3. Which class is responsible for sorting fills into buckets?">
+            <h3 class="quiz-question">A bug causes options trades to show up mixed with the wrong symbol on the completed trades page — TSLA options appearing under AAPL. Which class owns this grouping logic?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>CsvParser — it reads the symbol from the CSV row.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>TradeCompletionEngine — it groups fills into buckets by symbol, type, and account.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>DashboardEngine — it queries completed trades to display them.</span>
+              </button>
+              <button class="quiz-option" data-value="option-d" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>PositionTracker — it calculates positions per symbol.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <!-- Question 3 -->
+          <div class="quiz-question-block"
+               data-correct="option-a"
+               data-explanation-right="Correct! CsvParser is the format translator — it is the only class that knows anything about Schwab&apos;s specific CSV layout. The rest of the pipeline (NdjsonIngester, TradeCompletionEngine, PositionTracker) receives clean Python dicts and has no idea where they came from. Adding Interactive Brokers support means writing a new parser that produces the same clean dict format — the rest of the pipeline works unchanged."
+               data-explanation-wrong="Which class is specifically responsible for reading and translating the broker file format? The rest of the pipeline is deliberately kept format-agnostic — it only knows how to process clean Python records, not raw CSV rows.">
+            <h3 class="quiz-question">You want to add support for Interactive Brokers CSV files, which have a completely different column layout than Schwab. Which class needs a new counterpart written for it?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>CsvParser — it is the format translator. The rest of the pipeline is already format-agnostic.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>NdjsonIngester — it handles the database writes and would need to understand the new format.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>TradeCompletionEngine — it groups trades and would need to handle different column names.</span>
+              </button>
+              <button class="quiz-option" data-value="option-d" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>MassiveClient — it handles external data and would need to pull IB data from Polygon.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module2')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module2')">Try Again</button>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">→</div>
+          <div class="callout-content">
+            <strong class="callout-title">Up Next: The Three-Tier Design</strong>
+            <p>These six classes all write data to three tables: <code style="font-family:var(--font-mono);font-size:var(--text-sm)">trades</code>, <code style="font-family:var(--font-mono);font-size:var(--text-sm)">completed_trades</code>, and <code style="font-family:var(--font-mono);font-size:var(--text-sm)">positions</code>. Module 3 unpacks why the database is designed that way — and why that design means you can always recover from almost any problem.</p>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- .module-body -->
+  </div><!-- .module-content -->
+</section>

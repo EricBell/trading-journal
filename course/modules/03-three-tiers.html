@@ -1,0 +1,451 @@
+<section class="module" id="module-3" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+
+    <!-- ═══════════════════════════════════════════════════════
+         MODULE HEADER
+    ═══════════════════════════════════════════════════════ -->
+    <header class="module-header animate-in">
+      <span class="module-number">03</span>
+      <h1 class="module-title">The Three-Tier Design</h1>
+      <p class="module-subtitle">How raw fills become P&amp;L — and why everything except the raw data can be destroyed and rebuilt.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 1 — Metaphor + Opening Hook
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The Ship Navigation Metaphor</h2>
+
+        <p>The database has 13 tables, but only three of them form the spine of the whole system. Everything else supports this central architecture.</p>
+
+        <div class="pattern-cards" style="margin-top: var(--space-8)">
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">📡</div>
+            <h4 class="pattern-title">Raw GPS Log</h4>
+            <p class="pattern-desc">Every position fix, every second. Never deleted. Never modified. The only record that matters when everything else fails.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">🗺️</div>
+            <h4 class="pattern-title">Plotted Route Summary</h4>
+            <p class="pattern-desc">Departure → arrival, distance, speed. <em>Derived</em> from the raw log. Can be regenerated at any time. Deleted and rebuilt when the route changes.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-5)">
+            <div class="pattern-icon" style="background: var(--color-actor-5)">🧭</div>
+            <h4 class="pattern-title">Current Position Indicator</h4>
+            <p class="pattern-desc">Where you are <em>right now</em>. Also derived. Updated continuously from the raw log. Always current, never the original source.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">The Core Principle</strong>
+            <p>The raw log is the only thing you must never lose. The summaries and current position can always be regenerated from it. This is exactly how the Trading Journal database works — and it's one of the most important patterns in data engineering.</p>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 2 — The Three Tiers Visualized
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in" style="margin-top: var(--space-16)">
+        <h2 class="screen-heading">The Three Tiers</h2>
+        <p>Each tier is built from the one below it. Tiers 2 and 3 are fully <span class="term" data-definition="Derived data is calculated or generated from a primary source rather than entered directly. Because it can always be recalculated, it is safe to delete and rebuild — the original source is what matters.">derived</span>. The only irreplaceable data is Tier 1.</p>
+
+        <!-- Hero visual: stacked tier diagram -->
+        <div style="margin-top: var(--space-8); display: flex; flex-direction: column; gap: 0;">
+
+          <!-- Tier 3 -->
+          <div style="background: linear-gradient(135deg, #2D8B55 0%, #248a4f 100%); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: var(--space-6) var(--space-8); color: white; position: relative;">
+            <div style="display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-3);">
+              <span style="font-family: var(--font-mono); font-size: var(--text-xs); background: rgba(255,255,255,0.2); padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); letter-spacing: 0.1em; text-transform: uppercase;">Tier 3 · Positions</span>
+              <span style="font-size: var(--text-xs); opacity: 0.8;">Fully derived · 1 row per symbol</span>
+            </div>
+            <p style="margin: 0; font-size: var(--text-sm); opacity: 0.95; line-height: 1.6;">
+              The <strong>positions</strong> table. Running totals — how many shares you own right now and what you paid on average. Rebuilt from scratch whenever fills change.
+            </p>
+            <div style="margin-top: var(--space-3); display: flex; gap: var(--space-3); flex-wrap: wrap;">
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">current_qty</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">avg_cost_basis</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">realized_pnl</code>
+            </div>
+          </div>
+
+          <!-- Arrow down -->
+          <div style="background: var(--color-surface); display: flex; align-items: center; justify-content: center; padding: var(--space-2) 0; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border);">
+            <span style="font-size: var(--text-lg); color: var(--color-text-muted);">↑ derived from ↓</span>
+          </div>
+
+          <!-- Tier 2 -->
+          <div style="background: linear-gradient(135deg, #2A7B9B 0%, #1F6280 100%); padding: var(--space-6) var(--space-8); color: white; position: relative;">
+            <div style="display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-3);">
+              <span style="font-family: var(--font-mono); font-size: var(--text-xs); background: rgba(255,255,255,0.2); padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); letter-spacing: 0.1em; text-transform: uppercase;">Tier 2 · Completed Trades</span>
+              <span style="font-size: var(--text-xs); opacity: 0.8;">Fully derived · 1 row per round-trip</span>
+            </div>
+            <p style="margin: 0; font-size: var(--text-sm); opacity: 0.95; line-height: 1.6;">
+              The <strong>completed_trades</strong> table. Each buy→sell round trip. Entry price, exit price, net P&amp;L, timestamps. <span style="background: rgba(255,255,255,0.15); padding: 1px 6px; border-radius: 4px;">Destroyed and rebuilt</span> on every file upload.
+            </p>
+            <div style="margin-top: var(--space-3); display: flex; gap: var(--space-3); flex-wrap: wrap;">
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">entry_avg_price</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">exit_avg_price</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">net_pnl</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">opened_at</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">closed_at</code>
+            </div>
+          </div>
+
+          <!-- Arrow down -->
+          <div style="background: var(--color-surface); display: flex; align-items: center; justify-content: center; padding: var(--space-2) 0; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border);">
+            <span style="font-size: var(--text-lg); color: var(--color-text-muted);">↑ derived from ↓</span>
+          </div>
+
+          <!-- Tier 1 -->
+          <div style="background: linear-gradient(135deg, #7B6DAA 0%, #5e4f8a 100%); border-radius: 0 0 var(--radius-lg) var(--radius-lg); padding: var(--space-6) var(--space-8); color: white; position: relative;">
+            <div style="display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-3);">
+              <span style="font-family: var(--font-mono); font-size: var(--text-xs); background: rgba(255,255,255,0.2); padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); letter-spacing: 0.1em; text-transform: uppercase;">Tier 1 · Trades (Executions)</span>
+              <span style="font-size: var(--text-xs); opacity: 0.8;">🔒 Source of truth · Never deleted</span>
+            </div>
+            <p style="margin: 0; font-size: var(--text-sm); opacity: 0.95; line-height: 1.6;">
+              The <strong>trades</strong> table. One row per broker fill. Raw, immutable, the GPS log. Every P&amp;L number in the app ultimately comes from this table.
+            </p>
+            <div style="margin-top: var(--space-3); display: flex; gap: var(--space-3); flex-wrap: wrap;">
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">unique_key</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">exec_timestamp</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">symbol</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">side</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">qty</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">net_price</code>
+              <code style="font-size: var(--text-xs); background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">pos_effect</code>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- trade_annotations sidebar callout -->
+        <div class="callout callout-accent" style="margin-top: var(--space-8)">
+          <div class="callout-icon">🏷️</div>
+          <div class="callout-content">
+            <strong class="callout-title">The Survivor: trade_annotations</strong>
+            <p>There is a fourth table that sits <em>beside</em> the three tiers — not derived from Tier 1. This is <code>trade_annotations</code>: the setup patterns, notes, and stop prices <strong>you</strong> manually typed in. It lives in its own table with its own survival strategy. More on this in a moment.</p>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 3 — Data Flow Animation: The Rebuild
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in" style="margin-top: var(--space-16)">
+        <h2 class="screen-heading">What Happens When You Upload a File</h2>
+        <p>Every time you upload a CSV, the app runs through a precise sequence. Watch what gets destroyed — and what survives.</p>
+
+        <div class="flow-animation animate-in" style="margin-top: var(--space-8)" data-steps='[
+          {"highlight":"flow-actor-1","label":"New CSV file uploaded. The ingester reads every fill and writes it to Tier 1 (trades table). Existing rows get updated, new rows get created."},
+          {"highlight":"flow-actor-2","label":"TradeCompletionEngine springs into action. Step 1: ALL completed_trades rows for this user are DELETED. Tier 2 is wiped clean.","packet":true,"from":"actor-1","to":"actor-2"},
+          {"highlight":"flow-actor-2","label":"Step 2: TradeCompletionEngine reads ALL fills from Tier 1 and rebuilds Tier 2 from scratch — matching every BUY with its matching SELL to form round trips."},
+          {"highlight":"flow-actor-3","label":"PositionTracker rebuilds Tier 3. It reads the completed trades and recalculates running totals — current shares owned, average cost, realized P&L.","packet":true,"from":"actor-2","to":"actor-3"},
+          {"highlight":"flow-actor-4","label":"Finally, the re-linking SQL runs. It finds all trade_annotations with a NULL foreign key and reconnects them to their new Tier 2 rows using the natural key (user, symbol, opened_at). Annotations survive.","packet":true,"from":"actor-2","to":"actor-4"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-actor-1">
+              <div class="flow-actor-icon" style="background: var(--color-actor-3)">T1</div>
+              <span>Tier 1<br>trades</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-2">
+              <div class="flow-actor-icon" style="background: var(--color-actor-2)">T2</div>
+              <span>Tier 2<br>completed_trades</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-3">
+              <div class="flow-actor-icon" style="background: var(--color-actor-5)">T3</div>
+              <span>Tier 3<br>positions</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-4">
+              <div class="flow-actor-icon" style="background: var(--color-actor-4)">📝</div>
+              <span>trade_<br>annotations</span>
+            </div>
+          </div>
+
+          <div class="flow-packet" id="flow-packet"></div>
+          <div class="flow-step-label" id="flow-label">Click "Next Step" to watch the rebuild</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+
+        <!-- The actual rebuild code -->
+        <div class="translation-block animate-in" style="margin-top: var(--space-8)">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-keyword">def</span> <span class="code-function">reprocess_all_completed_trades</span>(<span class="code-property">self</span>, user_id):</span>
+<span class="code-line">  <span class="code-keyword">with</span> <span class="code-property">self</span>.db_manager.<span class="code-function">get_session</span>() <span class="code-keyword">as</span> session:</span>
+<span class="code-line">    <span class="code-comment"># Unlink all executions from their completed trades</span></span>
+<span class="code-line">    session.<span class="code-function">query</span>(Trade).<span class="code-function">filter</span>(</span>
+<span class="code-line">      Trade.user_id == user_id</span>
+<span class="code-line">    ).<span class="code-function">update</span>(</span>
+<span class="code-line">      {Trade.completed_trade_id: <span class="code-keyword">None</span>},</span>
+<span class="code-line">      synchronize_session=<span class="code-keyword">False</span></span>
+<span class="code-line">    )</span>
+<span class="code-line">    <span class="code-comment"># Delete all completed trades for this user</span></span>
+<span class="code-line">    session.<span class="code-function">query</span>(CompletedTrade).<span class="code-function">filter</span>(</span>
+<span class="code-line">      CompletedTrade.user_id == user_id</span>
+<span class="code-line">    ).<span class="code-function">delete</span>(synchronize_session=<span class="code-keyword">False</span>)</span>
+<span class="code-line">    session.<span class="code-function">commit</span>()</span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label" style="position: static; opacity: 1; font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-muted); display: block; margin-bottom: var(--space-3);">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Open a database session (a transaction that either fully completes or fully rolls back).</p>
+              <p class="tl">First, sever all the links from individual fills back to their round-trip trade rows — set those foreign key pointers to NULL.</p>
+              <p class="tl">Then delete every completed_trade row for this user. Tier 2 is now empty.</p>
+              <p class="tl">Commit — make it permanent. Tier 1 (the fills) is untouched throughout. Only the derived data is gone.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 4 — Code↔English: Annotation Re-linking
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in" style="margin-top: var(--space-16)">
+        <h2 class="screen-heading">How Your Notes Survive the Rebuild</h2>
+
+        <p>When Tier 2 is deleted, the <span class="term" data-definition="A foreign key is a pointer from one database table to a row in another table. Like a library card number that points to your account — if the account is deleted, the card number points to nothing.">foreign key</span> from <code>trade_annotations</code> to <code>completed_trades</code> is set to <span class="term" data-definition="NULL means &quot;nothing&quot; or &quot;unknown&quot; — the field exists but has no value. It is different from zero or an empty string.">NULL</span> (the pointer goes dead). After the rebuild, this SQL reconnects everything.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-comment"># Re-link orphaned annotations after the rebuild.</span></span>
+<span class="code-line"><span class="code-comment"># Natural key: (user_id, symbol, opened_at)</span></span>
+<span class="code-line">session.<span class="code-function">execute</span>(</span>
+<span class="code-line">  <span class="code-function">text</span>(<span class="code-string">"""</span></span>
+<span class="code-line"><span class="code-string">    UPDATE trade_annotations ta</span></span>
+<span class="code-line"><span class="code-string">    SET completed_trade_id = ct.completed_trade_id</span></span>
+<span class="code-line"><span class="code-string">    FROM completed_trades ct</span></span>
+<span class="code-line"><span class="code-string">    WHERE ta.user_id   = :user_id</span></span>
+<span class="code-line"><span class="code-string">      AND ta.completed_trade_id IS NULL</span></span>
+<span class="code-line"><span class="code-string">      AND ct.user_id   = :user_id</span></span>
+<span class="code-line"><span class="code-string">      AND ta.symbol    = ct.symbol</span></span>
+<span class="code-line"><span class="code-string">      AND ta.opened_at = ct.opened_at</span></span>
+<span class="code-line"><span class="code-string">  """</span>),</span>
+<span class="code-line">  {<span class="code-string">"user_id"</span>: user_id},</span>
+<span class="code-line">)</span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label" style="position: static; opacity: 1; font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-muted); display: block; margin-bottom: var(--space-3);">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">The rebuild is done — Tier 2 now has fresh <code>completed_trade_id</code> numbers. Time to reconnect the annotations.</p>
+              <p class="tl"><strong>UPDATE trade_annotations:</strong> For every annotation row that currently has a dead/NULL link to a completed trade...</p>
+              <p class="tl"><strong>SET completed_trade_id:</strong> ...point it to the newly-created row in the fresh Tier 2...</p>
+              <p class="tl"><strong>WHERE ... IS NULL:</strong> Only fix annotations that lost their link (the ones with NULL). Leave already-connected ones alone.</p>
+              <p class="tl"><strong>AND ta.symbol = ct.symbol AND ta.opened_at = ct.opened_at:</strong> Match by symbol + timestamp. Like reuniting luggage with its owner by matching name, destination, and flight number — three facts that never change.</p>
+              <p class="tl">This is the <span class="term" data-definition="A natural key is an identifier that comes from the real world — like a passport number or a flight + seat number — rather than an auto-generated database ID. It survives when the database row gets deleted and re-created.">natural key</span> pattern: even when IDs are recycled, (user, symbol, opened_at) uniquely identifies the trade forever.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-6)">
+          <div class="callout-icon">🔗</div>
+          <div class="callout-content">
+            <strong class="callout-title">ON DELETE SET NULL</strong>
+            <p>The <span class="term" data-definition="ON DELETE SET NULL is a database instruction that says: if the row this foreign key points to gets deleted, set this field to NULL instead of throwing an error. It keeps the annotation alive even when its target disappears.">ON DELETE SET NULL</span> constraint is what makes this safe. When <code>completed_trades</code> rows are deleted during the rebuild, the database automatically sets all referencing <code>completed_trade_id</code> fields to NULL rather than deleting the annotation along with them.</p>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════════════════════════════════════════════════
+           SCREEN 5 — Group Chat + Quiz
+      ═══════════════════════════════════════════════════════ -->
+      <section class="screen animate-in" style="margin-top: var(--space-16)">
+        <h2 class="screen-heading">The Conversation Behind the Curtain</h2>
+        <p>When you click "Upload CSV," here is roughly what happens between the components — if they could talk.</p>
+
+        <div class="chat-window" id="chat-module3">
+          <div class="chat-messages">
+
+            <div class="chat-message" data-msg="0" data-sender="TradeCompletionEngine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">TCE</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">TradeCompletionEngine</span>
+                <p>New file uploaded. I am about to delete <em>everything</em> in <code>completed_trades</code> and rebuild from scratch.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="1" data-sender="Annotation" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-4)">📝</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-4)">trade_annotations</span>
+                <p>Wait — what about me?! I have <code>completed_trade_id = 4821</code> pointing at a row in your table. If you delete that row, I am orphaned!</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="2" data-sender="TradeCompletionEngine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">TCE</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">TradeCompletionEngine</span>
+                <p>You are safe. You live in a <em>separate</em> table with a backup identity: <code>(user_id, symbol, opened_at)</code>. When I delete the row, the database sets your <code>completed_trade_id</code> to NULL — but you are not deleted. I will reconnect you after the rebuild.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="3" data-sender="Annotation" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-4)">📝</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-4)">trade_annotations</span>
+                <p>...oh. So I am temporarily disconnected, but my data — the &quot;MACD Scalp&quot; pattern I saved, the stop price, the notes — all of that survives?</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="4" data-sender="TradeCompletionEngine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">TCE</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">TradeCompletionEngine</span>
+                <p>Exactly. After the rebuild, a SQL UPDATE reconnects you by matching <code>symbol</code> and <code>opened_at</code> — facts that never change regardless of what ID the new row gets. Good system.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="5" data-sender="PositionTracker" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-5)">PT</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-5)">PositionTracker</span>
+                <p>Same thing happened to Tier 3 (positions). Every upload, I get deleted and rebuilt too. None of us are precious about our data — we are just <em>derived</em>. Tier 1 never lies, and that is all we need.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="chat-typing" id="chat-module3-typing" style="display:none">
+            <div class="chat-avatar" id="chat-module3-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+
+
+        <!-- ── QUIZ ── -->
+        <div style="margin-top: var(--space-12)">
+          <h2 class="screen-heading">Check Your Understanding</h2>
+          <p>These questions ask you to apply what you just learned to new situations — not recall definitions.</p>
+
+          <div class="quiz-container" id="quiz-module3">
+
+            <!-- Q1 -->
+            <div class="quiz-question-block"
+                 data-correct="q1-b"
+                 data-explanation-right="Exactly. process-trades only rebuilds Tier 2 from Tier 1. Tier 1 is read-only and untouched — it is the source of truth. You cannot corrupt the source data by running a report."
+                 data-explanation-wrong="Not quite. Think about which tier process-trades writes to, and which tier it only reads from. The source data lives in Tier 1 and is never modified by the rebuild.">
+              <h3 class="quiz-question">You accidentally run <code>db process-trades</code> three times in a row. Are your P&amp;L numbers at risk?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="q1-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Yes — running it multiple times overwrites the previous P&amp;L calculations and could corrupt the numbers.</span>
+                </button>
+                <button class="quiz-option" data-value="q1-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>No — it rebuilds Tier 2 from the same unchanged Tier 1 data each time. The result is always identical.</span>
+                </button>
+                <button class="quiz-option" data-value="q1-c" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Only if a file was uploaded in between the two runs.</span>
+                </button>
+              </div>
+              <div class="quiz-feedback"></div>
+            </div>
+
+            <!-- Q2 -->
+            <div class="quiz-question-block"
+                 data-correct="q2-b"
+                 data-explanation-right="Correct. Annotations use a natural key — (user_id, symbol, opened_at) — not a database ID that gets destroyed in the rebuild. The SQL re-linking step reconnects every annotation to the fresh Tier 2 row after each upload."
+                 data-explanation-wrong="Think about where annotations are stored. Are they inside completed_trades (which gets deleted), or in a separate table with their own survival mechanism?">
+              <h3 class="quiz-question">You annotated 50 trades with your pattern labels — &quot;MACD Scalp,&quot; &quot;Breakout,&quot; etc. You then re-upload a corrected CSV. Will those labels survive?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="q2-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>No — they live inside completed_trades, which gets wiped on every upload.</span>
+                </button>
+                <button class="quiz-option" data-value="q2-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Yes — they live in trade_annotations (a separate table) and get reconnected after the rebuild using the natural key.</span>
+                </button>
+                <button class="quiz-option" data-value="q2-c" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Only the annotations you made more than 24 hours ago — recent ones might be lost.</span>
+                </button>
+              </div>
+              <div class="quiz-feedback"></div>
+            </div>
+
+            <!-- Q3 -->
+            <div class="quiz-question-block"
+                 data-correct="q3-a"
+                 data-explanation-right="Exactly. The trades table (Tier 1) is the source of truth. Tiers 2 and 3 are fully derived from it and can be rebuilt at any time. If Tier 1 disappears, everything else is meaningless — there is nothing to derive from."
+                 data-explanation-wrong="Think about which table is the foundation everything else is built from — the table that cannot be regenerated from any other source.">
+              <h3 class="quiz-question">A disaster strikes and you can only restore one table from backup. Which one is it?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="q3-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>trades — Tier 1, the raw fills. Everything else can be rebuilt from this.</span>
+                </button>
+                <button class="quiz-option" data-value="q3-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>completed_trades — it has all the P&amp;L data you care about.</span>
+                </button>
+                <button class="quiz-option" data-value="q3-c" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>positions — it has the current state of all your holdings.</span>
+                </button>
+              </div>
+              <div class="quiz-feedback"></div>
+            </div>
+
+            <!-- Q4 -->
+            <div class="quiz-question-block"
+                 data-correct="q4-b"
+                 data-explanation-right="Right. A manually-entered score belongs in trade_annotations — never in completed_trades. Anything in completed_trades gets destroyed and rebuilt on every ingest. Only data derived from raw fills belongs there."
+                 data-explanation-wrong="Consider what happens to completed_trades on every file upload. If your quality score lived there, what would happen to it? Where is the only table designed to hold user-entered data that persists across rebuilds?">
+              <h3 class="quiz-question">A developer wants to add a &quot;trade quality score&quot; field (a 1–5 rating you manually enter). Where should it live?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="q4-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>In completed_trades — that is where all trade-level data lives.</span>
+                </button>
+                <button class="quiz-option" data-value="q4-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>In trade_annotations — because completed_trades gets wiped on every ingest, and this is manually-entered data that must survive.</span>
+                </button>
+                <button class="quiz-option" data-value="q4-c" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>In a brand new table with no connection to the existing three tiers.</span>
+                </button>
+              </div>
+              <div class="quiz-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3')">Try Again</button>
+          </div>
+        </div>
+
+      </section>
+
+    </div><!-- .module-body -->
+  </div><!-- .module-content -->
+</section>
