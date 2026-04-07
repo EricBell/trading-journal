@@ -110,6 +110,8 @@
             <span class="badge bg-warning text-dark fs-6">inconclusive</span>
           {% elif analysis.outcome == 'no_entry' %}
             <span class="badge bg-secondary fs-6">no entry</span>
+          {% elif analysis.outcome == 'no_data' %}
+            <span class="badge bg-dark fs-6" title="No bars available — retry when API quota resets">no data</span>
           {% else %}—{% endif %}
         </div>
       </div>

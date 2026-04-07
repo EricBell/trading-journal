@@ -1,3 +1,10 @@
+## v1.26.1 - 2026-04-07
+
+### Bug Fixes
+- **Grail plan analysis: `no_data` outcome** — when no 1-minute bars are available (e.g. API throttled), the outcome is now recorded as `no_data` (dark badge) instead of incorrectly showing `no entry`. A `no_data` result is treated as retriable: clicking Analyze again re-runs the analysis and overwrites the placeholder once bars are available.
+
+---
+
 ## v1.26.0 - 2026-04-07
 
 ### New Features

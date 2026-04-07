@@ -38,7 +38,8 @@ def run_grail_plan_analysis(
                Stop has priority on bars where both are touched.
 
     Outcome values:
-        no_entry    — entry zone never touched
+        no_data     — no 1m bars available (throttled / not yet cached); safe to retry
+        no_entry    — bars available but entry zone never touched
         success     — entry touched, TP1 zone touched before stop zone
         failure     — entry touched, stop zone touched before TP1 zone
         inconclusive — entry touched, neither TP1 nor stop reached in window
@@ -46,14 +47,17 @@ def run_grail_plan_analysis(
     Returns:
         {'status': 'ok'|'skipped'|'failed', 'outcome': str|None, 'message': str}
     """
-    # 1. Check idempotency
+    # 1. Check idempotency — allow re-run when previous result was no_data
     existing = _find_existing(grail_plan_id, analysis_version)
     if existing is not None:
-        return {
-            "status": "skipped",
-            "outcome": existing.outcome,
-            "message": "analysis already exists",
-        }
+        if existing.outcome == "no_data":
+            _delete_analysis(existing.grail_plan_analyses_id)
+        else:
+            return {
+                "status": "skipped",
+                "outcome": existing.outcome,
+                "message": "analysis already exists",
+            }
 
     # 2. Load plan from grail_files
     plan = _load_plan(grail_plan_id)
@@ -126,9 +130,23 @@ def run_grail_plan_analysis(
     bars = _load_bars(fetch_symbol, "1m", fetch_start, fetch_end)
     bars_scanned = len(bars)
 
-    # 6. Run zone-based bar scan
-    scan = _zone_scan(bars, side, entry_zone_low, entry_zone_high, entry_ideal,
-                      stop_zone_low, stop_zone_high, tp1_zone_low, tp1_zone_high)
+    # 6. Run zone-based bar scan (or record no_data if nothing available)
+    if bars_scanned == 0:
+        scan = {
+            "entry_zone_touched": False,
+            "entry_ideal_touched": False,
+            "entry_first_touch_at": None,
+            "bars_to_entry": None,
+            "outcome": "no_data",
+            "tp1_zone_touched": False,
+            "tp1_zone_touch_at": None,
+            "stop_zone_touched": False,
+            "stop_zone_touch_at": None,
+            "bars_to_outcome": None,
+        }
+    else:
+        scan = _zone_scan(bars, side, entry_zone_low, entry_zone_high, entry_ideal,
+                          stop_zone_low, stop_zone_high, tp1_zone_low, tp1_zone_high)
 
     # 7. Write result
     _write_result(
@@ -280,6 +298,17 @@ def _find_existing(grail_plan_id: int, analysis_version: int) -> Optional[GrailP
     except Exception as exc:
         logger.warning("_find_existing failed: %s", exc)
         return None
+
+
+def _delete_analysis(analysis_id: int) -> None:
+    try:
+        with db_manager.get_session() as session:
+            row = session.get(GrailPlanAnalysis, analysis_id)
+            if row is not None:
+                session.delete(row)
+                session.commit()
+    except Exception as exc:
+        logger.warning("_delete_analysis failed for id=%s: %s", analysis_id, exc)
 
 
 def _load_plan(grail_plan_id: int) -> Optional[dict]:
