@@ -324,16 +324,26 @@ def _load_plan_params(grail_plan_id: str) -> Optional[dict]:
     """
     Fetch the grail plan from grail_files and extract evaluation parameters.
 
-    All price fields use stock_price_range when available (option plans store
-    option premium in price_range but underlying prices in stock_price_range).
+    For equity plans, uses the pre-extracted columns (entry_low/entry_high,
+    stop_low/stop_high, tp1_low/tp1_high, tp2_low/tp2_high) added in the
+    save-grail-json schema update (April 2026).
+
+    For option plans, stop/tp must come from JSON stock_price_range (underlying
+    prices), not the pre-extracted columns which store option premium prices.
+    Entry zone (entry_low/entry_high) is always underlying regardless of asset type.
     """
     try:
         engine = _grail_engine()
         with engine.connect() as conn:
             row = conn.execute(
                 text(
-                    "SELECT id, asset_type, json_content->'trade_plan' AS trade_plan "
-                    "FROM grail_files WHERE id = :pid"
+                    "SELECT id, asset_type, entry_direction,"
+                    "       entry_low, entry_high,"
+                    "       stop_low, stop_high,"
+                    "       tp1_low, tp1_high,"
+                    "       tp2_low, tp2_high,"
+                    "       json_content->'trade_plan' AS trade_plan"
+                    " FROM grail_files WHERE id = :pid"
                 ),
                 {"pid": int(grail_plan_id)},
             ).mappings().first()
@@ -342,35 +352,43 @@ def _load_plan_params(grail_plan_id: str) -> Optional[dict]:
             logger.warning("_load_plan_params: grail_plan_id=%s not found", grail_plan_id)
             return None
 
-        trade_plan = row["trade_plan"]
-        if not trade_plan or not isinstance(trade_plan, dict):
-            logger.warning("_load_plan_params: no trade_plan for id=%s", grail_plan_id)
-            return None
-
-        entry = trade_plan.get("entry") or {}
-        exits = trade_plan.get("exits") or {}
-
-        # Side
-        direction = (entry.get("direction") or "").upper()
-        side = "long" if direction == "LONG" else "short" if direction == "SHORT" else None
-
-        # Entry zone (always underlying prices)
-        ideal_zone = entry.get("ideal_zone") or {}
-        zone_low = _to_float(ideal_zone.get("low"))
-        zone_high = _to_float(ideal_zone.get("high"))
-
-        # Targets — prefer stock_price_range (underlying), fall back to price_range
-        targets = exits.get("profit_targets") or []
-        tp1 = _target_price(targets, 0, side)
-        tp2 = _target_price(targets, 1, side)
-
-        # Stop — prefer stock_price_range, fall back to price_range
-        stop_data = exits.get("stop_loss") or {}
-        stop = _stop_price(stop_data, side)
-
         # instrument_type for hg_analysis_results CHECK constraint
         asset_type = (row["asset_type"] or "").upper()
         instrument_type = "option" if asset_type == "OPTIONS" else "equity"
+
+        # Side — prefer pre-extracted column, fall back to JSON
+        direction = (row["entry_direction"] or "").upper()
+        if not direction:
+            trade_plan = row["trade_plan"] or {}
+            direction = ((trade_plan.get("entry") or {}).get("direction") or "").upper()
+        side = "long" if direction == "LONG" else "short" if direction == "SHORT" else None
+
+        # Entry zone — pre-extracted columns are always underlying prices (both equity + options)
+        zone_low = _to_float(row["entry_low"])
+        zone_high = _to_float(row["entry_high"])
+        if zone_low is None or zone_high is None:
+            # Fall back to JSON for older rows that predate the migration
+            trade_plan = row["trade_plan"] or {}
+            ideal_zone = (trade_plan.get("entry") or {}).get("ideal_zone") or {}
+            zone_low = _to_float(ideal_zone.get("low"))
+            zone_high = _to_float(ideal_zone.get("high"))
+
+        # Stop and TP prices
+        if instrument_type == "equity":
+            # Use pre-extracted columns; select the tighter/conservative bound per side
+            stop = _to_float(row["stop_high"] if side == "long" else row["stop_low"])
+            tp1 = _to_float(row["tp1_low"] if side == "long" else row["tp1_high"])
+            tp2 = _to_float(row["tp2_low"] if side == "long" else row["tp2_high"])
+        else:
+            # Options: pre-extracted columns hold option premium, not underlying prices.
+            # Must use JSON stock_price_range (underlying) for correct bar-scan comparison.
+            trade_plan = row["trade_plan"] or {}
+            exits = trade_plan.get("exits") or {}
+            targets = exits.get("profit_targets") or []
+            tp1 = _target_price(targets, 0, side)
+            tp2 = _target_price(targets, 1, side)
+            stop_data = exits.get("stop_loss") or {}
+            stop = _stop_price(stop_data, side)
 
         return {
             "side": side,

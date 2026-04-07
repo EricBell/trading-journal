@@ -52,9 +52,7 @@ def find_grail_match(symbol: str, opened_at, trade_direction: str | None = None)
         params: dict = {"symbol": symbol, "trade_date": trade_date, "opened_at_utc": opened_at_utc}
         direction_clause = ""
         if trade_direction:
-            direction_clause = (
-                "   AND json_content->'trade_plan'->'entry'->>'direction' = :direction"
-            )
+            direction_clause = "   AND entry_direction = :direction"
             params["direction"] = trade_direction.upper()
 
         engine = _grail_engine()
@@ -125,7 +123,7 @@ def batch_grail_coverage(symbol_date_directions: list[tuple]) -> dict:
             result = conn.execute(
                 text(
                     "SELECT ticker, DATE(file_created_at) AS trade_date,"
-                    "       json_content->'trade_plan'->'entry'->>'direction' AS direction"
+                    "       entry_direction AS direction"
                     " FROM grail_files"
                     " WHERE ticker IN :symbols"
                     "   AND DATE(file_created_at) IN :dates"
@@ -179,7 +177,7 @@ def list_grail_candidates(symbol: str, opened_at) -> list[dict]:
             result = conn.execute(
                 text(
                     "SELECT id, ticker, file_created_at, asset_type,"
-                    "       json_content->'trade_plan'->'entry'->>'direction' AS direction"
+                    "       entry_direction AS direction, entry_low, entry_high"
                     " FROM grail_files"
                     " WHERE ticker = :symbol"
                     "   AND DATE(file_created_at) = :trade_date"

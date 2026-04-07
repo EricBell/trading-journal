@@ -1,3 +1,10 @@
+## v1.25.2 - 2026-04-07
+
+### Internal
+- **grail_files schema update** — Accounts for new pre-extracted columns added by `save-grail-json` (`entry_low`, `entry_high`, `stop_low`, `stop_high`, `tp1_low`, `tp1_high`, `tp2_low`, `tp2_high`, `entry_direction`). The HG evaluator now reads these columns directly for equity plans instead of navigating JSONB at query time. Option plans continue to use `stock_price_range` from JSON for stop/TP (underlying prices, not option premium). Direction filtering in `batch_grail_coverage` and `find_grail_match` also simplified to use the `entry_direction` column. `list_grail_candidates` now returns `entry_low`/`entry_high` for zone display without JSON parsing.
+
+---
+
 ## v1.25.1 - 2026-04-01
 
 ### Bug Fixes
