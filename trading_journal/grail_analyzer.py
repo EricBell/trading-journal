@@ -175,27 +175,36 @@ def run_grail_plan_analysis(
         logger.warning("run_grail_plan_analysis: MASSIVE_API_KEY not set, using cached bars only")
         fetch_status = "skipped"
 
-    # 5. Load bars from ohlcv_price_series
-    bars = _load_bars(fetch_symbol, "1m", fetch_start, fetch_end)
-    bars_scanned = len(bars)
+    _NO_DATA_SCAN = {
+        "entry_zone_touched": False,
+        "entry_ideal_touched": False,
+        "entry_first_touch_at": None,
+        "bars_to_entry": None,
+        "outcome": "no_data",
+        "tp1_zone_touched": False,
+        "tp1_zone_touch_at": None,
+        "stop_zone_touched": False,
+        "stop_zone_touch_at": None,
+        "bars_to_outcome": None,
+    }
 
-    # 6. Run zone-based bar scan (or record no_data if nothing available)
-    if bars_scanned == 0:
-        scan = {
-            "entry_zone_touched": False,
-            "entry_ideal_touched": False,
-            "entry_first_touch_at": None,
-            "bars_to_entry": None,
-            "outcome": "no_data",
-            "tp1_zone_touched": False,
-            "tp1_zone_touch_at": None,
-            "stop_zone_touched": False,
-            "stop_zone_touch_at": None,
-            "bars_to_outcome": None,
-        }
+    # 5. Load bars from ohlcv_price_series
+    # Skip entirely when fetch_status is no_subscription — there may be incidentally
+    # cached bars for the symbol from a prior run, but they are not meaningful here
+    # and would produce a misleading outcome (e.g. no_entry instead of no_data).
+    if fetch_status == "no_subscription":
+        bars_scanned = 0
+        scan = _NO_DATA_SCAN
     else:
-        scan = _zone_scan(bars, side, entry_zone_low, entry_zone_high, entry_ideal,
-                          stop_zone_low, stop_zone_high, tp1_zone_low, tp1_zone_high)
+        bars = _load_bars(fetch_symbol, "1m", fetch_start, fetch_end)
+        bars_scanned = len(bars)
+
+        # 6. Run zone-based bar scan (or record no_data if nothing available)
+        if bars_scanned == 0:
+            scan = _NO_DATA_SCAN
+        else:
+            scan = _zone_scan(bars, side, entry_zone_low, entry_zone_high, entry_ideal,
+                              stop_zone_low, stop_zone_high, tp1_zone_low, tp1_zone_high)
 
     # 7. Write result
     _write_result(

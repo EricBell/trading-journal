@@ -1,3 +1,10 @@
+## v1.26.4 - 2026-04-07
+
+### Bug Fixes
+- **Grail plan analysis: no_subscription bypasses cached bar scan** — when fetch_status is `no_subscription`, the analyzer now skips loading bars from `ohlcv_price_series` entirely. Previously, incidentally cached bars for the symbol could cause the zone scan to run and produce a misleading `no_entry` outcome instead of `no_data`. Existing `no_entry` results on futures plans can be corrected by clicking Re-analyze.
+
+---
+
 ## v1.26.3 - 2026-04-07
 
 ### Bug Fixes
