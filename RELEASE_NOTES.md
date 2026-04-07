@@ -1,3 +1,10 @@
+## v1.26.7 - 2026-04-07
+
+### Bug Fixes
+- **Grail batch: 429 rate limit now auto-retries instead of aborting** — when Massive returns a 429 mid-batch, the app now waits out the remainder of the 60s window (showing a live countdown) and automatically retries the same plan, then continues with the rest. The "press the button again" workaround is no longer needed.
+
+---
+
 ## v1.26.6 - 2026-04-07
 
 ### Features

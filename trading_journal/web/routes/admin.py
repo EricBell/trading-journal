@@ -791,53 +791,61 @@ def grail_plans_analyze_batch():
                 return
 
             ok = skipped = failed = done = 0
+            # Process plans one at a time.
+            # Track how many API calls have been made in the current 60s window
+            # and when that window started.  On a 429, don't advance — wait and
+            # retry the same plan.
             i = 0
+            window_start = _time.monotonic()
+            calls_this_window = 0
 
             while i < total:
-                # Process one rate-limit window worth of plans
-                sub_batch = to_analyze[i: i + _MASSIVE_RATE_PER_MINUTE]
-                window_start = _time.monotonic()
+                pid = to_analyze[i]
+                r = run_grail_plan_analysis(grail_plan_id=int(pid), user_id=user_id)
+                status = r['status']
+                fetch_status = r.get('fetch_status', '')
 
-                for pid in sub_batch:
-                    r = run_grail_plan_analysis(grail_plan_id=int(pid), user_id=user_id)
-                    status = r['status']
-                    fetch_status = r.get('fetch_status', '')
-
-                    if status == 'skipped':
-                        skipped += 1
-                    elif status == 'ok':
-                        ok += 1
-                    else:
-                        failed += 1
-                    done += 1
-
-                    yield _sse({
-                        "done": done,
-                        "total": total,
-                        "plan_id": pid,
-                        "outcome": r.get('outcome', ''),
-                        "fetch_status": fetch_status,
-                    })
-
-                    # Abort immediately if the API rate-limited us
-                    if fetch_status == 'rate_limited':
-                        yield _sse({
-                            "complete": True, "ok": ok, "skipped": skipped, "failed": failed,
-                            "message": f"Rate limited — {total - done} plan(s) remaining. "
-                                       f"Wait ~1 minute and press the button again.",
-                        })
-                        return
-
-                i += _MASSIVE_RATE_PER_MINUTE
-
-                # If there are more plans to fetch, wait out the remainder of 60s
-                if i < total:
+                if fetch_status == 'rate_limited':
+                    # Don't count or advance — we'll retry this plan after the wait.
                     elapsed = _time.monotonic() - window_start
-                    wait_secs = max(0.0, 60.0 - elapsed)
+                    wait_secs = max(5.0, 62.0 - elapsed)  # 2s buffer over 60s window
+                    yield _sse({"waiting": True, "wait_seconds": int(wait_secs) + 1,
+                                "done": done, "total": total})
+                    _time.sleep(wait_secs)
+                    window_start = _time.monotonic()
+                    calls_this_window = 0
+                    continue  # retry same plan (i not incremented)
+
+                # Plan processed (ok, skipped, or failed for non-429 reasons)
+                if status == 'skipped':
+                    skipped += 1
+                elif status == 'ok':
+                    ok += 1
+                else:
+                    failed += 1
+                done += 1
+                i += 1
+                calls_this_window += 1
+
+                yield _sse({
+                    "done": done,
+                    "total": total,
+                    "plan_id": pid,
+                    "outcome": r.get('outcome', ''),
+                    "fetch_status": fetch_status,
+                })
+
+                # After _MASSIVE_RATE_PER_MINUTE calls in this window, wait out
+                # the remainder of 60s before sending more requests.
+                if calls_this_window >= _MASSIVE_RATE_PER_MINUTE and i < total:
+                    elapsed = _time.monotonic() - window_start
+                    wait_secs = max(0.0, 62.0 - elapsed)
                     if wait_secs > 0.5:
                         yield _sse({"waiting": True, "wait_seconds": int(wait_secs) + 1,
                                     "done": done, "total": total})
                         _time.sleep(wait_secs)
+                    window_start = _time.monotonic()
+                    calls_this_window = 0
 
             yield _sse({"complete": True, "ok": ok, "skipped": skipped, "failed": failed,
                         "message": ""})
