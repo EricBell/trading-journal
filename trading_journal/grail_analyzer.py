@@ -10,10 +10,47 @@ from typing import Optional
 
 from sqlalchemy import text
 
+import zoneinfo
+
 from .database import db_manager
 from .grail_connector import _grail_engine
 from .market_data import MassiveClient
 from .models import GrailPlanAnalysis, OhlcvPriceSeries
+
+_APP_TZ = zoneinfo.ZoneInfo("US/Eastern")
+_MARKET_OPEN_HOUR, _MARKET_OPEN_MIN = 9, 30
+_MARKET_CLOSE_HOUR, _MARKET_CLOSE_MIN = 16, 0
+
+
+def _grail_ts_to_utc(ts: datetime) -> datetime:
+    """Convert a grail_files timestamp to real UTC.
+
+    grail_files stores file_created_at as naive Eastern local time (same convention
+    as trading_journal: the TIMESTAMP column has no zone, values are ET).
+    We attach the Eastern zone and convert to UTC so fetch windows land correctly.
+    """
+    naive = ts.replace(tzinfo=None)
+    return naive.replace(tzinfo=_APP_TZ).astimezone(timezone.utc)
+
+
+def expected_market_bars(fetch_start: datetime, fetch_end: datetime) -> int:
+    """Count expected 1-minute bars in [fetch_start, fetch_end] during NYSE market hours.
+
+    Both args should be UTC-aware. Counts Mon-Fri 9:30-16:00 ET minutes only.
+    """
+    total = 0
+    cur = fetch_start.astimezone(_APP_TZ).replace(second=0, microsecond=0)
+    end_et = fetch_end.astimezone(_APP_TZ)
+    step = timedelta(minutes=1)
+
+    while cur <= end_et:
+        if cur.weekday() < 5:  # Mon–Fri
+            t = cur.time()
+            from datetime import time as dtime
+            if dtime(_MARKET_OPEN_HOUR, _MARKET_OPEN_MIN) <= t < dtime(_MARKET_CLOSE_HOUR, _MARKET_CLOSE_MIN):
+                total += 1
+        cur += step
+    return total
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +63,7 @@ def run_grail_plan_analysis(
     grail_plan_id: int,
     user_id: int,
     analysis_version: int = _ANALYSIS_VERSION,
+    force: bool = False,
 ) -> dict:
     """Fetch 1m bars for the plan window and run zone-based analysis. Idempotent.
 
@@ -47,10 +85,10 @@ def run_grail_plan_analysis(
     Returns:
         {'status': 'ok'|'skipped'|'failed', 'outcome': str|None, 'message': str}
     """
-    # 1. Check idempotency — allow re-run when previous result was no_data
+    # 1. Check idempotency — no_data results and force=True always re-run
     existing = _find_existing(grail_plan_id, analysis_version)
     if existing is not None:
-        if existing.outcome == "no_data":
+        if existing.outcome == "no_data" or force:
             _delete_analysis(existing.grail_plan_analyses_id)
         else:
             return {
@@ -100,12 +138,16 @@ def run_grail_plan_analysis(
             # Best-effort: strip option suffix from ticker (e.g. "SPY241220P00580000" → "SPY")
             fetch_symbol = symbol[:3] if len(symbol) > 5 else symbol
 
-    # 3. Compute fetch window
-    plan_created_at = plan["file_created_at"]
-    if plan_created_at.tzinfo is None:
-        plan_created_at = plan_created_at.replace(tzinfo=timezone.utc)
+    # 3. Compute fetch window.
+    # file_created_at is stored as naive Eastern local time (no tz in DB column).
+    # Treat it as ET and convert to UTC so the window covers real market hours.
+    raw_ts = plan["file_created_at"]
+    plan_created_at = _grail_ts_to_utc(raw_ts) if raw_ts.tzinfo is None else raw_ts.astimezone(timezone.utc)
     fetch_start = plan_created_at - timedelta(minutes=_WINDOW_BEFORE_MINUTES)
     fetch_end = plan_created_at + timedelta(minutes=_WINDOW_AFTER_MINUTES)
+
+    # 3b. Expected bar count (for diagnostic display)
+    bars_expected = expected_market_bars(fetch_start, fetch_end)
 
     # 4. Fetch bars (upsert into ohlcv_price_series)
     client = MassiveClient()
@@ -166,6 +208,7 @@ def run_grail_plan_analysis(
         fetch_start=fetch_start,
         fetch_end=fetch_end,
         bars_fetched=bars_fetched,
+        bars_expected=bars_expected,
         fetch_status=fetch_status,
         bars_scanned=bars_scanned,
         scan=scan,
@@ -174,7 +217,12 @@ def run_grail_plan_analysis(
     return {
         "status": "ok",
         "outcome": scan["outcome"],
-        "message": f"{bars_scanned} bars scanned, outcome={scan['outcome']}",
+        "bars_scanned": bars_scanned,
+        "bars_fetched": bars_fetched,
+        "bars_expected": bars_expected,
+        "fetch_start": fetch_start,
+        "fetch_end": fetch_end,
+        "message": f"{bars_scanned} bars scanned (expected ~{bars_expected}), outcome={scan['outcome']}",
     }
 
 
@@ -370,6 +418,7 @@ def _write_result(
     fetch_start: datetime,
     fetch_end: datetime,
     bars_fetched: int,
+    bars_expected: int,
     fetch_status: str,
     bars_scanned: int,
     scan: dict,
@@ -391,6 +440,7 @@ def _write_result(
             fetch_start_at=fetch_start,
             fetch_end_at=fetch_end,
             bars_fetched=bars_fetched,
+            bars_expected=bars_expected,
             fetch_status=fetch_status,
             analysis_version=analysis_version,
             bars_scanned=bars_scanned,

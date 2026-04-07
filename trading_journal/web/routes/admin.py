@@ -696,7 +696,8 @@ def grail_plan_analyze(plan_id: int):
     if not os.environ.get('MASSIVE_API_KEY'):
         flash('MASSIVE_API_KEY is not set — bar fetch is disabled; analysis will use cached bars only.', 'warning')
 
-    result = run_grail_plan_analysis(grail_plan_id=plan_id, user_id=current_user.user_id)
+    force = request.form.get('force') == '1'
+    result = run_grail_plan_analysis(grail_plan_id=plan_id, user_id=current_user.user_id, force=force)
 
     if result['status'] == 'ok':
         flash(f"Analysis complete: {result['message']}", 'success')

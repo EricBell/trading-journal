@@ -623,6 +623,7 @@ class GrailPlanAnalysis(Base):
     fetch_start_at = Column(TIMESTAMP(timezone=True), nullable=True)
     fetch_end_at = Column(TIMESTAMP(timezone=True), nullable=True)
     bars_fetched = Column(Integer, nullable=True)
+    bars_expected = Column(Integer, nullable=True)   # expected market-hours bars in window
     fetch_status = Column(String(20), nullable=True)   # success, partial, failed, skipped
 
     # Analysis

@@ -1,3 +1,16 @@
+## v1.26.2 - 2026-04-07
+
+### Bug Fixes
+- **Grail plan analysis: timezone fix for fetch window** — `file_created_at` in grail_files is stored as naive Eastern local time. The analyzer was treating it as UTC, shifting the fetch window 4 hours early (e.g. a plan at 11:30 AM ET would fetch 6:00–9:30 AM ET = pre-market, yielding ~43 bars instead of ~150). Now correctly converts naive ET → UTC before computing the T−90/T+120 window.
+- **Grail plan analysis: Re-analyze always forces a re-run** — clicking Re-analyze on the plan detail page now unconditionally deletes the existing result and re-runs, regardless of the previous outcome (previously only `no_data` was retriable without manual DB intervention).
+- **Grail plan detail: diagnostic fetch info** — the analysis card now shows:
+  - Bars received vs. expected (expected = NYSE market-hours minutes in the fetch window)
+  - A ⚠ "low" badge and alert when bars scanned < 60% of expected
+  - The fetch window (UTC start → end) and the raw plan timestamp for comparison
+  - `bars_expected` column added to `grail_plan_analyses` table
+
+---
+
 ## v1.26.1 - 2026-04-07
 
 ### Bug Fixes
