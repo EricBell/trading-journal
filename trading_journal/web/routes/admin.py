@@ -1,7 +1,10 @@
 """Admin routes: /admin/users."""
 
 import json
+import logging
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
 from sqlalchemy import func
@@ -576,6 +579,224 @@ def hg_batch():
         'success' if analyzed > 0 else 'info',
     )
     return redirect(url_for('admin.hg_analysis'))
+
+
+# ---------------------------------------------------------------------------
+# Grail plan browser + zone analysis
+# ---------------------------------------------------------------------------
+
+_GRAIL_BATCH_CAP = 50
+
+
+@bp.route('/grail-plans')
+@admin_required
+def grail_plans():
+    """Browse grail_files plans with filters and show analysis outcomes."""
+    from ...grail_connector import list_grail_plans
+    from ...models import GrailPlanAnalysis
+
+    current_user = AuthContext.get_current_user()
+
+    symbol = request.args.get('symbol', '').strip() or None
+    date_from_str = request.args.get('date_from', '')
+    date_to_str = request.args.get('date_to', '')
+    asset_type = request.args.get('asset_type', '') or None
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = 25
+
+    date_from = None
+    date_to = None
+    try:
+        if date_from_str:
+            date_from = date.fromisoformat(date_from_str)
+        if date_to_str:
+            date_to = date.fromisoformat(date_to_str)
+    except ValueError:
+        pass
+
+    result = list_grail_plans(
+        symbol=symbol,
+        date_from=date_from,
+        date_to=date_to,
+        asset_type=asset_type,
+        page=page,
+        per_page=per_page,
+    )
+    plan_rows = result.get("rows", [])
+    total = result.get("total", 0)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    # Overlay existing analysis outcomes
+    plan_ids = [str(r["id"]) for r in plan_rows]
+    analysis_by_plan: dict = {}
+    if plan_ids:
+        with db_manager.get_session() as session:
+            analyses = (
+                session.query(GrailPlanAnalysis)
+                .filter(GrailPlanAnalysis.grail_plan_id.in_(plan_ids))
+                .all()
+            )
+            analysis_by_plan = {a.grail_plan_id: a for a in analyses}
+
+    # Aggregate stats across ALL analyzed plans (not just current page)
+    stats = _grail_analysis_stats()
+
+    return render_template(
+        'admin/grail_plans.html',
+        user=current_user,
+        plan_rows=plan_rows,
+        analysis_by_plan=analysis_by_plan,
+        total=total,
+        page=page,
+        total_pages=total_pages,
+        stats=stats,
+        filters={'symbol': symbol or '', 'date_from': date_from_str, 'date_to': date_to_str, 'asset_type': asset_type or ''},
+    )
+
+
+@bp.route('/grail-plans/<int:plan_id>')
+@admin_required
+def grail_plan_detail(plan_id: int):
+    """Show a single grail plan's details and analysis result."""
+    from ...grail_connector import fetch_grail_plan_full
+    from ...models import GrailPlanAnalysis
+
+    current_user = AuthContext.get_current_user()
+
+    plan = fetch_grail_plan_full(plan_id)
+    if plan is None:
+        flash(f"Grail plan {plan_id} not found.", 'warning')
+        return redirect(url_for('admin.grail_plans'))
+
+    with db_manager.get_session() as session:
+        analysis = (
+            session.query(GrailPlanAnalysis)
+            .filter_by(grail_plan_id=str(plan_id))
+            .order_by(GrailPlanAnalysis.analysis_version.desc())
+            .first()
+        )
+
+    return render_template(
+        'admin/grail_plan_detail.html',
+        user=current_user,
+        plan=plan,
+        analysis=analysis,
+    )
+
+
+@bp.route('/grail-plans/<int:plan_id>/analyze', methods=['POST'])
+@admin_required
+def grail_plan_analyze(plan_id: int):
+    """Trigger zone analysis for a single grail plan."""
+    import os
+    from ...grail_analyzer import run_grail_plan_analysis
+
+    current_user = AuthContext.get_current_user()
+
+    if not os.environ.get('MASSIVE_API_KEY'):
+        flash('MASSIVE_API_KEY is not set — bar fetch is disabled; analysis will use cached bars only.', 'warning')
+
+    result = run_grail_plan_analysis(grail_plan_id=plan_id, user_id=current_user.user_id)
+
+    if result['status'] == 'ok':
+        flash(f"Analysis complete: {result['message']}", 'success')
+    elif result['status'] == 'skipped':
+        flash(f"Already analyzed: outcome={result['outcome']}", 'info')
+    else:
+        flash(f"Analysis failed: {result['message']}", 'danger')
+
+    redirect_to = request.referrer or url_for('admin.grail_plan_detail', plan_id=plan_id)
+    return redirect(redirect_to)
+
+
+@bp.route('/grail-plans/analyze-batch', methods=['POST'])
+@admin_required
+def grail_plans_analyze_batch():
+    """Analyze up to GRAIL_BATCH_CAP plans matching the current filter (re-applied server-side)."""
+    import os
+    from ...grail_analyzer import run_grail_plan_analysis
+    from ...grail_connector import list_grail_plans
+    from ...models import GrailPlanAnalysis
+
+    current_user = AuthContext.get_current_user()
+
+    if not os.environ.get('MASSIVE_API_KEY'):
+        flash('MASSIVE_API_KEY is not set — bar fetch is disabled; analysis will use cached bars only.', 'warning')
+
+    symbol = request.form.get('symbol', '').strip() or None
+    date_from_str = request.form.get('date_from', '')
+    date_to_str = request.form.get('date_to', '')
+    asset_type = request.form.get('asset_type', '') or None
+
+    date_from = None
+    date_to = None
+    try:
+        if date_from_str:
+            date_from = date.fromisoformat(date_from_str)
+        if date_to_str:
+            date_to = date.fromisoformat(date_to_str)
+    except ValueError:
+        pass
+
+    # Fetch enough plan IDs to fill the cap (skip already-analyzed)
+    result = list_grail_plans(symbol=symbol, date_from=date_from, date_to=date_to,
+                               asset_type=asset_type, page=1, per_page=_GRAIL_BATCH_CAP * 4)
+    all_ids = [str(r["id"]) for r in result.get("rows", [])]
+
+    with db_manager.get_session() as session:
+        analyzed_ids = {
+            a.grail_plan_id
+            for a in session.query(GrailPlanAnalysis.grail_plan_id)
+            .filter(GrailPlanAnalysis.grail_plan_id.in_(all_ids))
+            .all()
+        }
+
+    to_analyze = [pid for pid in all_ids if pid not in analyzed_ids][:_GRAIL_BATCH_CAP]
+
+    ok = skipped_already = failed = 0
+    for pid in to_analyze:
+        r = run_grail_plan_analysis(grail_plan_id=int(pid), user_id=current_user.user_id)
+        if r['status'] == 'ok':
+            ok += 1
+        elif r['status'] == 'skipped':
+            skipped_already += 1
+        else:
+            failed += 1
+
+    flash(
+        f"Batch complete: {ok} analyzed, {skipped_already} already done, {failed} failed.",
+        'success' if ok > 0 else 'info',
+    )
+    return redirect(url_for('admin.grail_plans', symbol=symbol or '', date_from=date_from_str,
+                             date_to=date_to_str, asset_type=asset_type or ''))
+
+
+def _grail_analysis_stats() -> dict:
+    """Return aggregate counts across all grail_plan_analyses rows."""
+    try:
+        from sqlalchemy import func as sqlfunc
+        from ...models import GrailPlanAnalysis
+        with db_manager.get_session() as session:
+            total_analyzed = session.query(sqlfunc.count(GrailPlanAnalysis.grail_plan_analyses_id)).scalar() or 0
+            by_outcome = dict(
+                session.query(GrailPlanAnalysis.outcome, sqlfunc.count())
+                .group_by(GrailPlanAnalysis.outcome)
+                .all()
+            )
+            entry_reached = sum(
+                v for k, v in by_outcome.items() if k in ('success', 'failure', 'inconclusive')
+            )
+        return {
+            'total_analyzed': total_analyzed,
+            'entry_reached': entry_reached,
+            'success': by_outcome.get('success', 0),
+            'failure': by_outcome.get('failure', 0),
+            'inconclusive': by_outcome.get('inconclusive', 0),
+            'no_entry': by_outcome.get('no_entry', 0),
+        }
+    except Exception as exc:
+        logger.warning("_grail_analysis_stats failed: %s", exc)
+        return {}
 
 
 @bp.route('/export')

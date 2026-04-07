@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Grail Plan {{ plan.id }} — Admin{% endblock %}
+
+{% block content %}
+<ul class="nav nav-pills mb-4">
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.users') }}">Users</a></li>
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.export_page') }}">Export Annotations</a></li>
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.market_data') }}">Market Data</a></li>
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.hg_analysis') }}">HG Analysis</a></li>
+  <li class="nav-item"><a class="nav-link active" href="{{ url_for('admin.grail_plans') }}">Grail Plans</a></li>
+</ul>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a href="{{ url_for('admin.grail_plans') }}" class="btn btn-sm btn-outline-secondary">← Back</a>
+  <h5 class="mb-0">Grail Plan #{{ plan.id }} — {{ plan.ticker }}</h5>
+</div>
+
+{# ── Plan details ── #}
+<div class="card mb-4">
+  <div class="card-header fw-semibold">Plan Parameters</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-sm-4 col-md-2">
+        <div class="text-muted small">Ticker</div>
+        <div class="fw-semibold">{{ plan.ticker }}</div>
+      </div>
+      <div class="col-sm-4 col-md-2">
+        <div class="text-muted small">Asset Type</div>
+        <div>{{ plan.asset_type or '—' }}</div>
+      </div>
+      <div class="col-sm-4 col-md-2">
+        <div class="text-muted small">Direction</div>
+        <div>
+          {% if plan.entry_direction == 'LONG' %}
+            <span class="badge bg-success">LONG</span>
+          {% elif plan.entry_direction == 'SHORT' %}
+            <span class="badge bg-danger">SHORT</span>
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Created At</div>
+        <div class="font-monospace small">{{ plan.file_created_at.strftime('%Y-%m-%d %H:%M:%S') if plan.file_created_at else '—' }}</div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Resolved Ticker</div>
+        <div>{{ plan.resolved_ticker or '—' }}</div>
+      </div>
+
+      <div class="col-12"><hr class="my-1"></div>
+
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Entry Zone</div>
+        <div class="font-monospace">
+          {% if plan.entry_low is not none and plan.entry_high is not none %}
+            {{ "%.4f"|format(plan.entry_low|float) }} – {{ "%.4f"|format(plan.entry_high|float) }}
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Ideal Entry</div>
+        <div class="font-monospace">
+          {{ "%.4f"|format(plan.entry_price|float) if plan.entry_price is not none else '—' }}
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Stop Zone</div>
+        <div class="font-monospace">
+          {% if plan.stop_low is not none and plan.stop_high is not none %}
+            {{ "%.4f"|format(plan.stop_low|float) }} – {{ "%.4f"|format(plan.stop_high|float) }}
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">TP1 Zone</div>
+        <div class="font-monospace">
+          {% if plan.tp1_low is not none and plan.tp1_high is not none %}
+            {{ "%.4f"|format(plan.tp1_low|float) }} – {{ "%.4f"|format(plan.tp1_high|float) }}
+          {% else %}—{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Analysis section ── #}
+<div class="card mb-4">
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    <span>Zone Analysis</span>
+    <form method="post" action="{{ url_for('admin.grail_plan_analyze', plan_id=plan.id) }}">
+      <select name="analysis_type" class="form-select form-select-sm d-inline-block w-auto me-2">
+        <option value="zone_v1">Zone Analysis v1</option>
+      </select>
+      <button type="submit" class="btn btn-sm btn-primary">
+        {{ 'Re-analyze' if analysis else 'Run Analysis' }}
+      </button>
+    </form>
+  </div>
+  <div class="card-body">
+    {% if analysis %}
+    <div class="row g-3">
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Outcome</div>
+        <div>
+          {% if analysis.outcome == 'success' %}
+            <span class="badge bg-success fs-6">success</span>
+          {% elif analysis.outcome == 'failure' %}
+            <span class="badge bg-danger fs-6">failure</span>
+          {% elif analysis.outcome == 'inconclusive' %}
+            <span class="badge bg-warning text-dark fs-6">inconclusive</span>
+          {% elif analysis.outcome == 'no_entry' %}
+            <span class="badge bg-secondary fs-6">no entry</span>
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Entry Zone Touched</div>
+        <div>
+          {% if analysis.entry_zone_touched %}
+            <span class="badge bg-success">Yes</span>
+          {% elif analysis.entry_zone_touched == False %}
+            <span class="badge bg-secondary">No</span>
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Ideal Entry Touched</div>
+        <div>
+          {% if analysis.entry_ideal_touched %}
+            <span class="badge bg-info text-dark">Yes</span>
+          {% elif analysis.entry_ideal_touched == False %}
+            <span class="badge bg-secondary">No</span>
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Bars Scanned</div>
+        <div>{{ analysis.bars_scanned if analysis.bars_scanned is not none else '—' }}</div>
+      </div>
+
+      {% if analysis.entry_zone_touched %}
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">First Touch At</div>
+        <div class="font-monospace small">{{ analysis.entry_first_touch_at.strftime('%H:%M:%S') if analysis.entry_first_touch_at else '—' }}</div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Bars to Entry</div>
+        <div>{{ analysis.bars_to_entry if analysis.bars_to_entry is not none else '—' }}</div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Bars to Outcome</div>
+        <div>{{ analysis.bars_to_outcome if analysis.bars_to_outcome is not none else '—' }}</div>
+      </div>
+      {% if analysis.tp1_zone_touch_at %}
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">TP1 Touched At</div>
+        <div class="font-monospace small text-success">{{ analysis.tp1_zone_touch_at.strftime('%H:%M:%S') }}</div>
+      </div>
+      {% endif %}
+      {% if analysis.stop_zone_touch_at %}
+      <div class="col-sm-6 col-md-3">
+        <div class="text-muted small">Stop Touched At</div>
+        <div class="font-monospace small text-danger">{{ analysis.stop_zone_touch_at.strftime('%H:%M:%S') }}</div>
+      </div>
+      {% endif %}
+      {% endif %}
+
+      <div class="col-12">
+        <div class="text-muted small">Fetch: {{ analysis.bars_fetched or 0 }} bars ({{ analysis.fetch_status or '—' }})
+          · Analyzed {{ analysis.analyzed_at.strftime('%Y-%m-%d %H:%M') if analysis.analyzed_at else '—' }}
+          · v{{ analysis.analysis_version }}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-muted">No analysis yet. Click <strong>Run Analysis</strong> above.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

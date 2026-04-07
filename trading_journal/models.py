@@ -89,6 +89,7 @@ class User(Base):
     journal_notes = relationship("JournalNote", back_populates="user", order_by="JournalNote.created_at.desc()")
     hg_market_data_requests = relationship("HgMarketDataRequest", back_populates="user")
     hg_analysis_results = relationship("HgAnalysisResult", back_populates="user")
+    grail_plan_analyses = relationship("GrailPlanAnalysis", back_populates="user")
 
     # Constraints
     __table_args__ = (
@@ -588,3 +589,70 @@ class HgAnalysisResult(Base):
 
     user = relationship("User", back_populates="hg_analysis_results")
     market_data_request = relationship("HgMarketDataRequest", back_populates="analysis_results")
+
+
+class GrailPlanAnalysis(Base):
+    """Zone-based analysis of a grail plan against 1-min OHLCV bar data.
+
+    Plan-centric (not trade-linked): evaluates whether price entered the entry zone,
+    hit the ideal entry, and then reached TP1 before the stop zone. Results are
+    keyed by (grail_plan_id, analysis_version) — shared across users.
+    """
+
+    __tablename__ = "grail_plan_analyses"
+
+    grail_plan_analyses_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+
+    # External grail plan identity
+    grail_plan_id = Column(Text, nullable=False)
+
+    # Plan parameters snapshotted at analysis time
+    symbol = Column(String(50), nullable=False)
+    asset_type = Column(String(20), nullable=True)   # STOCK, OPTIONS, FUTURES
+    side = Column(String(10), nullable=True)          # long, short
+    entry_zone_low = Column(Numeric(18, 8), nullable=True)
+    entry_zone_high = Column(Numeric(18, 8), nullable=True)
+    entry_ideal = Column(Numeric(18, 8), nullable=True)   # entry_price / zone mid
+    stop_zone_low = Column(Numeric(18, 8), nullable=True)
+    stop_zone_high = Column(Numeric(18, 8), nullable=True)
+    tp1_zone_low = Column(Numeric(18, 8), nullable=True)
+    tp1_zone_high = Column(Numeric(18, 8), nullable=True)
+
+    # Fetch details
+    fetch_start_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    fetch_end_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    bars_fetched = Column(Integer, nullable=True)
+    fetch_status = Column(String(20), nullable=True)   # success, partial, failed, skipped
+
+    # Analysis
+    analysis_version = Column(Integer, nullable=False, default=1)
+    bars_scanned = Column(Integer, nullable=True)
+
+    # Entry behavior
+    entry_zone_touched = Column(Boolean, nullable=True)
+    entry_ideal_touched = Column(Boolean, nullable=True)
+    entry_first_touch_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    bars_to_entry = Column(Integer, nullable=True)
+
+    # Outcome
+    outcome = Column(String(20), nullable=True)   # no_entry | success | failure | inconclusive
+    tp1_zone_touched = Column(Boolean, nullable=True)
+    tp1_zone_touch_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    stop_zone_touched = Column(Boolean, nullable=True)
+    stop_zone_touch_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    bars_to_outcome = Column(Integer, nullable=True)
+
+    analyzed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('no_entry', 'success', 'failure', 'inconclusive')",
+            name="chk_gpa_outcome",
+        ),
+        UniqueConstraint("grail_plan_id", "analysis_version", name="uq_grail_plan_analyses_version"),
+    )
+
+    user = relationship("User", back_populates="grail_plan_analyses")

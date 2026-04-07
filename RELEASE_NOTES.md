@@ -1,3 +1,17 @@
+## v1.26.0 - 2026-04-07
+
+### New Features
+- **Grail Plan Browser** (`/admin/grail-plans`) — browse, filter, and analyze grail plans directly from the `grail_files` database without needing a linked trade.
+  - Filter by symbol, date range, and asset type (Stock / Options / Futures).
+  - Paginated table shows entry zone, ideal entry price, direction, and analysis outcome for each plan.
+  - Aggregate stats bar: total analyzed, entry reached %, success %, failure %, inconclusive %.
+  - **Zone-based analysis** (`grail_plan_analyses` table): scans 1-min bars (T−90 to T+120) to determine whether price entered the entry zone and subsequently hit TP1 or the stop zone first.
+    - Outcome: `success` (TP1 zone reached first), `failure` (stop zone reached first), `inconclusive` (entry touched, neither reached in window), `no_entry`.
+    - Also tracks whether the ideal entry price (zone mid) was touched.
+  - Per-plan "Analyze" button and "Analyze All (filtered, up to 50)" batch action.
+  - Plan detail page (`/admin/grail-plans/<id>`) shows full zone parameters and analysis card.
+- **Grail Plans** link added to the admin sub-nav (visible from all admin pages).
+
 ## v1.25.2 - 2026-04-07
 
 ### Internal

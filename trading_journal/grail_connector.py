@@ -1,7 +1,8 @@
 """Read-only connector for the external grail_files database."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from typing import Optional
 
 from sqlalchemy import bindparam, create_engine, text
 from sqlalchemy.engine.url import make_url
@@ -26,6 +27,93 @@ def _normalize_opened_at(opened_at):
     else:
         utc = opened_at
     return utc, utc.date()
+
+
+def list_grail_plans(
+    symbol: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    asset_type: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 25,
+) -> dict:
+    """Browse grail_files with optional filters. Returns paginated rows + total count.
+
+    Returns:
+        {'rows': [dict, ...], 'total': int}
+        or {'rows': [], 'total': 0, 'error': str} if grail DB is unreachable.
+    """
+    try:
+        conditions = []
+        params: dict = {}
+
+        if symbol:
+            conditions.append("ticker ILIKE :symbol")
+            params["symbol"] = f"%{symbol.strip()}%"
+        if date_from:
+            conditions.append("DATE(file_created_at) >= :date_from")
+            params["date_from"] = date_from
+        if date_to:
+            conditions.append("DATE(file_created_at) <= :date_to")
+            params["date_to"] = date_to
+        if asset_type:
+            conditions.append("asset_type = :asset_type")
+            params["asset_type"] = asset_type.upper()
+
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        engine = _grail_engine()
+        with engine.connect() as conn:
+            total_row = conn.execute(
+                text(f"SELECT COUNT(*) FROM grail_files {where}"), params
+            ).scalar()
+
+            offset = (page - 1) * per_page
+            rows = conn.execute(
+                text(
+                    f"SELECT id, ticker, asset_type, entry_direction,"
+                    f"       file_created_at, entry_price,"
+                    f"       entry_low, entry_high,"
+                    f"       stop_low, stop_high,"
+                    f"       tp1_low, tp1_high,"
+                    f"       tp2_low, tp2_high,"
+                    f"       resolved_ticker"
+                    f" FROM grail_files {where}"
+                    f" ORDER BY file_created_at DESC"
+                    f" LIMIT :limit OFFSET :offset"
+                ),
+                {**params, "limit": per_page, "offset": offset},
+            ).mappings().all()
+
+        return {"rows": [dict(r) for r in rows], "total": total_row or 0}
+
+    except Exception as exc:
+        logger.warning("list_grail_plans failed: %s", exc)
+        return {"rows": [], "total": 0, "error": str(exc)}
+
+
+def fetch_grail_plan_full(plan_id: int) -> Optional[dict]:
+    """Fetch all columns for a single grail plan by PK. Used by plan detail page."""
+    try:
+        engine = _grail_engine()
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT id, ticker, asset_type, entry_direction,"
+                    "       file_created_at, entry_price,"
+                    "       entry_low, entry_high,"
+                    "       stop_low, stop_high,"
+                    "       tp1_low, tp1_high,"
+                    "       tp2_low, tp2_high,"
+                    "       resolved_ticker, json_content"
+                    " FROM grail_files WHERE id = :pid"
+                ),
+                {"pid": plan_id},
+            ).mappings().first()
+            return dict(row) if row is not None else None
+    except Exception as exc:
+        logger.warning("fetch_grail_plan_full failed for id=%s: %s", plan_id, exc)
+        return None
 
 
 def find_grail_match(symbol: str, opened_at, trade_direction: str | None = None) -> dict | None:
