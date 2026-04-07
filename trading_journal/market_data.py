@@ -19,6 +19,7 @@ from .models import CompletedTrade, OhlcvPriceSeries, TradeAnnotation
 logger = logging.getLogger(__name__)
 
 _MASSIVE_BASE = "https://api.polygon.io"
+_MASSIVE_FUTURES_BASE = "https://api.massive.com"
 _APP_TZ = zoneinfo.ZoneInfo("US/Eastern")
 
 
@@ -271,6 +272,94 @@ class MassiveClient:
         last_bar_at = datetime.fromtimestamp(bars[-1]["t"] / 1000, tz=timezone.utc)
         logger.info(
             "fetch_window_bars: %s %s %s→%s → %d bars",
+            symbol, timeframe, from_ts.isoformat(), to_ts.isoformat(), len(bars),
+        )
+        return {
+            "bars_received": len(bars),
+            "first_bar_at": first_bar_at,
+            "last_bar_at": last_bar_at,
+            "error": None,
+        }
+
+    def fetch_futures_window_bars(
+        self, symbol: str, from_ts: datetime, to_ts: datetime, timeframe: str = "1m"
+    ) -> dict:
+        """
+        Fetch futures bars using the Massive.com dedicated futures endpoint.
+
+        Uses api.massive.com/futures/v1/aggs/{ticker}, which requires a Massive
+        futures subscription add-on (separate from the equities plan).
+
+        Returns same dict format as fetch_window_bars().
+        On authorization failure sets error='no_subscription'.
+
+        Note: The standard equity endpoint (api.polygon.io/v2/aggs/) also accepts
+        futures tickers but returns 0 results — it does NOT return 403.  Only the
+        dedicated endpoint correctly reports authorization failure.
+
+        If/when the subscription is upgraded, the response bar format is assumed to
+        match Polygon's standard OHLCV format (o/h/l/c/v/t fields). Adjust
+        _cache_bars() if Massive futures uses different field names.
+        """
+        if not self.enabled:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "MASSIVE_API_KEY not set"}
+
+        if from_ts.tzinfo is None:
+            from_ts = from_ts.replace(tzinfo=timezone.utc)
+        if to_ts.tzinfo is None:
+            to_ts = to_ts.replace(tzinfo=timezone.utc)
+
+        _TF_RES = {"1m": "1min", "5m": "5min", "15m": "15min", "1d": "1day"}
+        resolution = _TF_RES.get(timeframe, "1min")
+        window_start = from_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+        window_end = to_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        url = (
+            f"{_MASSIVE_FUTURES_BASE}/futures/v1/aggs/{symbol}"
+            f"?resolution={resolution}&window_start={window_start}&window_end={window_end}"
+            f"&sort=asc&limit=50000&apiKey={self.api_key}"
+        )
+
+        try:
+            data = self._http_get(url, symbol, from_ts, timeframe=timeframe)
+        except _UnavailableError:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "no_subscription"}
+        except _RateLimitError:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "429 Rate limited"}
+
+        if data is None:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "API call failed"}
+
+        # Massive futures endpoint returns HTTP 200 with status=NOT_AUTHORIZED in body
+        # (not HTTP 403) when the subscription doesn't cover futures data.
+        if data.get("status") == "NOT_AUTHORIZED":
+            logger.info(
+                "Massive futures: NOT_AUTHORIZED for %s — futures plan upgrade required "
+                "(see massive.com/pricing)",
+                symbol,
+            )
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": "no_subscription"}
+
+        if data.get("status") not in ("OK", "DELAYED"):
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": f"unexpected API status: {data.get('status')}"}
+
+        bars = data.get("results") or []
+        if not bars:
+            return {"bars_received": 0, "first_bar_at": None, "last_bar_at": None,
+                    "error": None}
+
+        self._cache_bars(symbol, bars, timeframe=timeframe)
+
+        first_bar_at = datetime.fromtimestamp(bars[0]["t"] / 1000, tz=timezone.utc)
+        last_bar_at = datetime.fromtimestamp(bars[-1]["t"] / 1000, tz=timezone.utc)
+        logger.info(
+            "fetch_futures_window_bars: %s %s %s→%s → %d bars",
             symbol, timeframe, from_ts.isoformat(), to_ts.isoformat(), len(bars),
         )
         return {

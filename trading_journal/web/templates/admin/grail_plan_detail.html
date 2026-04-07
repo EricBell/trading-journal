@@ -142,7 +142,9 @@
         <div class="text-muted small">Bars Scanned</div>
         <div>
           {{ analysis.bars_scanned if analysis.bars_scanned is not none else '—' }}
-          {% if analysis.bars_expected and analysis.bars_scanned is not none and analysis.bars_scanned < (analysis.bars_expected * 0.6)|int %}
+          {% if analysis.fetch_status == 'no_subscription' %}
+            <span class="badge bg-info text-dark ms-1" title="Futures data requires a Massive.com plan upgrade">upgrade req'd</span>
+          {% elif analysis.bars_expected and analysis.bars_scanned is not none and analysis.bars_scanned < (analysis.bars_expected * 0.6)|int %}
             <span class="badge bg-warning text-dark ms-1" title="Expected ~{{ analysis.bars_expected }} bars — window may be shifted or data missing">
               ⚠ low
             </span>
@@ -182,7 +184,7 @@
           Fetch:
           {{ analysis.bars_fetched or 0 }} bars received
           {% if analysis.bars_expected %} / ~{{ analysis.bars_expected }} expected{% endif %}
-          ({{ analysis.fetch_status or '—' }})
+          ({% if analysis.fetch_status == 'no_subscription' %}<span class="text-info">no subscription</span>{% else %}{{ analysis.fetch_status or '—' }}{% endif %})
           {% if analysis.fetch_start_at and analysis.fetch_end_at %}
             · Window:
             {{ analysis.fetch_start_at.strftime('%Y-%m-%d %H:%M') }} →
@@ -192,7 +194,12 @@
           · Analyzed {{ analysis.analyzed_at.strftime('%Y-%m-%d %H:%M') if analysis.analyzed_at else '—' }}
           · v{{ analysis.analysis_version }}
         </div>
-        {% if analysis.bars_expected and analysis.bars_scanned is not none and analysis.bars_scanned < (analysis.bars_expected * 0.6)|int %}
+        {% if analysis.fetch_status == 'no_subscription' %}
+        <div class="alert alert-info mt-2 mb-0 py-1 px-2 small">
+          <strong>Futures data not available:</strong> The current Massive.com subscription does not include futures market data.
+          <a href="https://massive.com/pricing" target="_blank" class="alert-link">Upgrade your plan</a> to enable futures analysis.
+        </div>
+        {% elif analysis.bars_expected and analysis.bars_scanned is not none and analysis.bars_scanned < (analysis.bars_expected * 0.6)|int %}
         <div class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
           <strong>⚠ Low bar count:</strong> got {{ analysis.bars_scanned }} bars, expected ~{{ analysis.bars_expected }}.
           This usually means the fetch window is misaligned with market hours, or bars haven't been cached yet.

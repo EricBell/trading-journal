@@ -123,6 +123,8 @@
                 <span class="badge bg-warning text-dark">inconclusive</span>
               {% elif analysis.outcome == 'no_entry' %}
                 <span class="badge bg-secondary">no entry</span>
+              {% elif analysis.outcome == 'no_data' and analysis.fetch_status == 'no_subscription' %}
+                <span class="badge bg-info text-dark" title="Futures data requires Massive.com plan upgrade">no subscription</span>
               {% elif analysis.outcome == 'no_data' %}
                 <span class="badge bg-dark" title="No bars available — retry when API quota resets">no data</span>
               {% else %}

@@ -150,15 +150,22 @@ def run_grail_plan_analysis(
     bars_expected = expected_market_bars(fetch_start, fetch_end)
 
     # 4. Fetch bars (upsert into ohlcv_price_series)
+    # Futures plans use the Massive dedicated futures endpoint; all other asset types
+    # use the standard Polygon equity endpoint.
     client = MassiveClient()
     fetch_status = "skipped"
     bars_fetched = 0
 
     if client.enabled:
-        fetch_result = client.fetch_window_bars(fetch_symbol, fetch_start, fetch_end, "1m")
+        if asset_type == "FUTURES":
+            fetch_result = client.fetch_futures_window_bars(fetch_symbol, fetch_start, fetch_end, "1m")
+        else:
+            fetch_result = client.fetch_window_bars(fetch_symbol, fetch_start, fetch_end, "1m")
         bars_fetched = fetch_result.get("bars_received", 0)
         error = fetch_result.get("error")
-        if error:
+        if error == "no_subscription":
+            fetch_status = "no_subscription"
+        elif error:
             fetch_status = "failed"
         elif bars_fetched == 0:
             fetch_status = "partial"

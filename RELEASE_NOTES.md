@@ -1,3 +1,14 @@
+## v1.26.3 - 2026-04-07
+
+### Bug Fixes
+- **Grail plan analysis: futures data routing** — futures plans now use the Massive.com dedicated futures endpoint (`api.massive.com/futures/v1/aggs/`) instead of the standard equity endpoint. The equity endpoint silently returns 0 bars for futures tickers (HTTP 200, no error) making it impossible to distinguish a subscription gap from a throttle; the dedicated endpoint returns `NOT_AUTHORIZED` in the response body when the plan doesn't include futures, which is now detected and surfaced as `fetch_status = "no_subscription"`.
+- **Grail plan detail/list: no_subscription badge** — futures plans without a subscription show a blue "no subscription" badge and an informative alert ("Futures data requires Massive.com plan upgrade") instead of the generic grey "no data" badge. The misleading ⚠ low bar count warning is suppressed for no_subscription results.
+
+### Notes
+- Futures data (MES, ES, NQ, etc.) requires a Massive.com plan that includes the futures add-on. The current subscription covers equities only. Upgrade at massive.com/pricing to enable futures zone analysis.
+
+---
+
 ## v1.26.2 - 2026-04-07
 
 ### Bug Fixes
