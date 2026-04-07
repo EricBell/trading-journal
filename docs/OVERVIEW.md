@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.25.1
-**Last Updated:** 2026-03-30
+**Version:** 1.25.2
+**Last Updated:** 2026-04-07
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -218,6 +218,13 @@ taken. On the trade detail page, `grail_connector.find_grail_match()` queries
 `opened_at`. If found, a "View Trade Plan" button appears. The connection is
 fire-and-forget: if `grail_files` is unreachable the page renders normally with no button.
 
+As of April 2026 `grail_files` carries pre-extracted columns for the key plan levels
+(`entry_direction`, `entry_low`, `entry_high`, `stop_low`, `stop_high`, `tp1_low`,
+`tp1_high`, `tp2_low`, `tp2_high`). `grail_connector` uses these directly: direction
+filtering in `find_grail_match` and `batch_grail_coverage` uses the `entry_direction`
+column instead of navigating JSONB; `list_grail_candidates` returns `entry_low`/`entry_high`
+so callers have the entry zone without parsing `json_content`.
+
 ### 5.6 HG plan analysis pipeline
 
 "HG" (Historical Grail) is the system for evaluating pre-trade plans against actual
@@ -237,6 +244,15 @@ entry-zone touch type (`never`/`top_of_zone`/`in_zone`/`bottom_of_zone`/`through
 TP1/TP2 reached with bar counts, MFE/MAE, and linked-trade comparison (actual entry/exit
 vs plan zone). Results are keyed by `analysis_version` so logic can evolve without
 destroying historical rows.
+
+Parameter extraction (`_load_plan_params`) uses the pre-extracted columns where possible:
+`entry_low`/`entry_high` (always underlying prices regardless of asset type) for the entry
+zone; for **equity** plans, `stop_low`/`stop_high` and `tp1_low`/`tp1_high`/`tp2_low`/
+`tp2_high` with direction-aware bound selection (long stop → `stop_high` / tighter upper
+bound; long tp1 → `tp1_low` / conservative lower bound; mirrored for short). For
+**option** plans, stop and TP still read from JSON `stock_price_range` because the
+pre-extracted columns hold option premium prices, not the underlying prices the bar scan
+requires. Falls back to JSON for any NULL column (pre-migration rows).
 
 **Stage 3 — Display**: Trade detail page shows an "HG Plan Analysis" card when an
 `HgAnalysisResult` exists for the linked grail plan. Admin → HG Analysis page lists all
@@ -430,4 +446,4 @@ RELEASE_NOTES.md            Release history; parsed by /about route
 | Project | Location | Role |
 |---|---|---|
 | schwab-csv-to-json | `../schwab-csv-to-json` | Original Schwab CSV → NDJSON converter (now superseded by built-in CsvParser, but still used for NDJSON batch workflows) |
-| save-grail-json | separate repo | Writes pre-trade JSON plans to the `grail_files` PostgreSQL database; this app reads them read-only |
+| save-grail-json | separate repo | Writes pre-trade JSON plans to the `grail_files` PostgreSQL database; this app reads them read-only. April 2026: added pre-extracted columns `entry_low/high`, `stop_low/high`, `tp1_low/high`, `tp2_low/high`, `entry_direction`; corrected `entry_price` to source from `ideal_zone.mid`. |
