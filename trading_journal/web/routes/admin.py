@@ -6,7 +6,7 @@ from datetime import date
 
 logger = logging.getLogger(__name__)
 
-from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
+from flask import Blueprint, Response, flash, make_response, redirect, render_template, request, stream_with_context, url_for
 from sqlalchemy import func
 from werkzeug.security import generate_password_hash
 
@@ -585,7 +585,9 @@ def hg_batch():
 # Grail plan browser + zone analysis
 # ---------------------------------------------------------------------------
 
-_GRAIL_BATCH_CAP = 50
+# Free-tier Massive API: 5 requests/minute.
+_MASSIVE_RATE_PER_MINUTE = 5   # how many sequential API calls fit in one 60s window
+_GRAIL_BATCH_DEFAULT = 4       # default plan count shown in the UI input
 
 
 @bp.route('/grail-plans')
@@ -713,16 +715,36 @@ def grail_plan_analyze(plan_id: int):
 @bp.route('/grail-plans/analyze-batch', methods=['POST'])
 @admin_required
 def grail_plans_analyze_batch():
-    """Analyze up to GRAIL_BATCH_CAP plans matching the current filter (re-applied server-side)."""
+    """Stream zone analysis progress as SSE for up to batch_count plans.
+
+    Rate-limit strategy: execute up to _MASSIVE_RATE_PER_MINUTE calls per
+    60-second window.  Measure how long each sub-batch takes, then sleep the
+    remainder of 60s before starting the next sub-batch.  The client reads the
+    SSE stream with fetch() and updates the UI in real time.
+
+    SSE event shapes:
+        {"done": N, "total": M, "plan_id": "...", "outcome": "...", "fetch_status": "..."}
+        {"waiting": true, "wait_seconds": N, "done": N, "total": M}
+        {"complete": true, "ok": N, "skipped": N, "failed": N, "message": "..."}
+        {"error": "..."}
+    """
     import os
+    import time as _time
     from ...grail_analyzer import run_grail_plan_analysis
     from ...grail_connector import list_grail_plans
     from ...models import GrailPlanAnalysis
 
     current_user = AuthContext.get_current_user()
+    user_id = current_user.user_id
 
-    if not os.environ.get('MASSIVE_API_KEY'):
-        flash('MASSIVE_API_KEY is not set — bar fetch is disabled; analysis will use cached bars only.', 'warning')
+    # Validate batch_count: positive integer only
+    raw_count = request.form.get('batch_count', str(_GRAIL_BATCH_DEFAULT)).strip()
+    try:
+        batch_count = int(raw_count)
+        if batch_count < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        batch_count = _GRAIL_BATCH_DEFAULT
 
     symbol = request.form.get('symbol', '').strip() or None
     date_from_str = request.form.get('date_from', '')
@@ -739,37 +761,101 @@ def grail_plans_analyze_batch():
     except ValueError:
         pass
 
-    # Fetch enough plan IDs to fill the cap (skip already-analyzed)
-    result = list_grail_plans(symbol=symbol, date_from=date_from, date_to=date_to,
-                               asset_type=asset_type, page=1, per_page=_GRAIL_BATCH_CAP * 4)
-    all_ids = [str(r["id"]) for r in result.get("rows", [])]
+    def _sse(data: dict) -> str:
+        return f"data: {json.dumps(data)}\n\n"
 
-    with db_manager.get_session() as session:
-        analyzed_ids = {
-            a.grail_plan_id
-            for a in session.query(GrailPlanAnalysis.grail_plan_id)
-            .filter(GrailPlanAnalysis.grail_plan_id.in_(all_ids))
-            .all()
-        }
+    @stream_with_context
+    def generate():
+        try:
+            # Resolve plan IDs — fetch enough to fill batch_count after skipping analyzed
+            result = list_grail_plans(
+                symbol=symbol, date_from=date_from, date_to=date_to,
+                asset_type=asset_type, page=1, per_page=max(batch_count * 10, 200)
+            )
+            all_ids = [str(r["id"]) for r in result.get("rows", [])]
 
-    to_analyze = [pid for pid in all_ids if pid not in analyzed_ids][:_GRAIL_BATCH_CAP]
+            with db_manager.get_session() as session:
+                analyzed_ids = {
+                    a.grail_plan_id
+                    for a in session.query(GrailPlanAnalysis.grail_plan_id)
+                    .filter(GrailPlanAnalysis.grail_plan_id.in_(all_ids))
+                    .all()
+                }
 
-    ok = skipped_already = failed = 0
-    for pid in to_analyze:
-        r = run_grail_plan_analysis(grail_plan_id=int(pid), user_id=current_user.user_id)
-        if r['status'] == 'ok':
-            ok += 1
-        elif r['status'] == 'skipped':
-            skipped_already += 1
-        else:
-            failed += 1
+            to_analyze = [pid for pid in all_ids if pid not in analyzed_ids][:batch_count]
+            total = len(to_analyze)
 
-    flash(
-        f"Batch complete: {ok} analyzed, {skipped_already} already done, {failed} failed.",
-        'success' if ok > 0 else 'info',
+            if total == 0:
+                yield _sse({"complete": True, "ok": 0, "skipped": 0, "failed": 0,
+                             "message": "All matching plans already analyzed."})
+                return
+
+            ok = skipped = failed = done = 0
+            i = 0
+
+            while i < total:
+                # Process one rate-limit window worth of plans
+                sub_batch = to_analyze[i: i + _MASSIVE_RATE_PER_MINUTE]
+                window_start = _time.monotonic()
+
+                for pid in sub_batch:
+                    r = run_grail_plan_analysis(grail_plan_id=int(pid), user_id=user_id)
+                    status = r['status']
+                    fetch_status = r.get('fetch_status', '')
+
+                    if status == 'skipped':
+                        skipped += 1
+                    elif status == 'ok':
+                        ok += 1
+                    else:
+                        failed += 1
+                    done += 1
+
+                    yield _sse({
+                        "done": done,
+                        "total": total,
+                        "plan_id": pid,
+                        "outcome": r.get('outcome', ''),
+                        "fetch_status": fetch_status,
+                    })
+
+                    # Abort immediately if the API rate-limited us
+                    if fetch_status == 'rate_limited':
+                        yield _sse({
+                            "complete": True, "ok": ok, "skipped": skipped, "failed": failed,
+                            "message": f"Rate limited — {total - done} plan(s) remaining. "
+                                       f"Wait ~1 minute and press the button again.",
+                        })
+                        return
+
+                i += _MASSIVE_RATE_PER_MINUTE
+
+                # If there are more plans to fetch, wait out the remainder of 60s
+                if i < total:
+                    elapsed = _time.monotonic() - window_start
+                    wait_secs = max(0.0, 60.0 - elapsed)
+                    if wait_secs > 0.5:
+                        yield _sse({"waiting": True, "wait_seconds": int(wait_secs) + 1,
+                                    "done": done, "total": total})
+                        _time.sleep(wait_secs)
+
+            yield _sse({"complete": True, "ok": ok, "skipped": skipped, "failed": failed,
+                        "message": ""})
+
+        except GeneratorExit:
+            pass  # client disconnected — stop silently
+        except Exception as exc:
+            logger.exception("grail batch stream error")
+            yield _sse({"error": str(exc)})
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',   # prevent nginx from buffering the stream
+        },
     )
-    return redirect(url_for('admin.grail_plans', symbol=symbol or '', date_from=date_from_str,
-                             date_to=date_to_str, asset_type=asset_type or ''))
 
 
 def _grail_analysis_stats() -> dict:

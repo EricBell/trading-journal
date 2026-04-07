@@ -57,18 +57,31 @@
 </div>
 {% endif %}
 
-{# ── Analyze All button ── #}
-<form method="post" action="{{ url_for('admin.grail_plans_analyze_batch') }}" class="mb-3"
-      onsubmit="return confirm('Run zone analysis for up to 50 unanalyzed plans matching current filters?')">
-  <input type="hidden" name="symbol" value="{{ filters.symbol }}">
-  <input type="hidden" name="date_from" value="{{ filters.date_from }}">
-  <input type="hidden" name="date_to" value="{{ filters.date_to }}">
-  <input type="hidden" name="asset_type" value="{{ filters.asset_type }}">
-  <button type="submit" class="btn btn-sm btn-outline-primary">
-    Analyze All (filtered, up to 50)
+{# ── Batch analyze controls ── #}
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap"
+     id="batch-controls"
+     data-batch-url="{{ url_for('admin.grail_plans_analyze_batch') }}"
+     data-symbol="{{ filters.symbol }}"
+     data-date-from="{{ filters.date_from }}"
+     data-date-to="{{ filters.date_to }}"
+     data-asset-type="{{ filters.asset_type }}">
+
+  <input type="number" id="batch-count-input" value="4" min="1" step="1"
+         class="form-control form-control-sm" style="width:75px"
+         title="Number of plans to analyze (positive integer)">
+
+  <button type="button" id="batch-btn" class="btn btn-sm btn-outline-primary"
+          onclick="grailBatch.start()">
+    Analyze Next <span id="batch-count-label">4</span>
   </button>
-  <span class="text-muted small ms-2">{{ total }} plan{{ 's' if total != 1 }} matching filter</span>
-</form>
+
+  <span id="batch-status" class="text-muted small"></span>
+
+  <span class="text-muted small ms-auto">
+    {{ total }} plan{{ 's' if total != 1 }} matching filter
+    &nbsp;·&nbsp; free tier: 5 req/min
+  </span>
+</div>
 
 {# ── Results table ── #}
 {% if plan_rows %}
@@ -179,5 +192,154 @@
   No grail plans found matching the current filters{% if not filters.symbol and not filters.date_from %} — the grail_files database may be unreachable{% endif %}.
 </div>
 {% endif %}
+
+{% block scripts %}
+<script>
+const grailBatch = (() => {
+  let countdownTimer = null;
+
+  function getCount() {
+    const input = document.getElementById('batch-count-input');
+    const raw = input.value.trim();
+    const n = parseInt(raw, 10);
+    if (!raw || isNaN(n) || n < 1 || String(n) !== raw) {
+      input.classList.add('is-invalid');
+      return null;
+    }
+    input.classList.remove('is-invalid');
+    return n;
+  }
+
+  function setStatus(html, cssClass) {
+    const el = document.getElementById('batch-status');
+    el.innerHTML = html;
+    el.className = 'small ' + (cssClass || 'text-muted');
+  }
+
+  function setButtonBusy(busy) {
+    const btn = document.getElementById('batch-btn');
+    btn.disabled = busy;
+    btn.classList.toggle('btn-outline-primary', !busy);
+    btn.classList.toggle('btn-secondary', busy);
+  }
+
+  function stopCountdown() {
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  }
+
+  function startCountdown(secs, done, total) {
+    stopCountdown();
+    let remaining = secs;
+    function tick() {
+      setStatus(
+        `${done}/${total} analyzed &nbsp;·&nbsp; ` +
+        `waiting <strong>${remaining}s</strong> before next batch…`,
+        'text-muted'
+      );
+      if (remaining <= 0) stopCountdown();
+      remaining--;
+    }
+    tick();
+    countdownTimer = setInterval(tick, 1000);
+  }
+
+  async function start() {
+    const count = getCount();
+    if (count === null) return;
+
+    document.getElementById('batch-count-label').textContent = count;
+    setButtonBusy(true);
+    setStatus('Starting…', 'text-muted');
+    stopCountdown();
+
+    const ctrl = document.getElementById('batch-controls').dataset;
+    const body = new FormData();
+    body.append('batch_count', count);
+    body.append('symbol',    ctrl.symbol    || '');
+    body.append('date_from', ctrl.dateFrom  || '');
+    body.append('date_to',   ctrl.dateTo    || '');
+    body.append('asset_type',ctrl.assetType || '');
+
+    let reader;
+    try {
+      const resp = await fetch(ctrl.batchUrl, {method: 'POST', body});
+      if (!resp.ok) { throw new Error(`HTTP ${resp.status}`); }
+      reader = resp.body.getReader();
+    } catch (err) {
+      setStatus('Request failed: ' + err.message, 'text-danger');
+      setButtonBusy(false);
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    try {
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, {stream: true});
+
+        // SSE blocks are separated by double newline
+        const blocks = buf.split('\n\n');
+        buf = blocks.pop();   // keep any incomplete trailing block
+
+        for (const block of blocks) {
+          const line = block.split('\n').find(l => l.startsWith('data: '));
+          if (!line) continue;
+          let ev;
+          try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+
+          if (ev.error) {
+            stopCountdown();
+            setStatus('Error: ' + ev.error, 'text-danger');
+            setButtonBusy(false);
+            return;
+          }
+
+          if (ev.complete) {
+            stopCountdown();
+            let msg = `Done: <strong>${ev.ok}</strong> analyzed`;
+            if (ev.skipped) msg += `, ${ev.skipped} already done`;
+            if (ev.failed)  msg += `, ${ev.failed} failed`;
+            if (ev.message) msg += ` &mdash; ${ev.message}`;
+            setStatus(msg, 'text-success');
+            setButtonBusy(false);
+            return;
+          }
+
+          if (ev.waiting) {
+            startCountdown(ev.wait_seconds, ev.done, ev.total);
+          } else {
+            stopCountdown();
+            const outcome = ev.fetch_status === 'no_subscription'
+              ? 'no subscription'
+              : (ev.outcome || ev.fetch_status || '?');
+            setStatus(
+              `${ev.done}/${ev.total} analyzed` +
+              ` &nbsp;·&nbsp; plan ${ev.plan_id}: <em>${outcome}</em>`,
+              'text-muted'
+            );
+          }
+        }
+      }
+    } catch (err) {
+      stopCountdown();
+      setStatus('Stream error: ' + err.message, 'text-danger');
+      setButtonBusy(false);
+    }
+  }
+
+  // Keep label in sync with input
+  document.getElementById('batch-count-input').addEventListener('input', function() {
+    const n = parseInt(this.value, 10);
+    document.getElementById('batch-count-label').textContent = (n > 0 ? n : '?');
+    this.classList.remove('is-invalid');
+  });
+
+  return { start };
+})();
+</script>
+{% endblock %}
 
 {% endblock %}

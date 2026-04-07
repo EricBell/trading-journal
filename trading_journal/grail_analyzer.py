@@ -162,9 +162,11 @@ def run_grail_plan_analysis(
         else:
             fetch_result = client.fetch_window_bars(fetch_symbol, fetch_start, fetch_end, "1m")
         bars_fetched = fetch_result.get("bars_received", 0)
-        error = fetch_result.get("error")
+        error = fetch_result.get("error") or ""
         if error == "no_subscription":
             fetch_status = "no_subscription"
+        elif "429" in error:
+            fetch_status = "rate_limited"
         elif error:
             fetch_status = "failed"
         elif bars_fetched == 0:
@@ -233,6 +235,7 @@ def run_grail_plan_analysis(
     return {
         "status": "ok",
         "outcome": scan["outcome"],
+        "fetch_status": fetch_status,
         "bars_scanned": bars_scanned,
         "bars_fetched": bars_fetched,
         "bars_expected": bars_expected,

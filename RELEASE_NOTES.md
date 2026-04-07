@@ -1,3 +1,30 @@
+## v1.26.6 - 2026-04-07
+
+### Features
+- **Grail batch analyze: SSE streaming with configurable count and live progress** — complete overhaul of the "Analyze All" batch button:
+  - Configurable count input (default 4) next to the button; validates positive integers only
+  - Real-time progress via Server-Sent Events: shows `done/total` and current plan outcome as each plan completes
+  - Smart rate-limiting: processes 5 plans per 60-second window (Massive free tier); measures actual elapsed time per sub-batch and sleeps only the remaining seconds
+  - Live countdown during inter-batch wait (e.g. "waiting 47s before next batch…")
+  - Button grays out and disables while the batch is running; re-enables on completion or error
+  - Aborts immediately on 429 rate-limit with a clear message; shows completion summary on finish
+  - No page reload — results accumulate while you watch
+
+---
+
+## v1.26.5 - 2026-04-07
+
+### Bug Fixes
+- **Grail batch analyze: throttling and rate-limit safety** — the "Analyze All" button previously fired all 50 plans with no delay, immediately hitting Massive's free-tier limit (5 req/min) after the first 4–5 plans. Fixed:
+  - Batch cap reduced to **4 plans per press** (safe for one HTTP response within ~40s at 13s/call)
+  - 13-second sleep between API calls to stay within the 5 req/min limit
+  - Early abort with a warning flash if a 429 is received mid-batch
+  - `fetch_status = "rate_limited"` added for 429 responses (previously folded into `"failed"`)
+  - Button label updated to "Analyze Next 4" with a rate-limit note
+- **Grail analyzer: `fetch_status` now included in return dict** — allows callers (batch loop, future tooling) to inspect the fetch outcome without re-querying the DB
+
+---
+
 ## v1.26.4 - 2026-04-07
 
 ### Bug Fixes
