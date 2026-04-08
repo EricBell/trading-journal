@@ -39,28 +39,37 @@
 </form>
 
 {# ── Aggregate stats ── #}
-{% if stats %}
-<div class="d-flex gap-3 mb-3 flex-wrap">
-  <span class="badge bg-secondary fs-6">Analyzed: {{ stats.total_analyzed }}</span>
-  {% if stats.total_analyzed > 0 %}
+<div class="d-flex gap-3 mb-3 flex-wrap" id="stats-bar">
+  <span class="badge bg-secondary fs-6" id="stat-analyzed">Analyzed: {{ stats.total_analyzed if stats else 0 }}</span>
+  {% if stats and stats.total_analyzed > 0 %}
   {% set entry_pct = ((stats.entry_reached / stats.total_analyzed) * 100)|round(0)|int %}
-  <span class="badge bg-info text-dark fs-6">Entry reached: {{ stats.entry_reached }} ({{ entry_pct }}%)</span>
+  <span class="badge bg-info text-dark fs-6" id="stat-entry-reached">Entry reached: {{ stats.entry_reached }} ({{ entry_pct }}%)</span>
   {% if stats.entry_reached > 0 %}
   {% set success_pct = ((stats.success / stats.entry_reached) * 100)|round(0)|int %}
   {% set failure_pct = ((stats.failure / stats.entry_reached) * 100)|round(0)|int %}
   {% set inc_pct = ((stats.inconclusive / stats.entry_reached) * 100)|round(0)|int %}
-  <span class="badge bg-success fs-6">Success: {{ stats.success }} ({{ success_pct }}%)</span>
-  <span class="badge bg-danger fs-6">Failure: {{ stats.failure }} ({{ failure_pct }}%)</span>
-  <span class="badge bg-warning text-dark fs-6">Inconclusive: {{ stats.inconclusive }} ({{ inc_pct }}%)</span>
+  <span class="badge bg-success fs-6" id="stat-success">Success: {{ stats.success }} ({{ success_pct }}%)</span>
+  <span class="badge bg-danger fs-6" id="stat-failure">Failure: {{ stats.failure }} ({{ failure_pct }}%)</span>
+  <span class="badge bg-warning text-dark fs-6" id="stat-inconclusive">Inconclusive: {{ stats.inconclusive }} ({{ inc_pct }}%)</span>
+  {% else %}
+  <span class="badge bg-info text-dark fs-6" id="stat-entry-reached" style="display:none"></span>
+  <span class="badge bg-success fs-6" id="stat-success" style="display:none"></span>
+  <span class="badge bg-danger fs-6" id="stat-failure" style="display:none"></span>
+  <span class="badge bg-warning text-dark fs-6" id="stat-inconclusive" style="display:none"></span>
   {% endif %}
+  {% else %}
+  <span class="badge bg-info text-dark fs-6" id="stat-entry-reached" style="display:none"></span>
+  <span class="badge bg-success fs-6" id="stat-success" style="display:none"></span>
+  <span class="badge bg-danger fs-6" id="stat-failure" style="display:none"></span>
+  <span class="badge bg-warning text-dark fs-6" id="stat-inconclusive" style="display:none"></span>
   {% endif %}
 </div>
-{% endif %}
 
 {# ── Batch analyze controls ── #}
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap"
      id="batch-controls"
      data-batch-url="{{ url_for('admin.grail_plans_analyze_batch') }}"
+     data-stats-url="{{ url_for('admin.grail_plans_stats') }}"
      data-symbol="{{ filters.symbol }}"
      data-date-from="{{ filters.date_from }}"
      data-date-to="{{ filters.date_to }}"
@@ -390,6 +399,35 @@ const grailBatch = (() => {
       'text-success'
     );
     setButtonBusy(false);
+    refreshStats();
+  }
+
+  async function refreshStats() {
+    const statsUrl = document.getElementById('batch-controls').dataset.statsUrl;
+    try {
+      const resp = await fetch(statsUrl);
+      if (!resp.ok) return;
+      const s = await resp.json();
+
+      const pct = (n, d) => d > 0 ? ` (${Math.round(n / d * 100)}%)` : '';
+
+      _setStat('stat-analyzed',      `Analyzed: ${s.total_analyzed}`,  s.total_analyzed > 0);
+      _setStat('stat-entry-reached', `Entry reached: ${s.entry_reached}${pct(s.entry_reached, s.total_analyzed)}`,
+               s.total_analyzed > 0);
+      _setStat('stat-success',       `Success: ${s.success}${pct(s.success, s.entry_reached)}`,
+               s.entry_reached > 0);
+      _setStat('stat-failure',       `Failure: ${s.failure}${pct(s.failure, s.entry_reached)}`,
+               s.entry_reached > 0);
+      _setStat('stat-inconclusive',  `Inconclusive: ${s.inconclusive}${pct(s.inconclusive, s.entry_reached)}`,
+               s.entry_reached > 0);
+    } catch (_) { /* non-fatal */ }
+  }
+
+  function _setStat(id, text, visible) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.style.display = visible ? '' : 'none';
   }
 
   // ── Entry point ───────────────────────────────────────────────────────────

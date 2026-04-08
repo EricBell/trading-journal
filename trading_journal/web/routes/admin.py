@@ -877,6 +877,14 @@ def _grail_analysis_stats() -> dict:
         return {}
 
 
+@bp.route('/grail-plans/stats')
+@admin_required
+def grail_plans_stats():
+    """Return aggregate grail_plan_analyses stats as JSON (for live UI refresh)."""
+    from flask import jsonify
+    return jsonify(_grail_analysis_stats())
+
+
 @bp.route('/export')
 @admin_required
 def export_page():

@@ -1,3 +1,10 @@
+## v1.26.12 - 2026-04-08
+
+### Features
+- **Grail Plan Browser: stats refresh after batch completes** — the Analyzed / Entry reached / Success / Failure / Inconclusive badges now update automatically when a batch run finishes (via a lightweight `/admin/grail-plans/stats` JSON fetch). No page reload needed.
+
+---
+
 ## v1.26.11 - 2026-04-08
 
 ### Bug Fixes
