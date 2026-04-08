@@ -201,8 +201,18 @@
 {% block scripts %}
 <script>
 const grailBatch = (() => {
-  let countdownTimer = null;
+  const RATE_PER_MIN = 5;        // Massive free-tier limit
+  const WINDOW_SECS  = 62;       // Safety margin over 60s rate window
   const MAX_LOG_LINES = 100;
+
+  let countdownTimer = null;
+
+  // Grand totals accumulated across all sub-batches in one "start()" run
+  let grandTotal = 0;
+  let grandDone  = 0;
+  let grandOk    = 0;
+  let grandSkipped = 0;
+  let grandFailed  = 0;
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -212,7 +222,7 @@ const grailBatch = (() => {
 
   function appendLog(line) {
     const el = document.getElementById('batch-log');
-    if (el.style.display === 'none') el.style.display = '';  // reveal on first entry
+    if (el.style.display === 'none') el.style.display = '';
     const lines = el.textContent ? el.textContent.split('\n') : [];
     lines.push(line);
     if (lines.length > MAX_LOG_LINES) lines.splice(0, lines.length - MAX_LOG_LINES);
@@ -249,36 +259,38 @@ const grailBatch = (() => {
     if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
   }
 
-  function startCountdown(secs, done, total) {
+  // Start a client-side countdown; calls onDone() when it reaches zero.
+  function startCountdown(secs, onDone) {
     stopCountdown();
     let remaining = secs;
     function tick() {
       setStatus(
-        `${done}/${total} analyzed &nbsp;·&nbsp; ` +
+        `${grandDone}/${grandTotal} analyzed &nbsp;·&nbsp; ` +
         `waiting <strong>${remaining}s</strong> before next batch…`,
         'text-muted'
       );
-      if (remaining <= 0) stopCountdown();
+      if (remaining <= 0) {
+        stopCountdown();
+        onDone();
+        return;
+      }
       remaining--;
     }
     tick();
     countdownTimer = setInterval(tick, 1000);
   }
 
-  // ── Main ─────────────────────────────────────────────────────────────────
+  // ── Sub-batch runner ──────────────────────────────────────────────────────
+  // Called recursively (via setTimeout/countdown) until grandDone >= grandTotal.
 
-  async function start() {
-    const count = getCount();
-    if (count === null) return;
+  async function runSubBatch() {
+    const remaining = grandTotal - grandDone;
+    if (remaining <= 0) { _finish(); return; }
 
-    document.getElementById('batch-count-label').textContent = count;
-    setButtonBusy(true);
-    setStatus('Starting…', 'text-muted');
-    stopCountdown();
-
+    const subCount = Math.min(RATE_PER_MIN, remaining);
     const ctrl = document.getElementById('batch-controls').dataset;
     const body = new FormData();
-    body.append('batch_count', count);
+    body.append('batch_count', subCount);
     body.append('symbol',    ctrl.symbol    || '');
     body.append('date_from', ctrl.dateFrom  || '');
     body.append('date_to',   ctrl.dateTo    || '');
@@ -290,14 +302,15 @@ const grailBatch = (() => {
       if (!resp.ok) { throw new Error(`HTTP ${resp.status}`); }
       reader = resp.body.getReader();
     } catch (err) {
-      setStatus('Request failed: ' + err.message, 'text-danger');
       appendLog(_logTime() + ' — request failed: ' + err.message);
+      setStatus('Request failed: ' + err.message, 'text-danger');
       setButtonBusy(false);
       return;
     }
 
     const decoder = new TextDecoder();
     let buf = '';
+    const doneBeforeThisBatch = grandDone;  // snapshot for live progress within sub-batch
 
     try {
       while (true) {
@@ -305,9 +318,8 @@ const grailBatch = (() => {
         if (done) break;
         buf += decoder.decode(value, {stream: true});
 
-        // SSE blocks are separated by double newline
         const blocks = buf.split('\n\n');
-        buf = blocks.pop();   // keep any incomplete trailing block
+        buf = blocks.pop();
 
         for (const block of blocks) {
           const line = block.split('\n').find(l => l.startsWith('data: '));
@@ -316,7 +328,6 @@ const grailBatch = (() => {
           try { ev = JSON.parse(line.slice(6)); } catch { continue; }
 
           if (ev.error) {
-            stopCountdown();
             appendLog(_logTime() + ' — ERROR: ' + ev.error);
             setStatus('Error: ' + ev.error, 'text-danger');
             setButtonBusy(false);
@@ -324,51 +335,79 @@ const grailBatch = (() => {
           }
 
           if (ev.complete) {
-            stopCountdown();
-            let text = `Done: ${ev.ok} analyzed`;
-            if (ev.skipped) text += `, ${ev.skipped} already done`;
-            if (ev.failed)  text += `, ${ev.failed} failed`;
-            if (ev.message) text += ` — ${ev.message}`;
-            appendLog(_logTime() + ' — ' + text);
-            setStatus(
-              `Done: <strong>${ev.ok}</strong> analyzed` +
-              (ev.skipped ? `, ${ev.skipped} already done` : '') +
-              (ev.failed  ? `, ${ev.failed} failed` : '') +
-              (ev.message ? ` &mdash; ${ev.message}` : ''),
-              'text-success'
-            );
-            setButtonBusy(false);
+            // Accumulate grand totals
+            const processed = ev.ok + ev.skipped + ev.failed;
+            grandDone    += processed;
+            grandOk      += ev.ok;
+            grandSkipped += ev.skipped;
+            grandFailed  += ev.failed;
+
+            const newRemaining = grandTotal - grandDone;
+
+            if (newRemaining <= 0 || processed === 0) {
+              // All done, or nothing was processed (rate-limited on first plan)
+              _finish();
+            } else {
+              // More plans to go — wait for the remainder of the 60s window, then recurse.
+              const waitSecs = Math.max(1, Math.ceil(WINDOW_SECS - (ev.elapsed_secs || 0)));
+              appendLog(_logTime() + ` — waiting ${waitSecs}s before next batch…`);
+              startCountdown(waitSecs, runSubBatch);
+            }
             return;
           }
 
-          if (ev.waiting) {
-            // Only log the first tick of each wait period to avoid spam.
-            // countdownTimer is null before the first startCountdown() call
-            // and gets reset to null by stopCountdown() between plan results.
-            if (!countdownTimer) {
-              appendLog(_logTime() + ` — waiting ${ev.wait_seconds}s before next batch…`);
-            }
-            startCountdown(ev.wait_seconds, ev.done, ev.total);
-          } else {
-            stopCountdown();
-            const outcome = ev.fetch_status === 'no_subscription'
-              ? 'no subscription'
-              : (ev.outcome || ev.fetch_status || '?');
-            appendLog(_logTime() + ` — plan ${ev.plan_id}: ${outcome}`);
-            setStatus(
-              `${ev.done}/${ev.total} analyzed` +
-              ` &nbsp;·&nbsp; plan ${ev.plan_id}: <em>${outcome}</em>`,
-              'text-muted'
-            );
-          }
+          // Per-plan result event
+          const outcome = ev.fetch_status === 'no_subscription'
+            ? 'no subscription'
+            : (ev.outcome || ev.fetch_status || '?');
+          appendLog(_logTime() + ` — plan ${ev.plan_id}: ${outcome}`);
+          setStatus(
+            `${doneBeforeThisBatch + ev.done}/${grandTotal} analyzed` +
+            ` &nbsp;·&nbsp; plan ${ev.plan_id}: <em>${outcome}</em>`,
+            'text-muted'
+          );
         }
       }
     } catch (err) {
-      stopCountdown();
       appendLog(_logTime() + ' — stream error: ' + err.message);
       setStatus('Stream error: ' + err.message, 'text-danger');
       setButtonBusy(false);
     }
+  }
+
+  function _finish() {
+    stopCountdown();
+    let logText = `Done: ${grandOk} analyzed`;
+    if (grandSkipped) logText += `, ${grandSkipped} already done`;
+    if (grandFailed)  logText += `, ${grandFailed} failed`;
+    appendLog(_logTime() + ' — ' + logText);
+    setStatus(
+      `Done: <strong>${grandOk}</strong> analyzed` +
+      (grandSkipped ? `, ${grandSkipped} already done` : '') +
+      (grandFailed  ? `, ${grandFailed} failed` : ''),
+      'text-success'
+    );
+    setButtonBusy(false);
+  }
+
+  // ── Entry point ───────────────────────────────────────────────────────────
+
+  async function start() {
+    const count = getCount();
+    if (count === null) return;
+
+    document.getElementById('batch-count-label').textContent = count;
+    setButtonBusy(true);
+    setStatus('Starting…', 'text-muted');
+    stopCountdown();
+
+    grandTotal   = count;
+    grandDone    = 0;
+    grandOk      = 0;
+    grandSkipped = 0;
+    grandFailed  = 0;
+
+    await runSubBatch();
   }
 
   // Keep label in sync with input

@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.25.2
-**Last Updated:** 2026-04-07
+**Version:** 1.26.9
+**Last Updated:** 2026-04-08
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -72,6 +72,7 @@ The hard problems this application solves:
       ├── /admin/users                  user management (admin only)
       ├── /admin/market-data            Polygon.io enrichment + OHLCV explorer (admin only)
       ├── /admin/market-data/hg-analysis  HG plan analysis dashboard + batch trigger (admin only)
+      ├── /admin/grail-plans            Grail Plan Browser: filter, analyze, batch-analyze (admin only)
       ├── /admin/export                 annotation export as JSON (admin only)
       ├── /journal             timestamped free-form notes (list + create + edit + delete)
       ├── /about               release notes accordion
@@ -254,6 +255,16 @@ bound; long tp1 → `tp1_low` / conservative lower bound; mirrored for short). F
 pre-extracted columns hold option premium prices, not the underlying prices the bar scan
 requires. Falls back to JSON for any NULL column (pre-migration rows).
 
+**Futures data**: Standard Polygon.io equity endpoint returns HTTP 200 with 0 bars for
+futures tickers — indistinguishable from throttling. `MassiveClient.fetch_futures_window_bars`
+calls the dedicated Massive futures endpoint (`api.massive.com/futures/v1/aggs/`), which
+returns `{"status": "NOT_AUTHORIZED"}` in the JSON body (HTTP 200) when the subscription
+does not cover futures. This is detected and surfaced as `fetch_status="no_subscription"`,
+which short-circuits the bar scan (skipping `_load_bars`) and sets `outcome="no_data"`. The
+Grail Plan Browser shows a blue "no subscription" badge. The plan is excluded from the
+"already analyzed" filter on subsequent batch runs (the `no_data` outcome is not treated as
+final) so it will be retried automatically if the subscription is upgraded.
+
 **Stage 3 — Display**: Trade detail page shows an "HG Plan Analysis" card when an
 `HgAnalysisResult` exists for the linked grail plan. Admin → HG Analysis page lists all
 analyses and provides a "Run Batch" button that processes up to 20 unanalyzed trades.
@@ -308,6 +319,7 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
 | Admin: users | `/admin/users` | Create, deactivate, regenerate API key; pill sub-nav to export (admin-only) |
 | Admin: market data | `/admin/market-data` | Three tabs: (1) list option trades missing `underlying_at_entry` with one-click Polygon.io enrichment; (2) fetch 1m/5m/15m OHLCV bars for any symbol and date range; (3) Explore OHLCV — summary stats, HG plan coverage table, schema reference, free-form SELECT query box (500-row cap). Admin-only. |
 | Admin: HG analysis | `/admin/market-data/hg-analysis` | Lists all `HgMarketDataRequest` rows with fetch status and linked `HgAnalysisResult` outcomes. "Run Batch (up to 20)" triggers hydration + evaluation for all unanalyzed grail-linked trades. Admin-only. |
+| Admin: Grail Plan Browser | `/admin/grail-plans` | Browse and analyze grail plans directly from the `grail_files` DB. Filter by symbol, date range, asset type. Per-plan "Analyze" / "Re-analyze" buttons. Configurable batch analyzer: enter a count, click "Analyze Next N" — SSE streams per-plan results; client-side countdown handles the 60s inter-batch wait (no long-lived connection held open); rate-limited or `no_data` plans are retried on the next batch. Outcome badges: success, failure, inconclusive, no entry, no data, no subscription. Aggregate stats (entry reached %, success/failure/inconclusive %). Admin-only. |
 | Admin: export | `/admin/export` | Export all manually entered data as JSON (format v3.0): trade annotations (grouped by account) + journal notes. Per-user selection. Natural keys documented in `export_metadata.schema` for re-import. Admin-only. |
 | Journal | `/journal` | Timestamped free-form notes (EasyMDE markdown editor, title optional). List shows newest first with snippet. Not trade-linked. Included in export. |
 | About | `/about` | Release notes parsed from RELEASE_NOTES.md; Bootstrap accordion; current release badged |
@@ -385,6 +397,15 @@ be backfilled manually via Admin → Market Data. HG plan analysis (TP1/TP2 reac
 MFE/MAE, entry touch type) is implemented via the HG pipeline (§5.6). VIX context
 analysis is not yet implemented.
 
+### Grail Plan Browser batch: client-side wait architecture
+The batch analyzer avoids long-lived SSE connections (which nginx would drop at
+`proxy_read_timeout`, default 60s) by keeping each HTTP request short: the server
+processes one sub-batch of up to 5 plans and closes immediately, returning `elapsed_secs`.
+The client computes `waitSecs = max(1, ceil(62 − elapsed_secs))` and uses `setInterval`
+for the countdown — no open connection is held during the wait. A fresh HTTP POST starts
+the next sub-batch. Plans with `outcome='no_data'` are excluded from the "already analyzed"
+set so they are retried on subsequent batches.
+
 ### Single brokerage source
 The parser understands Schwab CSV format only. Other brokerages would require a new parser
 producing the same `NdjsonRecord` schema.
@@ -409,10 +430,11 @@ trading_journal/
 ├── trade_completion.py     TradeCompletionEngine — groups fills into completed trades
 ├── positions.py            PositionTracker — avg cost basis, bulk UPSERT, option expiry
 ├── dashboard.py            DashboardEngine — metrics aggregation
-├── market_data.py          MassiveClient (Polygon.io); enrich_missing_underlying_prices; enrich_trades_by_ids; fetch_window_bars
+├── market_data.py          MassiveClient (Polygon.io); enrich_missing_underlying_prices; enrich_trades_by_ids; fetch_window_bars; fetch_futures_window_bars
 ├── hg_hydration.py         hydrate_hg_plan() — fetch bars for a grail plan → ohlcv_price_series + HgMarketDataRequest
 ├── hg_evaluator.py         evaluate_hg_plan() — bar-scan evaluator → HgAnalysisResult
-├── grail_connector.py      Read-only connector to external grail_files DB
+├── grail_analyzer.py       run_grail_plan_analysis() — combined hydrate+evaluate entry point used by Grail Plan Browser batch; routes FUTURES asset_type to fetch_futures_window_bars
+├── grail_connector.py      Read-only connector to external grail_files DB; list_grail_plans, fetch_grail_plan_full, find_grail_match, batch_grail_coverage
 ├── config.py               Two-tier TOML config loader
 ├── database.py             db_manager singleton, session context manager
 ├── authorization.py        AuthContext — current-user thread-local
@@ -427,7 +449,7 @@ trading_journal/
         ├── trades.py       /trades, /trades/<id>, annotate, delete, grail-plan, hg-analyze
         ├── positions.py    /positions
         ├── ingest.py       /ingest (CSV upload)
-        ├── admin.py        /admin/users, /admin/market-data, /admin/market-data/hg-analysis, /admin/market-data/hg-batch, /admin/export
+        ├── admin.py        /admin/users, /admin/market-data, /admin/market-data/hg-analysis, /admin/market-data/hg-batch, /admin/grail-plans, /admin/export
         ├── journal.py      /journal — list, create, detail/edit, delete
         ├── about.py        /about (release notes)
         ├── settings.py     /settings

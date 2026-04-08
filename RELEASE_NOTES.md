@@ -1,3 +1,11 @@
+## v1.26.9 - 2026-04-07
+
+### Bug Fixes
+- **Grail batch: "Stream error: network error" truly fixed** — previous keep-alive approach (re-sending SSE events every 10s during server-side `time.sleep()`) failed because gunicorn/kernel buffered the events and they never reached the browser. Root fix: the server no longer sleeps at all. Each HTTP request processes one sub-batch of up to 5 plans and closes immediately, returning `elapsed_secs` in the `complete` event. The client uses `setTimeout`/`setInterval` for all inter-batch waiting — no connection is held open during the wait. The stream can never time out.
+- **Grail batch: rate-limited plans no longer skipped** — `analyzed_ids` now excludes rows with `outcome='no_data'` so plans that were previously stopped by a 429 or subscription gap are retried next time.
+
+---
+
 ## v1.26.8 - 2026-04-08
 
 ### Bug Fixes
