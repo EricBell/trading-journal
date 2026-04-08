@@ -819,7 +819,7 @@ def grail_plans_analyze_batch():
                     "done": done,
                     "total": total,
                     "plan_id": pid,
-                    "outcome": r.get('outcome', ''),
+                    "outcome": r.get('outcome') or '',
                     "fetch_status": fetch_status,
                 })
                 logger.info(

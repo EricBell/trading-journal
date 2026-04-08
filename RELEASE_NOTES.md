@@ -1,3 +1,11 @@
+## v1.26.10 - 2026-04-08
+
+### Bug Fixes
+- **Grail batch: '?' outcome now shows a real label** — plans that failed before analysis (plan not found in grail_files, or entry zone columns NULL) returned no `fetch_status`, causing the log to display `?`. These cases now return a descriptive `fetch_status` (`plan_not_found` or `no_entry_zone`), so the log shows the actual reason.
+- **Grail batch: plans with no entry zone no longer retry endlessly** — `invalid` outcome is written to `GrailPlanAnalysis` for plans where `entry_low`/`entry_high` are NULL. Subsequent batch runs skip these plans (same as `success`/`failure`/etc). The Grail Plan Browser shows a "no entry zone" badge. `plan_not_found` (grail DB unreachable) is still treated as transient and retried.
+
+---
+
 ## v1.26.9 - 2026-04-07
 
 ### Bug Fixes

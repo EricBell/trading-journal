@@ -100,7 +100,12 @@ def run_grail_plan_analysis(
     # 2. Load plan from grail_files
     plan = _load_plan(grail_plan_id)
     if plan is None:
-        return {"status": "failed", "outcome": None, "message": f"grail plan id={grail_plan_id} not found"}
+        return {
+            "status": "failed",
+            "fetch_status": "plan_not_found",
+            "outcome": None,
+            "message": f"grail plan id={grail_plan_id} not found in grail_files (DB may be unreachable)",
+        }
 
     symbol = plan["ticker"]
     asset_type = (plan.get("asset_type") or "").upper()
@@ -126,7 +131,46 @@ def run_grail_plan_analysis(
                 entry_ideal = _to_float(ideal_zone.get("mid"))
 
     if entry_zone_low is None or entry_zone_high is None:
-        return {"status": "failed", "outcome": None, "message": "plan has no entry zone (entry_low/entry_high NULL)"}
+        # Permanent — write a DB record so this plan is not retried on every batch run.
+        _write_result(
+            grail_plan_id=grail_plan_id,
+            user_id=user_id,
+            analysis_version=analysis_version,
+            symbol=plan.get("ticker", ""),
+            asset_type=(plan.get("asset_type") or "").upper(),
+            side=side,
+            entry_zone_low=0.0,
+            entry_zone_high=0.0,
+            entry_ideal=None,
+            stop_zone_low=None,
+            stop_zone_high=None,
+            tp1_zone_low=None,
+            tp1_zone_high=None,
+            fetch_start=datetime.now(tz=timezone.utc),
+            fetch_end=datetime.now(tz=timezone.utc),
+            bars_fetched=0,
+            bars_expected=0,
+            fetch_status="no_entry_zone",
+            bars_scanned=0,
+            scan={
+                "entry_zone_touched": False,
+                "entry_ideal_touched": False,
+                "entry_first_touch_at": None,
+                "bars_to_entry": None,
+                "outcome": "invalid",
+                "tp1_zone_touched": False,
+                "tp1_zone_touch_at": None,
+                "stop_zone_touched": False,
+                "stop_zone_touch_at": None,
+                "bars_to_outcome": None,
+            },
+        )
+        return {
+            "status": "failed",
+            "fetch_status": "no_entry_zone",
+            "outcome": "invalid",
+            "message": "plan has no entry zone (entry_low/entry_high NULL)",
+        }
 
     # Symbol to fetch: for options use resolved_ticker (underlying), else use ticker
     fetch_symbol = symbol
