@@ -650,7 +650,7 @@ class GrailPlanAnalysis(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "outcome IN ('no_data', 'no_entry', 'success', 'failure', 'inconclusive')",
+            "outcome IN ('no_data', 'no_entry', 'success', 'failure', 'inconclusive', 'invalid')",
             name="chk_gpa_outcome",
         ),
         UniqueConstraint("grail_plan_id", "analysis_version", name="uq_grail_plan_analyses_version"),

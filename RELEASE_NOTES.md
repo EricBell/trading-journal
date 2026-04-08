@@ -1,3 +1,10 @@
+## v1.26.11 - 2026-04-08
+
+### Bug Fixes
+- **Grail batch crash: `chk_gpa_outcome` constraint violation** — `'invalid'` was not in the DB check constraint for `grail_plan_analyses.outcome`. Added migration `2026_04_08_gpa_invalid_outcome` to expand the constraint and updated `models.py` to match.
+
+---
+
 ## v1.26.10 - 2026-04-08
 
 ### Bug Fixes
