@@ -790,14 +790,23 @@ def grail_plans_analyze_batch():
                              "message": "All matching plans already analyzed."})
                 return
 
+            logger.info("grail batch start: total=%d user_id=%s", total, user_id)
+
             ok = skipped = failed = done = 0
-            # Process plans one at a time.
-            # Track how many API calls have been made in the current 60s window
-            # and when that window started.  On a 429, don't advance — wait and
-            # retry the same plan.
             i = 0
             window_start = _time.monotonic()
             calls_this_window = 0
+
+            def _sleep_with_keepalive(wait_secs, done, total):
+                """Yield keep-alive SSE ticks every 10s to prevent proxy/nginx idle timeout."""
+                deadline = _time.monotonic() + wait_secs
+                while True:
+                    remaining = deadline - _time.monotonic()
+                    if remaining <= 0:
+                        break
+                    yield _sse({"waiting": True, "wait_seconds": int(remaining) + 1,
+                                "done": done, "total": total})
+                    _time.sleep(min(10.0, remaining))
 
             while i < total:
                 pid = to_analyze[i]
@@ -808,10 +817,9 @@ def grail_plans_analyze_batch():
                 if fetch_status == 'rate_limited':
                     # Don't count or advance — we'll retry this plan after the wait.
                     elapsed = _time.monotonic() - window_start
-                    wait_secs = max(5.0, 62.0 - elapsed)  # 2s buffer over 60s window
-                    yield _sse({"waiting": True, "wait_seconds": int(wait_secs) + 1,
-                                "done": done, "total": total})
-                    _time.sleep(wait_secs)
+                    wait_secs = max(5.0, 62.0 - elapsed)
+                    logger.info("grail batch: rate_limited on plan %s, waiting %.1fs", pid, wait_secs)
+                    yield from _sleep_with_keepalive(wait_secs, done, total)
                     window_start = _time.monotonic()
                     calls_this_window = 0
                     continue  # retry same plan (i not incremented)
@@ -834,6 +842,10 @@ def grail_plans_analyze_batch():
                     "outcome": r.get('outcome', ''),
                     "fetch_status": fetch_status,
                 })
+                logger.info(
+                    "grail batch: plan_id=%s outcome=%s fetch_status=%s bars_scanned=%s",
+                    pid, r.get('outcome', ''), fetch_status, r.get('bars_scanned', '?'),
+                )
 
                 # After _MASSIVE_RATE_PER_MINUTE calls in this window, wait out
                 # the remainder of 60s before sending more requests.
@@ -841,14 +853,17 @@ def grail_plans_analyze_batch():
                     elapsed = _time.monotonic() - window_start
                     wait_secs = max(0.0, 62.0 - elapsed)
                     if wait_secs > 0.5:
-                        yield _sse({"waiting": True, "wait_seconds": int(wait_secs) + 1,
-                                    "done": done, "total": total})
-                        _time.sleep(wait_secs)
+                        logger.info(
+                            "grail batch: sub-batch window exhausted, waiting %.1fs (done=%d/%d)",
+                            wait_secs, done, total,
+                        )
+                        yield from _sleep_with_keepalive(wait_secs, done, total)
                     window_start = _time.monotonic()
                     calls_this_window = 0
 
             yield _sse({"complete": True, "ok": ok, "skipped": skipped, "failed": failed,
                         "message": ""})
+            logger.info("grail batch complete: ok=%d skipped=%d failed=%d", ok, skipped, failed)
 
         except GeneratorExit:
             pass  # client disconnected — stop silently

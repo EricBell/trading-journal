@@ -1,3 +1,13 @@
+## v1.26.8 - 2026-04-08
+
+### Bug Fixes
+- **Grail batch: "Stream error: network error" fixed** — root cause was a 60s silent gap between sub-batches tripping nginx's default `proxy_read_timeout 60s`. The `_time.sleep(wait_secs)` calls are replaced with a `_sleep_with_keepalive()` inner generator that wakes every 10 seconds and re-emits the `waiting` SSE event with an updated countdown, keeping data flowing through any proxy.
+
+### Features
+- **Grail batch: live log panel** — a dark monospace log panel appears below the batch controls when a run starts. Each plan result and inter-batch wait is timestamped and appended (up to 100 lines, trimmed from oldest). Wait keep-alive ticks are not logged (only the first tick of each wait is logged). Panel persists until page reload. Server-side `logger.info()` calls added throughout `generate()` for gunicorn/file log visibility.
+
+---
+
 ## v1.26.7 - 2026-04-07
 
 ### Bug Fixes

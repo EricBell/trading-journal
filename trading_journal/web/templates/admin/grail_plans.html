@@ -83,6 +83,11 @@
   </span>
 </div>
 
+{# ── Batch run log (hidden until batch starts) ── #}
+<div id="batch-log"
+     class="font-monospace small border rounded bg-dark text-light p-2 mb-3"
+     style="display:none; height:200px; overflow-y:scroll; white-space:pre-wrap;"></div>
+
 {# ── Results table ── #}
 {% if plan_rows %}
 <div class="card">
@@ -197,6 +202,23 @@
 <script>
 const grailBatch = (() => {
   let countdownTimer = null;
+  const MAX_LOG_LINES = 100;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  function _logTime() {
+    return new Date().toLocaleTimeString('en-US', {hour12: false});
+  }
+
+  function appendLog(line) {
+    const el = document.getElementById('batch-log');
+    if (el.style.display === 'none') el.style.display = '';  // reveal on first entry
+    const lines = el.textContent ? el.textContent.split('\n') : [];
+    lines.push(line);
+    if (lines.length > MAX_LOG_LINES) lines.splice(0, lines.length - MAX_LOG_LINES);
+    el.textContent = lines.join('\n');
+    el.scrollTop = el.scrollHeight;
+  }
 
   function getCount() {
     const input = document.getElementById('batch-count-input');
@@ -243,6 +265,8 @@ const grailBatch = (() => {
     countdownTimer = setInterval(tick, 1000);
   }
 
+  // ── Main ─────────────────────────────────────────────────────────────────
+
   async function start() {
     const count = getCount();
     if (count === null) return;
@@ -267,6 +291,7 @@ const grailBatch = (() => {
       reader = resp.body.getReader();
     } catch (err) {
       setStatus('Request failed: ' + err.message, 'text-danger');
+      appendLog(_logTime() + ' — request failed: ' + err.message);
       setButtonBusy(false);
       return;
     }
@@ -292,6 +317,7 @@ const grailBatch = (() => {
 
           if (ev.error) {
             stopCountdown();
+            appendLog(_logTime() + ' — ERROR: ' + ev.error);
             setStatus('Error: ' + ev.error, 'text-danger');
             setButtonBusy(false);
             return;
@@ -299,22 +325,36 @@ const grailBatch = (() => {
 
           if (ev.complete) {
             stopCountdown();
-            let msg = `Done: <strong>${ev.ok}</strong> analyzed`;
-            if (ev.skipped) msg += `, ${ev.skipped} already done`;
-            if (ev.failed)  msg += `, ${ev.failed} failed`;
-            if (ev.message) msg += ` &mdash; ${ev.message}`;
-            setStatus(msg, 'text-success');
+            let text = `Done: ${ev.ok} analyzed`;
+            if (ev.skipped) text += `, ${ev.skipped} already done`;
+            if (ev.failed)  text += `, ${ev.failed} failed`;
+            if (ev.message) text += ` — ${ev.message}`;
+            appendLog(_logTime() + ' — ' + text);
+            setStatus(
+              `Done: <strong>${ev.ok}</strong> analyzed` +
+              (ev.skipped ? `, ${ev.skipped} already done` : '') +
+              (ev.failed  ? `, ${ev.failed} failed` : '') +
+              (ev.message ? ` &mdash; ${ev.message}` : ''),
+              'text-success'
+            );
             setButtonBusy(false);
             return;
           }
 
           if (ev.waiting) {
+            // Only log the first tick of each wait period to avoid spam.
+            // countdownTimer is null before the first startCountdown() call
+            // and gets reset to null by stopCountdown() between plan results.
+            if (!countdownTimer) {
+              appendLog(_logTime() + ` — waiting ${ev.wait_seconds}s before next batch…`);
+            }
             startCountdown(ev.wait_seconds, ev.done, ev.total);
           } else {
             stopCountdown();
             const outcome = ev.fetch_status === 'no_subscription'
               ? 'no subscription'
               : (ev.outcome || ev.fetch_status || '?');
+            appendLog(_logTime() + ` — plan ${ev.plan_id}: ${outcome}`);
             setStatus(
               `${ev.done}/${ev.total} analyzed` +
               ` &nbsp;·&nbsp; plan ${ev.plan_id}: <em>${outcome}</em>`,
@@ -325,6 +365,7 @@ const grailBatch = (() => {
       }
     } catch (err) {
       stopCountdown();
+      appendLog(_logTime() + ' — stream error: ' + err.message);
       setStatus('Stream error: ' + err.message, 'text-danger');
       setButtonBusy(false);
     }
