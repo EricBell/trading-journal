@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.26.9
-**Last Updated:** 2026-04-08
+**Version:** 1.26.12
+**Last Updated:** 2026-04-21
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -140,6 +140,7 @@ restores them exactly.
 | `ohlcv_price_series` | 1-min and daily OHLCV bars fetched from Polygon.io; cached to avoid redundant API calls; includes `vwap` column | (symbol, timestamp, timeframe) UNIQUE |
 | `hg_market_data_requests` | Audit trail of bar-fetch operations tied to a grail plan: symbol, timeframe, fetch window, status, bar counts, window rule | (user_id, grail_plan_id, timeframe, fetch_start_at, fetch_end_at) UNIQUE |
 | `hg_analysis_results` | Versioned evaluation results per HG plan: entry touch type, TP1/TP2 reached, MFE/MAE, bars-to-entry, linked-trade comparison | (hg_market_data_request_id, analysis_version) UNIQUE |
+| `grail_plan_analyses` | Plan-centric zone-based analysis results from Grail Plan Browser: entry/stop/TP1 zone touch, outcome, fetch metadata, bars_expected | (grail_plan_id, analysis_version) effectively UNIQUE per user; user_id FK |
 | `journal_notes` | Free-form trader notes (not trade-linked): title, body (markdown), timestamps | note_id PK; user_id FK |
 
 ### Why `trade_annotations` is a separate table
@@ -397,6 +398,32 @@ be backfilled manually via Admin → Market Data. HG plan analysis (TP1/TP2 reac
 MFE/MAE, entry touch type) is implemented via the HG pipeline (§5.6). VIX context
 analysis is not yet implemented.
 
+### 5.7 Grail Plan Browser analysis pipeline
+
+`grail_analyzer.py: run_grail_plan_analysis()` is the plan-centric counterpart to the
+trade-linked HG pipeline (§5.6). Instead of starting from a matched trade, it starts from
+a `grail_files` plan ID directly. It is used exclusively by the Admin → Grail Plan Browser.
+
+**Flow**: look up plan in `grail_files` → compute fetch window (plan_created_at − 90m
+through + 120m) → fetch 1m bars via `MassiveClient` (equity) or `fetch_futures_window_bars`
+(futures, which returns `no_subscription` when the Polygon subscription lacks futures
+coverage) → upsert into `ohlcv_price_series` → run zone-based bar scan → write
+`GrailPlanAnalysis` row. Idempotent: re-runs only if outcome is `no_data` or `force=True`.
+
+**Outcome values** (`grail_plan_analyses.outcome`):
+- `no_data` — bars unavailable; safe to retry
+- `no_entry` — bars available but entry zone never touched
+- `success` — entry zone touched, TP1 zone hit before stop zone
+- `failure` — entry zone touched, stop zone hit before TP1
+- `inconclusive` — entry zone touched, neither TP1 nor stop reached in window
+- `invalid` — plan lacks required zone fields (entry/stop/TP1 low+high all present is required)
+
+`bars_expected` is computed by counting 1-minute NYSE market-hours slots in the fetch
+window (`expected_market_bars()`) so partial-data fetches can be distinguished from
+complete ones (when `bars_fetched < bars_expected`).
+
+---
+
 ### Grail Plan Browser batch: client-side wait architecture
 The batch analyzer avoids long-lived SSE connections (which nginx would drop at
 `proxy_read_timeout`, default 60s) by keeping each HTTP request short: the server
@@ -422,7 +449,7 @@ the wrong trade.
 
 ```
 trading_journal/
-├── models.py               SQLAlchemy ORM — all 13 tables
+├── models.py               SQLAlchemy ORM — all 14 tables
 ├── ingestion.py            NdjsonIngester — ingest pipeline entry point
 ├── csv_parser.py           CsvParser — Schwab CSV → record dicts
 ├── ninjatrader_parser.py   NinjaTraderParser — NinjaTrader exec CSV → record dicts (FUTURES)
