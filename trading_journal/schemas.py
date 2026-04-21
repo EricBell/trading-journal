@@ -60,6 +60,7 @@ class NdjsonRecord(BaseModel):
     # Source tracking
     source_file: Optional[str] = None
     source_file_index: Optional[int] = None
+    spread_order_tag: Optional[str] = None
 
     # Account info (extracted from CSV row 1)
     account_number: Optional[str] = None

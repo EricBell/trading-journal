@@ -1,3 +1,10 @@
+## v1.27.0 - 2026-04-21
+
+### Features
+- **Options spread support (vertical put debit spread)** — Schwab CSV multi-leg orders (parent row + continuation row) are now fully ingested. Each leg is stored as a separate execution with its individual leg price (not the spread-level net price), producing correct per-leg P&L. Completed trades that are legs of the same order are linked via `spread_group_id`. The trades list shows a **SPREAD** badge on linked legs; the trade detail page shows a "Spread" card listing the sibling leg(s) with their P&L and a combined P&L row.
+
+---
+
 ## v1.26.12 - 2026-04-08
 
 ### Features

@@ -471,8 +471,14 @@ def _parse_single_file(
         'exp': None, 'strike': None, 'type': None, 'spread': None,
         'price': None, 'net_price': None, 'price_improvement': None,
         'order_type': None, 'tif': None, 'status': None,
-        'notes': None, 'mark': None,
+        'notes': None, 'mark': None, 'spread_order_tag': None,
     }
+
+    # Multi-leg spread tracking: parent row carries exec_time + spread type;
+    # continuation rows inherit those values so they survive is_fill gating.
+    _spread_tag: Optional[str] = None
+    _spread_exec_time: Optional[str] = None
+    _spread_type: Optional[str] = None
 
     with open(path, 'r', encoding=encoding, errors='ignore', newline='') as f:
         reader = csv.reader(f)
@@ -578,7 +584,29 @@ def _parse_single_file(
 
             rec = build_order_record(section, current_header_map, cells, row_index)
             if rec is not None:
+                if rec['exec_time'] is not None and rec.get('spread') is not None:
+                    # Parent spread row: save trackers, use per-leg price
+                    _spread_tag = str(row_index)
+                    _spread_exec_time = rec['exec_time']
+                    _spread_type = rec['spread']
+                    rec['spread_order_tag'] = str(row_index)
+                    rec['net_price'] = rec.get('price')
+                elif (rec['exec_time'] is None and _spread_exec_time is not None
+                      and (rec.get('side') or rec.get('symbol'))):
+                    # Continuation row: inherit parent state, use per-leg price
+                    rec['exec_time'] = _spread_exec_time
+                    rec['spread'] = _spread_type
+                    rec['spread_order_tag'] = _spread_tag
+                    rec['net_price'] = rec.get('price')
+                else:
+                    _spread_tag = None
+                    _spread_exec_time = None
+                    _spread_type = None
                 results.append(rec)
+            else:
+                _spread_tag = None
+                _spread_exec_time = None
+                _spread_type = None
 
     if account_number:
         for rec in results:
@@ -617,6 +645,8 @@ class CsvParser:
         source_filename = Path(file_path).name
         for rec in records:
             rec['source_file'] = source_filename
+            if rec.get('spread_order_tag'):
+                rec['spread_order_tag'] = f"{source_filename}:{rec['spread_order_tag']}"
         return records
 
     def parse_files(self, file_paths: List[str]) -> List[Dict[str, Any]]:
@@ -638,6 +668,8 @@ class CsvParser:
             for rec in records:
                 rec['source_file'] = source_filename
                 rec['source_file_index'] = file_index
+                if rec.get('spread_order_tag'):
+                    rec['spread_order_tag'] = f"{source_filename}:{rec['spread_order_tag']}"
             all_records.extend(records)
 
         if all_records:

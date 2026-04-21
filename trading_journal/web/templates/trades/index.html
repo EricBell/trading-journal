@@ -140,6 +140,9 @@
           {% elif t.instrument_type == 'FUTURES' and t.option_details_dict %}
           <br><small class="text-muted">{{ t.option_details_dict.get('exp_date', '') }}</small>
           {% endif %}
+          {% if t.completed_trade_id in spread_siblings %}
+          <br><span class="badge bg-info text-dark" style="font-size:.7em">SPREAD</span>
+          {% endif %}
         </td>
         <td><span class="badge bg-secondary">{{ t.trade_type or t.instrument_type }}</span></td>
         <td>{{ t.total_qty }}</td>

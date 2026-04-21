@@ -183,6 +183,28 @@ def index():
             .all()
         )
 
+        # Build spread sibling map for the current page
+        spread_siblings: dict[int, list[int]] = {}
+        page_group_ids = {t.spread_group_id for t in trades if t.spread_group_id}
+        if page_group_ids:
+            all_spread_members = (
+                db_session.query(CompletedTrade.completed_trade_id, CompletedTrade.spread_group_id)
+                .filter(
+                    CompletedTrade.user_id == user.user_id,
+                    CompletedTrade.spread_group_id.in_(page_group_ids),
+                )
+                .all()
+            )
+            group_members: dict[str, list[int]] = {}
+            for cid, gid in all_spread_members:
+                group_members.setdefault(gid, []).append(cid)
+            for t in trades:
+                if t.spread_group_id and t.spread_group_id in group_members:
+                    sibs = [sid for sid in group_members[t.spread_group_id]
+                            if sid != t.completed_trade_id]
+                    if sibs:
+                        spread_siblings[t.completed_trade_id] = sibs
+
     # Build grail plan indicators for the current page (one batch query to grail_files)
     from datetime import timezone as _tz
     from ...grail_connector import batch_grail_coverage
@@ -236,6 +258,7 @@ def index():
         total_pages=total_pages,
         per_page_options=PER_PAGE_OPTIONS,
         grail_indicators=grail_indicators,
+        spread_siblings=spread_siblings,
     )
 
 
@@ -292,6 +315,19 @@ def detail(trade_id: int):
             .order_by(HgAnalysisResult.evaluated_at.desc())
             .first()
         )
+
+        # Load spread siblings (other legs of the same multi-leg order)
+        spread_siblings = []
+        if trade.spread_group_id:
+            spread_siblings = (
+                db_session.query(CompletedTrade)
+                .filter(
+                    CompletedTrade.spread_group_id == trade.spread_group_id,
+                    CompletedTrade.completed_trade_id != trade.completed_trade_id,
+                )
+                .order_by(CompletedTrade.opened_at)
+                .all()
+            )
 
         # Build navigation: fetch ordered IDs for the current filter/sort context
         nav_query = _build_trades_query(
@@ -359,6 +395,7 @@ def detail(trade_id: int):
         nav=nav,
         back_url=back_url,
         annotate_url=annotate_url,
+        spread_siblings=spread_siblings,
     )
 
 

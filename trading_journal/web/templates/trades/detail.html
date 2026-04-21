@@ -174,6 +174,43 @@
       </div>
     </div>
 
+    {% if spread_siblings %}
+    <div class="card mt-3 border-info">
+      <div class="card-header bg-info bg-opacity-10 text-info fw-semibold">
+        Spread — other leg{{ 's' if spread_siblings|length > 1 else '' }}
+      </div>
+      <div class="card-body p-2">
+        <table class="table table-sm mb-0">
+          {% for s in spread_siblings %}
+          <tr>
+            <td>
+              <a href="{{ url_for('trades.detail', trade_id=s.completed_trade_id) }}">
+                {{ s.symbol }}
+                {% if s.option_details_dict %}
+                  ${{ "%.0f"|format(s.option_details_dict.get('strike', 0)|float) }}
+                  {{ s.option_details_dict.get('right', '') }}
+                {% endif %}
+              </a>
+            </td>
+            <td class="text-end fw-bold {% if s.net_pnl and s.net_pnl > 0 %}text-success{% elif s.net_pnl and s.net_pnl < 0 %}text-danger{% endif %}">
+              ${{ "%.2f"|format(s.net_pnl|float) if s.net_pnl else '0.00' }}
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="table-light">
+            <td class="text-muted small">Combined P&amp;L</td>
+            <td class="text-end fw-bold">
+              {% set combined = (trade.net_pnl or 0)|float + spread_siblings|sum(attribute='net_pnl')|float %}
+              <span class="{% if combined > 0 %}text-success{% elif combined < 0 %}text-danger{% endif %}">
+                ${{ "%.2f"|format(combined) }}
+              </span>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Executions -->
     <div class="card mt-3">
       <div class="card-header">Executions ({{ executions|length }})</div>

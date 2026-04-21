@@ -160,6 +160,7 @@ class Trade(Base):
     strike_price = Column(Numeric(18, 4))
     option_type = Column(String(4))
     spread_type = Column(String(20))
+    spread_order_tag = Column(String(100), nullable=True)
     option_data = Column(JSONB)
 
     # Processing metadata
@@ -237,6 +238,7 @@ class CompletedTrade(Base):
     # Trade classification
     is_winning_trade = Column(Boolean)
     trade_type = Column(String(20))
+    spread_group_id = Column(String(200), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
 

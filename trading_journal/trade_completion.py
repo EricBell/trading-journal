@@ -283,6 +283,11 @@ class TradeCompletionEngine:
         else:
             ct_option_details = first_open.option_data
 
+        # Compute spread_group_id: sorted unique spread_order_tags from all cycle executions.
+        # Both legs of the same multi-leg order will share identical tags → identical group_id.
+        tags = sorted({t.spread_order_tag for t in cycle_trades if t.spread_order_tag})
+        spread_group_id = ",".join(tags) if tags else None
+
         # Create the single CompletedTrade object
         completed_trade = CompletedTrade(
             user_id=first_open.user_id,
@@ -301,6 +306,7 @@ class TradeCompletionEngine:
             hold_duration=hold_duration,
             is_winning_trade=net_pnl > 0,
             trade_type=trade_type,
+            spread_group_id=spread_group_id,
         )
         
         session.add(completed_trade)

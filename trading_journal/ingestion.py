@@ -389,6 +389,7 @@ class NdjsonIngester:
                 "strike_price": record.option.strike,
                 "option_type": record.option.right,
                 "spread_type": record.spread,
+                "spread_order_tag": record.spread_order_tag,
                 "option_data": option_dict,
             })
 
