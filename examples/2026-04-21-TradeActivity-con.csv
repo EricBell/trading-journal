@@ -1,0 +1,26 @@
+﻿Today's Trade Activity for 79967586SCHW (Contributory IRA) on 4/21/26 17:23:12
+
+Working Orders
+Notes,,Time Placed,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,PRICE,,TIF,Mark,Status
+
+Filled Orders
+,,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Price Improvement,Order Type
+,,4/21/26 10:58:41,VERTICAL,SELL,-1,TO CLOSE,SPX,21 APR 26,7110,PUT,16.70,2.50,-,LMT
+,,,,BUY,+1,TO CLOSE,SPX,21 APR 26,7105,PUT,14.20,CREDIT,-,
+,,4/21/26 10:52:44,VERTICAL,BUY,+1,TO OPEN,SPX,21 APR 26,7110,PUT,9.88,1.85,-,LMT
+,,,,SELL,-1,TO OPEN,SPX,21 APR 26,7105,PUT,8.03,DEBIT,-,
+,,4/21/26 10:00:48,VERTICAL,SELL,-1,TO CLOSE,SPX,21 APR 26,7130,PUT,12.77,2.05,-,LMT
+,,,,BUY,+1,TO CLOSE,SPX,21 APR 26,7125,PUT,10.72,CREDIT,-,
+,,4/21/26 10:00:29,VERTICAL,BUY,+1,TO OPEN,SPX,21 APR 26,7130,PUT,12.05,2.00,-,LMT
+,,,,SELL,-1,TO OPEN,SPX,21 APR 26,7125,PUT,10.05,DEBIT,-,
+
+Canceled Orders
+Notes,,Time Canceled,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,PRICE,,TIF,Status
+,,4/21/26 10:58:42,VERTICAL,SELL,-1,TO CLOSE,SPX,21 APR 26,7110,PUT,1.30,LMT,DAY,CANCELED
+,,,TRG BY #1006078655858,BUY,+1,TO CLOSE,SPX,21 APR 26,7105,PUT,CREDIT,,,
+,,,OCO #1006078655860,,,,,,,,1.50,STP,ASK,
+,,4/21/26 10:05:51,VERTICAL,BUY,+1,TO OPEN,SPX,21 APR 26,7125,PUT,1.65,LMT,DAY,CANCELED
+,,,,SELL,-1,TO OPEN,SPX,21 APR 26,7120,PUT,DEBIT,,,
+
+Rolling Strategies
+Covered Call Position,New Exp,Call By,Begin (Days),Order Price,Active Time,Move to MKT Time,Status

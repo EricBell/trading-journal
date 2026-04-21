@@ -425,4 +425,7 @@ When in plan mode, plans must NOT include code. Present strategy, approach, trad
 
 The application depends on output from the **Schwab CSV to JSON Converter** located at `../schwab-csv-to-json` for NDJSON input data.
 
+## Avoid
+- folders named 'archive'. These are documents/code that no longer apply.
+
 ## Next Work: 
