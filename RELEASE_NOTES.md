@@ -1,3 +1,10 @@
+## v1.27.1 - 2026-04-21
+
+### Bug Fixes
+- **Spread representation rework** — a vertical spread is now stored as one `CompletedTrade` (not one per leg). All four leg executions link to the single row. Dashboard metrics (trade count, win rate, equity curve, win/loss donut) are correct by construction. The trades list shows `$7110/$7105 PUT` notation; the detail page lists each leg with its side. The v1.27.0 `spread_siblings` workaround is removed.
+
+---
+
 ## v1.27.0 - 2026-04-21
 
 ### Features

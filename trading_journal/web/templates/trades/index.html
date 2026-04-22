@@ -132,16 +132,22 @@
         <td>
           <strong>{{ t.symbol }}</strong>
           {% if t.instrument_type == 'OPTION' and t.option_details_dict %}
-          <br><small class="text-muted">
-            ${{ "%.0f"|format(t.option_details_dict.get('strike', 0)|float) }}
-            {{ t.option_details_dict.get('right', '') }}
-            &middot; {{ t.option_details_dict.get('exp_date', '') }}
-          </small>
+            {% if t.option_details_dict.get('legs') %}
+              {% set _legs = t.option_details_dict.get('legs', []) %}
+              <br><small class="text-muted">
+                ${{ "%.0f"|format(_legs[0].get('strike', 0)|float) }}{% if _legs|length > 1 %}/${{ "%.0f"|format(_legs[-1].get('strike', 0)|float) }}{% endif %}
+                {{ _legs[0].get('right', '') }}
+                &middot; {{ t.option_details_dict.get('exp_date', '') }}
+              </small>
+            {% else %}
+              <br><small class="text-muted">
+                ${{ "%.0f"|format(t.option_details_dict.get('strike', 0)|float) }}
+                {{ t.option_details_dict.get('right', '') }}
+                &middot; {{ t.option_details_dict.get('exp_date', '') }}
+              </small>
+            {% endif %}
           {% elif t.instrument_type == 'FUTURES' and t.option_details_dict %}
           <br><small class="text-muted">{{ t.option_details_dict.get('exp_date', '') }}</small>
-          {% endif %}
-          {% if t.completed_trade_id in spread_siblings %}
-          <br><span class="badge bg-info text-dark" style="font-size:.7em">SPREAD</span>
           {% endif %}
         </td>
         <td><span class="badge bg-secondary">{{ t.trade_type or t.instrument_type }}</span></td>

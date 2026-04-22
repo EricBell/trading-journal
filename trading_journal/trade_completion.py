@@ -1,8 +1,9 @@
 """Trade completion engine - groups executions into completed round-trip trades."""
 
 import logging
+from collections import defaultdict
 from datetime import datetime, date
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -49,8 +50,13 @@ class TradeCompletionEngine:
             )
             unlinked_trades = query.order_by(Trade.exec_timestamp).all()
 
+            # Spreads (multi-leg orders) are processed as single CompletedTrades;
+            # non-spread fills use the existing per-instrument-key grouping.
+            spread_trades = [t for t in unlinked_trades if t.spread_order_tag]
+            non_spread_trades = [t for t in unlinked_trades if not t.spread_order_tag]
+
             trade_groups: Dict[Any, List[Trade]] = {}
-            for trade in unlinked_trades:
+            for trade in non_spread_trades:
                 key = (trade.symbol, trade.instrument_type, trade.account_id)
                 if trade.instrument_type == 'OPTION' and trade.option_data:
                     key = key + (trade.exp_date, trade.strike_price, trade.option_type)
@@ -61,6 +67,8 @@ class TradeCompletionEngine:
             completed_count = 0
             for trades in trade_groups.values():
                 completed_count += self._process_trade_group(session, trades)
+
+            completed_count += self._process_spread_trades(session, spread_trades)
 
             session.commit()
 
@@ -113,26 +121,23 @@ class TradeCompletionEngine:
             if not unlinked_trades:
                 return {"completed_trades": 0, "message": "No unlinked trades to process"}
 
-            # Group by account, symbol, and instrument type so fills from different
-            # accounts for the same symbol are never merged into one completed trade.
-            trade_groups = {}
-            for trade in unlinked_trades:
+            spread_trades = [t for t in unlinked_trades if t.spread_order_tag]
+            non_spread_trades = [t for t in unlinked_trades if not t.spread_order_tag]
+
+            trade_groups: Dict[Any, List[Trade]] = {}
+            for trade in non_spread_trades:
                 key = (trade.symbol, trade.instrument_type, trade.account_id)
                 if trade.instrument_type == 'OPTION' and trade.option_data:
-                    # For options, include expiration and strike in key
-                    option_key = (trade.exp_date, trade.strike_price, trade.option_type)
-                    key = key + option_key
+                    key = key + (trade.exp_date, trade.strike_price, trade.option_type)
                 elif trade.instrument_type == 'FUTURES':
-                    # For futures, include contract expiry to distinguish JUN26 from SEP26
                     key = key + (trade.exp_date,)
-
-                if key not in trade_groups:
-                    trade_groups[key] = []
-                trade_groups[key].append(trade)
+                trade_groups.setdefault(key, []).append(trade)
 
             completed_count = 0
-            for group_key, trades in trade_groups.items():
+            for trades in trade_groups.values():
                 completed_count += self._process_trade_group(session, trades)
+
+            completed_count += self._process_spread_trades(session, spread_trades)
 
             session.commit()
 
@@ -140,6 +145,141 @@ class TradeCompletionEngine:
                 "completed_trades": completed_count,
                 "message": f"Processed {completed_count} completed trades"
             }
+
+    def _process_spread_trades(self, session: Session, spread_trades: List[Trade]) -> int:
+        """Process multi-leg spread executions into single CompletedTrades (one per spread)."""
+        if not spread_trades:
+            return 0
+
+        # Group executions by their order tag (all legs of one multi-leg order share a tag)
+        by_tag: Dict[str, List[Trade]] = defaultdict(list)
+        for t in spread_trades:
+            by_tag[t.spread_order_tag].append(t)
+
+        # Classify each tag group: all TO OPEN → open order; all TO CLOSE → close order
+        open_groups: List[List[Trade]] = []
+        close_groups: List[List[Trade]] = []
+        for tag, legs in by_tag.items():
+            effects = {l.pos_effect for l in legs}
+            if effects == {'TO OPEN'}:
+                open_groups.append(legs)
+            elif effects == {'TO CLOSE'}:
+                close_groups.append(legs)
+            else:
+                logger.warning(f"Skipping spread order {tag}: mixed pos_effect {effects}")
+
+        def _identity(legs: List[Trade]) -> Tuple:
+            """Key that identifies which open order matches which close order."""
+            l = legs[0]
+            return (l.symbol, l.instrument_type, l.account_id, l.exp_date,
+                    frozenset(l.strike_price for l in legs))
+
+        def _min_ts(legs: List[Trade]) -> datetime:
+            return min((l.exec_timestamp for l in legs if l.exec_timestamp), default=datetime.min)
+
+        # Group and sort by identity key so FIFO matching works correctly
+        opens_by_key: Dict[Tuple, List[List[Trade]]] = defaultdict(list)
+        closes_by_key: Dict[Tuple, List[List[Trade]]] = defaultdict(list)
+        for legs in open_groups:
+            opens_by_key[_identity(legs)].append(legs)
+        for legs in close_groups:
+            closes_by_key[_identity(legs)].append(legs)
+        for v in opens_by_key.values():
+            v.sort(key=_min_ts)
+        for v in closes_by_key.values():
+            v.sort(key=_min_ts)
+
+        completed_count = 0
+        for key in set(opens_by_key) & set(closes_by_key):
+            for open_legs, close_legs in zip(opens_by_key[key], closes_by_key[key]):
+                self._create_spread_completed_trade(session, open_legs, close_legs)
+                completed_count += 1
+
+        return completed_count
+
+    def _create_spread_completed_trade(
+        self, session: Session, open_legs: List[Trade], close_legs: List[Trade]
+    ) -> Optional[CompletedTrade]:
+        """Create one CompletedTrade representing a complete multi-leg spread round-trip."""
+        if not open_legs or not close_legs:
+            return None
+
+        first_leg = open_legs[0]
+        multiplier = get_contract_multiplier(first_leg.instrument_type, first_leg.symbol or '')
+        total_qty = abs(open_legs[0].qty) if open_legs[0].qty else 1
+
+        # Net debit paid to open: BUY costs (+), SELL credits (-)
+        net_debit = sum(
+            Decimal(str(l.net_price)) * (1 if l.side == 'BUY' else -1) * abs(l.qty)
+            for l in open_legs
+        )
+        # Net credit received to close: SELL credits (+), BUY costs (-)
+        net_credit = sum(
+            Decimal(str(l.net_price)) * (1 if l.side == 'SELL' else -1) * abs(l.qty)
+            for l in close_legs
+        )
+
+        gross_cost = net_debit * multiplier
+        gross_proceeds = net_credit * multiplier
+        net_pnl = gross_proceeds - gross_cost
+
+        entry_avg_price = gross_cost / total_qty if total_qty else Decimal('0')
+        exit_avg_price = gross_proceeds / total_qty if total_qty else Decimal('0')
+
+        opened_at = min(l.exec_timestamp for l in open_legs if l.exec_timestamp)
+        closed_at = max(l.exec_timestamp for l in close_legs if l.exec_timestamp)
+        hold_duration = closed_at - opened_at if opened_at and closed_at else None
+
+        # Direction: the long (BUY) leg drives trade_type
+        long_legs = [l for l in open_legs if l.side == 'BUY']
+        if long_legs:
+            trade_type = 'SHORT' if long_legs[0].option_type == 'PUT' else 'LONG'
+        else:
+            short_leg = next((l for l in open_legs if l.side == 'SELL'), first_leg)
+            trade_type = 'LONG' if short_leg.option_type == 'PUT' else 'SHORT'
+
+        # Multi-leg option_details: legs sorted highest-strike first
+        sorted_legs = sorted(open_legs, key=lambda l: float(l.strike_price or 0), reverse=True)
+        option_details = {
+            'spread_type': first_leg.spread_type or 'VERTICAL',
+            'exp_date': first_leg.exp_date.isoformat() if first_leg.exp_date else None,
+            'legs': [
+                {'strike': float(l.strike_price), 'right': l.option_type, 'side': l.side}
+                for l in sorted_legs
+            ],
+        }
+
+        completed_trade = CompletedTrade(
+            user_id=first_leg.user_id,
+            account_id=first_leg.account_id,
+            symbol=first_leg.symbol,
+            instrument_type=first_leg.instrument_type,
+            option_details=option_details,
+            total_qty=total_qty,
+            entry_avg_price=float(entry_avg_price),
+            exit_avg_price=float(exit_avg_price),
+            gross_proceeds=float(gross_proceeds),
+            gross_cost=float(gross_cost),
+            net_pnl=float(net_pnl),
+            opened_at=opened_at,
+            closed_at=closed_at,
+            hold_duration=hold_duration,
+            is_winning_trade=net_pnl > 0,
+            trade_type=trade_type,
+        )
+
+        session.add(completed_trade)
+        session.flush()
+
+        for leg in open_legs + close_legs:
+            leg.completed_trade_id = completed_trade.completed_trade_id
+
+        logger.info(
+            f"Created spread: {completed_trade.symbol} {trade_type} {total_qty}x "
+            f"@ {float(entry_avg_price):.2f} -> {float(exit_avg_price):.2f} "
+            f"P&L: ${float(net_pnl):.2f}"
+        )
+        return completed_trade
 
     def _process_trade_group(self, session: Session, trades: List[Trade]) -> int:
         """Process a group of trades for the same instrument to find completed cycles."""
