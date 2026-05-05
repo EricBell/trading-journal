@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.26.12
-**Last Updated:** 2026-04-21
+**Version:** 1.27.1
+**Last Updated:** 2026-05-05
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -130,8 +130,8 @@ restores them exactly.
 |---|---|---|
 | `users` | Auth, multi-user isolation | username UNIQUE, api_key_hash UNIQUE |
 | `accounts` | Brokerage accounts per user | (user_id, account_number) UNIQUE |
-| `trades` | Individual fills (Tier 1) | (user_id, unique_key) UNIQUE |
-| `completed_trades` | Round-trip trades (Tier 2) | user_id FK |
+| `trades` | Individual fills (Tier 1) | (user_id, unique_key) UNIQUE; `spread_order_tag` groups legs of a multi-leg order |
+| `completed_trades` | Round-trip trades (Tier 2) | user_id FK; `spread_group_id` links to source spread order tags |
 | `trade_annotations` | Manual annotations (pattern, notes, stop, atm_engaged, exit_reason, underlying_at_entry) | (user_id, symbol, opened_at) UNIQUE |
 | `positions` | Running position aggregate (Tier 3) | (user_id, symbol, instrument_type, option_details, account_id) UNIQUE |
 | `setup_patterns` | User-managed dropdown: pattern names | case-insensitive UNIQUE per user |
@@ -198,18 +198,55 @@ and issues a single bulk UPSERT at the end — no per-trade commits, no per-trad
 
 ### 5.4 TradeCompletionEngine grouping algorithm
 
-Executions are grouped by `(account_id, symbol, instrument_type)` for equities, by
+Executions are split into two paths before grouping:
+
+**Spread path** — any execution with a non-null `spread_order_tag` is routed to
+`_process_spread_trades()` (see §5.8). These are never mixed with the standard path.
+
+**Standard path** — executions without a `spread_order_tag` are grouped by
+`(account_id, symbol, instrument_type)` for equities, by
 `(account_id, symbol, instrument_type, exp_date, strike_price, option_type)` for options,
 or by `(account_id, symbol, instrument_type, contract_expiry)` for futures.
 `account_id` is the outermost key, ensuring fills from different brokerage accounts for
 the same symbol are never merged into a single `CompletedTrade`.
 
-Within each group, fills are processed chronologically. A running `open_qty` tracks
-the net position. When `open_qty` returns to zero, the group is sealed as a
+Within each standard group, fills are processed chronologically. A running `open_qty`
+tracks the net position. When `open_qty` returns to zero, the group is sealed as a
 `CompletedTrade`.
 
 Fills with no account (NDJSON uploads without account info) have `account_id=None` and
 group together correctly — Python treats `None` as a valid, comparable dict key.
+
+### 5.8 Spread completion algorithm
+
+Multi-leg options orders (e.g. vertical put debit spreads) are identified by a shared
+`spread_order_tag` on every execution leg. `CsvParser` assigns the tag at parse time:
+the parent row (which carries `exec_time` and `spread` type) gets a tag equal to
+`{source_filename}:{row_index}`; continuation rows (same order, different leg) inherit
+the parent's `exec_time`, `spread_type`, and tag.
+
+`_process_spread_trades(session, spread_trades)` in `TradeCompletionEngine`:
+
+1. Groups executions by `spread_order_tag` — all legs of one multi-leg order share a tag.
+2. Classifies each tag group as **open** (all `TO OPEN`) or **close** (all `TO CLOSE`).
+   Mixed-effect groups are logged as warnings and skipped.
+3. Matches open and close groups by `(symbol, instrument_type, account_id, exp_date,
+   frozenset(strike_prices))` using FIFO ordering within each key.
+4. For each matched open/close pair, `_create_spread_completed_trade()` computes:
+   - **Net debit** (open cost): `Σ net_price × qty × sign(BUY=+1, SELL=-1)` across open legs
+   - **Net credit** (close proceeds): `Σ net_price × qty × sign(SELL=+1, BUY=-1)` across close legs
+   - **net_pnl** = `gross_proceeds − gross_cost` (both multiplied by options multiplier 100×)
+   - **option_details** JSONB: `{spread_type, exp_date, legs:[{strike, right, side}, …]}`
+     (legs sorted highest-strike first)
+5. One `CompletedTrade` row is created per matched pair (not one per leg). All leg
+   executions are linked to that single `CompletedTrade` via `completed_trade_id`.
+
+The `spread_group_id` column on `completed_trades` stores the sorted, comma-joined
+`spread_order_tag` values from the cycle executions, providing a traceable link back to
+the CSV row numbers that produced the trade.
+
+Web UI: the trades list shows `$high/$low` strike notation for spread trades; the trade
+detail page renders "Long Leg / Short Leg" rows instead of a single Strike/Type pair.
 
 ### 5.5 Grail integration (read-only external DB)
 
@@ -484,7 +521,8 @@ trading_journal/
 
 main.py                     Click CLI entry point
 wsgi.py                     gunicorn entry point
-alembic/versions/           Migration history
+alembic/versions/           Migration history (latest: 2026_04_21_spread_support — adds spread_order_tag on trades, spread_group_id on completed_trades)
+docs/vertical-put-debit-spread.md  Spread support design doc and worked example
 RELEASE_NOTES.md            Release history; parsed by /about route
 ```
 
