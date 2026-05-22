@@ -14,6 +14,7 @@ from ...ninjatrader_parser import NinjaTraderParser, is_ninjatrader_exec_file
 from ...ingestion import NdjsonIngester, IngestionError
 from ...market_data import enrich_missing_underlying_prices
 from ...trade_completion import TradeCompletionEngine
+from ...observability import UploadPerfLogger
 
 bp = Blueprint('ingest', __name__)
 logger = logging.getLogger(__name__)
@@ -38,6 +39,9 @@ def upload():
     tmpdir = tempfile.mkdtemp()
     saved_paths = []
 
+    ul = UploadPerfLogger.from_env()
+    session_id = UploadPerfLogger.new_session_id()
+
     try:
         # Save uploaded files to temp dir
         for f in files:
@@ -50,20 +54,41 @@ def upload():
             flash('No valid files to process.', 'warning')
             return redirect(url_for('ingest.upload_form'))
 
+        user_id = AuthContext.require_user().user_id
+        total_file_bytes = sum(os.path.getsize(p) for p in saved_paths)
+
+        ul.event('upload_received', {
+            'upload_session_id': session_id,
+            'user_id': user_id,
+            'file_count': len(saved_paths),
+            'filenames': [Path(p).name for p in saved_paths],
+            'file_size_bytes': total_file_bytes,
+            'dry_run': dry_run,
+        })
+
         # Parse CSVs — detect NinjaTrader exec files and route to the right parser
         schwab_paths = []
         records = []
-        for path in saved_paths:
-            if is_ninjatrader_exec_file(path):
-                records.extend(NinjaTraderParser().parse_file(path))
-            else:
-                schwab_paths.append(path)
-        if schwab_paths:
-            records.extend(CsvParser(include_rolling=include_rolling).parse_files(schwab_paths))
+        with ul.stage("csv_parse", upload_session_id=session_id, user_id=user_id,
+                      file_count=len(saved_paths)) as ctx:
+            for path in saved_paths:
+                if is_ninjatrader_exec_file(path):
+                    records.extend(NinjaTraderParser().parse_file(path))
+                else:
+                    schwab_paths.append(path)
+            if schwab_paths:
+                records.extend(CsvParser(include_rolling=include_rolling).parse_files(schwab_paths))
+            ctx['records_emitted'] = len(records)
+            ctx['fills'] = sum(1 for r in records if r.get('event_type') == 'fill')
 
         # Ingest into DB (dry_run=True skips all writes)
         ingester = NdjsonIngester()
-        result = ingester.ingest_records(records, dry_run=dry_run)
+        result = ingester.ingest_records(
+            records,
+            dry_run=dry_run,
+            upload_logger=ul,
+            upload_session_id=session_id,
+        )
 
         if dry_run:
             # Build per-symbol breakdown from parsed fills
@@ -101,9 +126,10 @@ def upload():
             )
 
         # Reprocess all completed trades from scratch (idempotent on re-uploads)
-        user_id = AuthContext.require_user().user_id
         engine = TradeCompletionEngine()
-        proc = engine.reprocess_all_completed_trades(user_id)
+        with ul.stage("completed_trade_rebuild", upload_session_id=session_id, user_id=user_id) as ctx:
+            proc = engine.reprocess_all_completed_trades(user_id)
+            ctx['completed_trades'] = proc.get('completed_trades', 0)
 
         # Auto-populate underlying_at_entry for option trades (background, fire-and-forget)
         import threading
@@ -117,6 +143,15 @@ def upload():
         else:
             enrichment_msg = ""
 
+        ul.event('upload_complete', {
+            'upload_session_id': session_id,
+            'user_id': user_id,
+            'records_inserted': result['inserts'],
+            'records_updated': result['updates'],
+            'completed_trades': proc.get('completed_trades', 0),
+            **ul.summary(),
+        })
+
         flash(
             f"Imported {result['inserts']} new, updated {result['updates']}. "
             f"{proc.get('completed_trades', 0)} trades completed.{enrichment_msg}",
@@ -128,13 +163,20 @@ def upload():
 
         return redirect(url_for('trades.index'))
 
-    except IngestionError as e:
-        logger.error(f"Ingestion error: {e}")
-        flash(f"Ingestion failed: {e}", 'danger')
-        return redirect(url_for('ingest.upload_form'))
-    except Exception as e:
-        logger.exception("Unexpected upload error")
-        flash(f"Unexpected error: {e}", 'danger')
+    except (IngestionError, Exception) as e:
+        is_ingestion_err = isinstance(e, IngestionError)
+        if is_ingestion_err:
+            logger.error(f"Ingestion error: {e}")
+        else:
+            logger.exception("Unexpected upload error")
+
+        ul.event('upload_failed', {
+            'upload_session_id': session_id,
+            'error_type': type(e).__name__,
+            'error_message': str(e),
+        })
+
+        flash(f"{'Ingestion' if is_ingestion_err else 'Unexpected'} error: {e}", 'danger')
         return redirect(url_for('ingest.upload_form'))
     finally:
         # Clean up temp dir

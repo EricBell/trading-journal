@@ -18,6 +18,7 @@ from .schemas import NdjsonRecord
 from .positions import PositionTracker
 from .authorization import AuthContext
 from .duplicate_detector import DuplicateDetector
+from .observability import UploadPerfLogger
 
 logger = logging.getLogger(__name__)
 
@@ -331,12 +332,6 @@ class NdjsonIngester:
             # Commit the transaction
             session.commit()
 
-        # Reprocess positions only for symbols present in this batch.
-        # Scoping to affected symbols avoids rebuilding the entire position history
-        # on every upload (which caused worker timeouts with remote PostgreSQL).
-        affected_symbols = {r.symbol for r in records if r.symbol}
-        self.position_tracker.reprocess_positions_for_symbols(user_id, affected_symbols)
-
         return insert_count, update_count
 
     def _convert_to_trade_data(self, record: NdjsonRecord, source_file_path: str) -> Dict[str, Any]:
@@ -405,6 +400,8 @@ class NdjsonIngester:
         records: List[Dict[str, Any]],
         dry_run: bool = False,
         verbose: bool = False,
+        upload_logger: Optional[UploadPerfLogger] = None,
+        upload_session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Ingest pre-parsed records (from CsvParser) directly into the database.
 
@@ -412,60 +409,82 @@ class NdjsonIngester:
             records: List of record dicts as produced by CsvParser.parse_file/parse_files.
             dry_run: If True, validate only — no database changes.
             verbose: Log additional detail.
+            upload_logger: Optional performance logger; no-ops when disabled.
+            upload_session_id: Session ID to correlate all stage events for this upload.
 
         Returns:
             Dict with keys: records_processed, records_failed, inserts, updates,
             validation_errors, success, dry_run.
         """
+        ul = upload_logger if upload_logger is not None else UploadPerfLogger.noop()
         user_id = AuthContext.require_user().user_id
         records_processed = 0
         records_failed = 0
         validation_errors = []
         successful_records = []
 
-        for record_data in records:
-            try:
-                # Pre-filter header rows and known non-fill types before pydantic validation
-                # so they don't generate spurious validation errors.
-                if 'section_header' in record_data.get('issues', []):
-                    continue
-                event_type = record_data.get('event_type')
-                if event_type is not None and event_type != 'fill':
-                    if verbose:
-                        logger.debug(f"Skipping {event_type} record at row {record_data.get('row_index')}")
-                    continue
+        with ul.stage("record_validation", upload_session_id=upload_session_id, user_id=user_id) as ctx:
+            for record_data in records:
+                try:
+                    # Pre-filter header rows and known non-fill types before pydantic validation
+                    # so they don't generate spurious validation errors.
+                    if 'section_header' in record_data.get('issues', []):
+                        continue
+                    event_type = record_data.get('event_type')
+                    if event_type is not None and event_type != 'fill':
+                        if verbose:
+                            logger.debug(f"Skipping {event_type} record at row {record_data.get('row_index')}")
+                        continue
 
-                record = NdjsonRecord(**record_data)
+                    record = NdjsonRecord(**record_data)
 
-                if record.is_section_header:
-                    if verbose:
-                        logger.debug(f"Skipping section header: {record.section}")
-                    continue
+                    if record.is_section_header:
+                        if verbose:
+                            logger.debug(f"Skipping section header: {record.section}")
+                        continue
 
-                if not record.is_fill:
-                    if verbose:
-                        logger.debug(f"Skipping non-fill record: {record.event_type}")
-                    continue
+                    if not record.is_fill:
+                        if verbose:
+                            logger.debug(f"Skipping non-fill record: {record.event_type}")
+                        continue
 
-                successful_records.append(record)
-                records_processed += 1
+                    successful_records.append(record)
+                    records_processed += 1
 
-            except ValidationError as e:
-                records_failed += 1
-                error_msg = f"Row {record_data.get('row_index', 'unknown')}: {str(e)}"
-                validation_errors.append(error_msg)
-                logger.warning(f"Validation error: {error_msg}")
+                except ValidationError as e:
+                    records_failed += 1
+                    error_msg = f"Row {record_data.get('row_index', 'unknown')}: {str(e)}"
+                    validation_errors.append(error_msg)
+                    logger.warning(f"Validation error: {error_msg}")
+
+            ctx['records_valid'] = records_processed
+            ctx['records_invalid'] = records_failed
 
         insert_count = 0
         update_count = 0
 
         if not dry_run and successful_records:
-            insert_count, update_count = self._insert_records_with_tracking(
-                user_id,
-                successful_records,
-                'csv_upload',
-            )
+            with ul.stage("bulk_upsert_trades", upload_session_id=upload_session_id, user_id=user_id,
+                          records_in=records_processed) as ctx:
+                insert_count, update_count = self._insert_records_with_tracking(
+                    user_id,
+                    successful_records,
+                    'csv_upload',
+                )
+                ctx['records_inserted'] = insert_count
+                ctx['records_updated'] = update_count
+
             self._backfill_completed_trade_accounts(user_id)
+
+            # Reprocess positions only for symbols present in this batch.
+            # Scoping to affected symbols avoids rebuilding the entire position history
+            # on every upload (which caused worker timeouts with remote PostgreSQL).
+            affected_symbols = {r.symbol for r in successful_records if r.symbol}
+            with ul.stage("position_rebuild", upload_session_id=upload_session_id, user_id=user_id,
+                          affected_symbols=sorted(affected_symbols)) as ctx:
+                pos_result = self.position_tracker.reprocess_positions_for_symbols(user_id, affected_symbols)
+                ctx['positions_rebuilt'] = pos_result.get('trades_processed', 0)
+                ctx['options_expired'] = pos_result.get('expired_options', 0)
 
         if verbose or validation_errors:
             logger.info(
