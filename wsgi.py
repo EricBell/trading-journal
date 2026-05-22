@@ -8,6 +8,9 @@ Usage:
   uv run gunicorn --bind 0.0.0.0:5000 --workers 2 wsgi:app
 """
 
+from dotenv import load_dotenv
+load_dotenv()  # populate os.environ from .env before anything else runs
+
 from trading_journal.web import create_app
 
 app = create_app()

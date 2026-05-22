@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.27.1
-**Last Updated:** 2026-05-05
+**Version:** 1.27.2
+**Last Updated:** 2026-05-22
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -503,6 +503,7 @@ trading_journal/
 ├── database.py             db_manager singleton, session context manager
 ├── authorization.py        AuthContext — current-user thread-local
 ├── duplicate_detector.py   Cross-user duplicate detection before ingest
+├── observability.py        UploadPerfLogger — sends per-stage timing events to OpenObserve over HTTP; disabled by default (UPLOAD_PERF_LOGGING_ENABLED); no-op when disabled or when OpenObserve is unreachable
 │
 └── web/
     ├── __init__.py         Flask app factory
@@ -520,9 +521,11 @@ trading_journal/
         └── api.py          /api/*
 
 main.py                     Click CLI entry point
-wsgi.py                     gunicorn entry point
+wsgi.py                     gunicorn entry point; calls load_dotenv() so .env vars reach os.environ
 alembic/versions/           Migration history (latest: 2026_04_21_spread_support — adds spread_order_tag on trades, spread_group_id on completed_trades)
 docs/vertical-put-debit-spread.md  Spread support design doc and worked example
+docs/openobserve-upload-logging.md  Upload perf logging setup: env vars, event reference, query examples
+docker-compose.openobserve.yml  Dev-only OpenObserve container for upload performance diagnosis
 RELEASE_NOTES.md            Release history; parsed by /about route
 ```
 

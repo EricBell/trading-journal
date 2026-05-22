@@ -1,3 +1,10 @@
+## v1.27.2 - 2026-05-22
+
+### Features
+- **Upload performance logging (OpenObserve)** — the CSV ingest pipeline now emits structured timing events to an external OpenObserve instance, making it possible to see exactly how long each stage takes: `csv_parse`, `record_validation`, `bulk_upsert_trades`, `position_rebuild`, and `completed_trade_rebuild`. Off by default; enable with `UPLOAD_PERF_LOGGING_ENABLED=true` and the `OPENOBSERVE_*` env vars. If OpenObserve is unreachable, uploads continue normally — logging is fire-and-forget with a 1-second timeout. A summary event (`upload_complete`) includes `total_elapsed_ms`, `slowest_stage`, and counts for the full upload. See `docs/openobserve-upload-logging.md` for setup and query examples. A ready-to-use `docker-compose.openobserve.yml` is included.
+
+---
+
 ## v1.27.1 - 2026-04-21
 
 ### Bug Fixes
