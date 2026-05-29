@@ -159,7 +159,8 @@ def index():
             query
             .options(
                 joinedload(CompletedTrade.account),
-                joinedload(CompletedTrade.trade_annotation),
+                joinedload(CompletedTrade.trade_annotation)
+                    .joinedload(TradeAnnotation.setup_pattern_rel),
             )
             .offset((page - 1) * per_page)
             .limit(per_page)

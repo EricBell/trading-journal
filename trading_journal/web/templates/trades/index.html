@@ -11,6 +11,8 @@
   .select-mode tr[data-id].date-band-alt:hover td { background-color: #dde4eb !important; }
   /* Highlight selected rows */
   tr.row-selected td { background-color: #fff3cd !important; }
+  /* Left-border stripe on rows that have been annotated */
+  tr.trade-annotated { box-shadow: inset 3px 0 0 #0d6efd; }
 </style>
 {% endblock %}
 
@@ -112,11 +114,13 @@
         {% if ns.prev_date is not none %}{% set ns.band = 1 - ns.band %}{% endif %}
         {% set ns.prev_date = row_date %}
       {% endif %}
+      {% set _ann = t.trade_annotation %}
+      {% set _annotated = _ann and (_ann.setup_pattern_id or _ann.trade_notes or _ann.setup_source_id or _ann.atm_option_id or _ann.exit_reason or _ann.strategy_category or _ann.stop_price) %}
       <tr data-id="{{ t.completed_trade_id }}"
           data-href="{{ url_for('trades.detail', trade_id=t.completed_trade_id, sort=sort_col, dir=sort_dir, symbol=symbol, range=range_filter, account=account_filter) }}"
           onclick="rowClick(this)"
           style="cursor:pointer"
-          class="{% if ns.band == 1 %}date-band-alt{% endif %}">
+          class="{% if ns.band == 1 %}date-band-alt{% endif %}{% if _annotated %} trade-annotated{% endif %}">
         {# Row checkbox — hidden until select mode #}
         <td class="select-col d-none">
           <input type="checkbox" class="row-cb" value="{{ t.completed_trade_id }}"
@@ -159,7 +163,7 @@
         <td class="text-end fw-bold {% if t.net_pnl and t.net_pnl > 0 %}text-success{% elif t.net_pnl and t.net_pnl < 0 %}text-danger{% endif %}">
           ${{ "%.2f"|format(t.net_pnl|float) if t.net_pnl else '0.00' }}
         </td>
-        <td>{{ t.setup_pattern_rel.pattern_name if t.setup_pattern_rel else '' }}{% if t.trade_notes %} <span title="Has notes" style="color:#6ea8fe;font-size:.85em">✎</span>{% endif %}</td>
+        <td>{{ _ann.setup_pattern_rel.pattern_name if (_ann and _ann.setup_pattern_rel) else '' }}{% if _ann and _ann.trade_notes %} <span title="Has notes" style="color:#6ea8fe;font-size:.85em">✎</span>{% endif %}</td>
         {% if accounts %}<td class="text-muted small">{{ t.account.account_name if t.account else '—' }}</td>{% endif %}
       </tr>
       {% endfor %}
