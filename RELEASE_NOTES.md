@@ -1,6 +1,6 @@
-## v1.28.1 - 2026-05-29
+## v1.29.0 - 2026-05-29
 
-### Bug Fixes
+### Features
 - **Annotation indicator on trade rows (issue #12)** — trades list now shows a blue left-border stripe on any row with at least one annotation field filled in (pattern, notes, source, stop, ATM, exit reason, or strategy). Also fixes the previously broken Pattern column display (pattern name and ✎ notes icon were always blank due to accessing the wrong attribute on the model).
 
 ---
