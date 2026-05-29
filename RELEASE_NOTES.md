@@ -1,3 +1,10 @@
+## v1.28.0 - 2026-05-29
+
+### Features
+- **Managed ATM Engaged dropdown** — the "ATM Engaged" field on the trade annotation form is now a user-managed dropdown, matching the pattern of Setup Patterns and Setup Sources. Values can be added, renamed, and deactivated in Settings. Existing annotations with legacy hardcoded values (`not_used`, `entry_only`, `full_session`) are automatically migrated to named options. The dropdown supports inline "Add new option..." creation directly from the trade detail page.
+
+---
+
 ## v1.27.2 - 2026-05-22
 
 ### Features

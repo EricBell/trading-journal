@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Account, CompletedTrade, HgAnalysisResult, SetupPattern, SetupSource, Trade, TradeAnnotation
+from ...models import Account, AtmOption, CompletedTrade, HgAnalysisResult, SetupPattern, SetupSource, Trade, TradeAnnotation
 from ...positions import PositionTracker
 
 bp = Blueprint('trades', __name__)
@@ -285,6 +285,13 @@ def detail(trade_id: int):
             .all()
         )
 
+        atm_options = (
+            db_session.query(AtmOption)
+            .filter_by(user_id=user.user_id, is_active=True)
+            .order_by(AtmOption.option_name)
+            .all()
+        )
+
         # Load most recent HG analysis result for this trade (if any)
         hg_analysis = (
             db_session.query(HgAnalysisResult)
@@ -352,6 +359,7 @@ def detail(trade_id: int):
         executions=executions,
         patterns=patterns,
         sources=sources,
+        atm_options=atm_options,
         user=user,
         grail_record=grail_record,
         grail_candidates=grail_candidates,
@@ -552,7 +560,32 @@ def annotate(trade_id: int):
 
         ann.trade_notes = request.form.get('trade_notes', '').strip() or None
 
-        ann.atm_engaged = request.form.get('atm_engaged', '').strip() or None
+        # Resolve atm_option_id
+        atm_id_raw = request.form.get('atm_option_id', '').strip()
+        if atm_id_raw == '__new__':
+            new_name = request.form.get('new_atm_option_name', '').strip()
+            if new_name:
+                existing = session.query(AtmOption).filter(
+                    AtmOption.user_id == user.user_id,
+                    sa_func.lower(AtmOption.option_name) == new_name.lower()
+                ).first()
+                if existing:
+                    ann.atm_option_id = existing.option_id
+                else:
+                    new_opt = AtmOption(user_id=user.user_id, option_name=new_name, is_active=True)
+                    session.add(new_opt)
+                    session.flush()
+                    ann.atm_option_id = new_opt.option_id
+            else:
+                ann.atm_option_id = None
+        elif atm_id_raw:
+            try:
+                ann.atm_option_id = int(atm_id_raw)
+            except ValueError:
+                ann.atm_option_id = None
+        else:
+            ann.atm_option_id = None
+
         ann.exit_reason = request.form.get('exit_reason', '').strip() or None
 
         underlying_raw = request.form.get('underlying_at_entry', '').strip()

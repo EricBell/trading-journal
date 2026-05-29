@@ -6,7 +6,7 @@ from sqlalchemy import func
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import TradeAnnotation, SetupPattern, SetupSource
+from ...models import AtmOption, TradeAnnotation, SetupPattern, SetupSource
 
 bp = Blueprint('settings', __name__, url_prefix='/settings')
 
@@ -50,11 +50,29 @@ def index():
             .all()
         )
 
+        # ATM options with trade counts
+        atm_rows = (
+            db_session.query(
+                AtmOption,
+                func.count(TradeAnnotation.annotation_id).label('trade_count')
+            )
+            .outerjoin(
+                TradeAnnotation,
+                (TradeAnnotation.atm_option_id == AtmOption.option_id) &
+                (TradeAnnotation.user_id == user.user_id)
+            )
+            .filter(AtmOption.user_id == user.user_id)
+            .group_by(AtmOption.option_id)
+            .order_by(AtmOption.option_name)
+            .all()
+        )
+
     return render_template(
         'settings/index.html',
         user=user,
         pattern_rows=pattern_rows,
         source_rows=source_rows,
+        atm_rows=atm_rows,
     )
 
 
@@ -275,5 +293,111 @@ def deactivate_source(source_id: int):
         source.is_active = False
         db_session.commit()
         flash(f'Source "{source.source_name}" deactivated.', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/atm-options', methods=['POST'])
+@login_required
+def create_atm_option():
+    user = AuthContext.require_user()
+    name = request.form.get('option_name', '').strip()
+    if not name:
+        flash('ATM option name cannot be empty.', 'danger')
+        return redirect(url_for('settings.index'))
+
+    with db_manager.get_session() as db_session:
+        existing = (
+            db_session.query(AtmOption)
+            .filter(
+                AtmOption.user_id == user.user_id,
+                func.lower(AtmOption.option_name) == name.lower()
+            )
+            .first()
+        )
+        if existing:
+            flash(f'ATM option "{name}" already exists.', 'warning')
+            return redirect(url_for('settings.index'))
+
+        option = AtmOption(user_id=user.user_id, option_name=name, is_active=True)
+        db_session.add(option)
+        db_session.commit()
+        flash(f'ATM option "{name}" created.', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/atm-options/<int:option_id>/edit', methods=['POST'])
+@login_required
+def edit_atm_option(option_id: int):
+    user = AuthContext.require_user()
+    new_name = request.form.get('option_name', '').strip()
+    if not new_name:
+        flash('ATM option name cannot be empty.', 'danger')
+        return redirect(url_for('settings.index'))
+
+    with db_manager.get_session() as db_session:
+        option = (
+            db_session.query(AtmOption)
+            .filter_by(option_id=option_id, user_id=user.user_id)
+            .one_or_none()
+        )
+        if option is None:
+            flash('ATM option not found.', 'warning')
+            return redirect(url_for('settings.index'))
+
+        duplicate = (
+            db_session.query(AtmOption)
+            .filter(
+                AtmOption.user_id == user.user_id,
+                func.lower(AtmOption.option_name) == new_name.lower(),
+                AtmOption.option_id != option_id
+            )
+            .first()
+        )
+        if duplicate:
+            flash(f'ATM option "{new_name}" already exists.', 'warning')
+            return redirect(url_for('settings.index'))
+
+        old_name = option.option_name
+        option.option_name = new_name
+        db_session.commit()
+        flash(f'ATM option "{old_name}" renamed to "{new_name}".', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/atm-options/<int:option_id>/deactivate', methods=['POST'])
+@login_required
+def deactivate_atm_option(option_id: int):
+    user = AuthContext.require_user()
+    with db_manager.get_session() as db_session:
+        option = (
+            db_session.query(AtmOption)
+            .filter_by(option_id=option_id, user_id=user.user_id)
+            .one_or_none()
+        )
+        if option is None:
+            flash('ATM option not found.', 'warning')
+            return redirect(url_for('settings.index'))
+
+        trade_count = (
+            db_session.query(func.count(TradeAnnotation.annotation_id))
+            .filter(
+                TradeAnnotation.user_id == user.user_id,
+                TradeAnnotation.atm_option_id == option_id
+            )
+            .scalar() or 0
+        )
+        if trade_count > 0:
+            flash(
+                f'Cannot deactivate "{option.option_name}": {trade_count} trade(s) use this option.',
+                'warning'
+            )
+            return redirect(url_for('settings.index'))
+
+        option.is_active = False
+        db_session.commit()
+        flash(f'ATM option "{option.option_name}" deactivated.', 'success')
 
     return redirect(url_for('settings.index'))

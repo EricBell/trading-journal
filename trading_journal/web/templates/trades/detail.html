@@ -252,12 +252,20 @@
 
           <div class="mb-3">
             <label class="form-label">ATM Engaged</label>
-            <select name="atm_engaged" class="form-select">
+            <select name="atm_option_id" class="form-select" id="atmSelect">
               <option value="">— not recorded —</option>
-              <option value="not_used" {% if annotation and annotation.atm_engaged == 'not_used' %}selected{% endif %}>Not used (manual trade)</option>
-              <option value="entry_only" {% if annotation and annotation.atm_engaged == 'entry_only' %}selected{% endif %}>Entry signal only</option>
-              <option value="full_session" {% if annotation and annotation.atm_engaged == 'full_session' %}selected{% endif %}>Full session</option>
+              {% for opt in atm_options %}
+              <option value="{{ opt.option_id }}"
+                {% if annotation and annotation.atm_option_id == opt.option_id %}selected{% endif %}>
+                {{ opt.option_name }}
+              </option>
+              {% endfor %}
+              <option value="__new__">+ Add new option...</option>
             </select>
+            <div id="newAtmInput" style="display:none" class="mt-2">
+              <input type="text" name="new_atm_option_name" class="form-control form-control-sm"
+                     placeholder="New ATM option name">
+            </div>
           </div>
 
           <div class="mb-3">
@@ -553,7 +561,7 @@ const tradeData = {
     setup_source: {% set ns2 = namespace(sname=none) %}{% for s in sources %}{% if s.source_id == annotation.setup_source_id %}{% set ns2.sname = s.source_name %}{% endif %}{% endfor %}{{ ns2.sname | tojson }},
     notes: {{ (annotation.trade_notes if annotation.trade_notes else none) | tojson }},
     stop_price: {{ (annotation.stop_price | float if annotation.stop_price else none) | tojson }},
-    atm_engaged: {{ (annotation.atm_engaged if annotation.atm_engaged else none) | tojson }},
+    atm_engaged: {% set ns3 = namespace(aname=none) %}{% for a in atm_options %}{% if a.option_id == annotation.atm_option_id %}{% set ns3.aname = a.option_name %}{% endif %}{% endfor %}{{ ns3.aname | tojson }},
     exit_reason: {{ (annotation.exit_reason if annotation.exit_reason else none) | tojson }},
     underlying_at_entry: {{ (annotation.underlying_at_entry | float if annotation.underlying_at_entry else none) | tojson }}
   }{% else %}null{% endif %}
@@ -586,6 +594,15 @@ const newSourceInput = document.getElementById('newSourceInput');
 if (sourceSelect) {
   sourceSelect.addEventListener('change', function() {
     newSourceInput.style.display = this.value === '__new__' ? 'block' : 'none';
+  });
+}
+
+// Show/hide new ATM option input when "__new__" is selected
+const atmSelect = document.getElementById('atmSelect');
+const newAtmInput = document.getElementById('newAtmInput');
+if (atmSelect) {
+  atmSelect.addEventListener('change', function() {
+    newAtmInput.style.display = this.value === '__new__' ? 'block' : 'none';
   });
 }
 </script>

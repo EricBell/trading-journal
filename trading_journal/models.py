@@ -84,6 +84,7 @@ class User(Base):
     accounts = relationship("Account", back_populates="user")
     setup_patterns = relationship("SetupPattern", back_populates="user")
     setup_sources = relationship("SetupSource", back_populates="user")
+    atm_options = relationship("AtmOption", back_populates="user")
     processing_logs = relationship("ProcessingLog", back_populates="user")
     trade_annotations = relationship("TradeAnnotation", back_populates="user")
     journal_notes = relationship("JournalNote", back_populates="user", order_by="JournalNote.created_at.desc()")
@@ -288,7 +289,8 @@ class TradeAnnotation(Base):
     stop_price = Column(Numeric(18, 8), nullable=True)
     trade_notes = Column(Text, nullable=True)
     strategy_category = Column(String(30), nullable=True)
-    atm_engaged = Column(String(20), nullable=True)
+    atm_engaged = Column(String(20), nullable=True)  # legacy; superseded by atm_option_id
+    atm_option_id = Column(BigInteger, ForeignKey("atm_options.option_id", ondelete="SET NULL"), nullable=True)
     exit_reason = Column(String(30), nullable=True)
     underlying_at_entry = Column(Numeric(18, 8), nullable=True)
 
@@ -304,6 +306,7 @@ class TradeAnnotation(Base):
     user = relationship("User", back_populates="trade_annotations")
     setup_pattern_rel = relationship("SetupPattern", foreign_keys=[setup_pattern_id])
     setup_source_rel = relationship("SetupSource", foreign_keys=[setup_source_id])
+    atm_option_rel = relationship("AtmOption", foreign_keys=[atm_option_id])
 
     __table_args__ = (
         UniqueConstraint("user_id", "symbol", "opened_at", name="uq_annotation_per_trade"),
@@ -375,6 +378,21 @@ class SetupPattern(Base):
     user = relationship("User", back_populates="setup_patterns")
 
     # Unique index (case-insensitive) is managed by Alembic: uq_pattern_per_user
+
+
+class AtmOption(Base):
+    """ATM Engaged dropdown options (user-managed)."""
+
+    __tablename__ = "atm_options"
+
+    option_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+    option_name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="atm_options")
 
 
 class ProcessingLog(Base):
