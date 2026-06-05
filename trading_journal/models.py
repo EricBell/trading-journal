@@ -91,6 +91,9 @@ class User(Base):
     hg_market_data_requests = relationship("HgMarketDataRequest", back_populates="user")
     hg_analysis_results = relationship("HgAnalysisResult", back_populates="user")
     grail_plan_analyses = relationship("GrailPlanAnalysis", back_populates="user")
+    backtest_strategy_types = relationship("BacktestStrategyType", back_populates="user")
+    backtest_underlyings = relationship("BacktestUnderlying", back_populates="user")
+    backtest_runs = relationship("BacktestRun", back_populates="user")
 
     # Constraints
     __table_args__ = (
@@ -677,3 +680,110 @@ class GrailPlanAnalysis(Base):
     )
 
     user = relationship("User", back_populates="grail_plan_analyses")
+
+
+class BacktestStrategyType(Base):
+    """User-managed dropdown: spread strategy types for backtest runs."""
+
+    __tablename__ = "backtest_strategy_types"
+
+    strategy_type_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+    strategy_name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="backtest_strategy_types")
+    runs = relationship("BacktestRun", back_populates="strategy_type_rel")
+
+    # Case-insensitive unique index managed by migration: uq_backtest_strategy_type_per_user
+
+
+class BacktestUnderlying(Base):
+    """User-managed dropdown: underlying instruments for backtest runs."""
+
+    __tablename__ = "backtest_underlyings"
+
+    underlying_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+    underlying_name = Column(String(50), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="backtest_underlyings")
+    runs = relationship("BacktestRun", back_populates="underlying_rel")
+
+    # Case-insensitive unique index managed by migration: uq_backtest_underlying_per_user
+
+
+class BacktestRun(Base):
+    """One row per backtest experiment: parameter combination + aggregate results."""
+
+    __tablename__ = "backtest_runs"
+
+    run_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+
+    # Strategy parameters — managed dropdowns
+    strategy_type_id = Column(BigInteger, ForeignKey("backtest_strategy_types.strategy_type_id"), nullable=True)
+    underlying_id = Column(BigInteger, ForeignKey("backtest_underlyings.underlying_id"), nullable=True)
+
+    # Entry parameters
+    entry_time = Column(String(10), nullable=True)           # e.g. "09:30"
+    entry_style = Column(String(20), nullable=False, default="simultaneous")  # simultaneous | staged
+    spread_width_pts = Column(Integer, nullable=True)
+    dte_at_entry = Column(Integer, nullable=True)
+    strike_selection = Column(String(200), nullable=True)    # free text: "ATM", "-0.20 delta"
+    profit_target_pct = Column(Numeric(5, 2), nullable=True)
+    stop_loss_rule = Column(String(200), nullable=True)      # free text: "2× debit"
+    date_range_start = Column(Date, nullable=True)
+    date_range_end = Column(Date, nullable=True)
+    backtest_tool = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="draft")  # draft | complete
+
+    # Aggregate results (all nullable — can be filled after creation)
+    trade_count = Column(Integer, nullable=True)
+    win_rate_pct = Column(Numeric(5, 2), nullable=True)
+    avg_pnl_per_trade = Column(Numeric(12, 2), nullable=True)
+    total_pnl = Column(Numeric(12, 2), nullable=True)
+    avg_win = Column(Numeric(12, 2), nullable=True)
+    avg_loss = Column(Numeric(12, 2), nullable=True)
+    profit_factor = Column(Numeric(8, 4), nullable=True)
+    max_win = Column(Numeric(12, 2), nullable=True)
+    max_loss = Column(Numeric(12, 2), nullable=True)
+    max_drawdown = Column(Numeric(12, 2), nullable=True)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="backtest_runs")
+    strategy_type_rel = relationship("BacktestStrategyType", back_populates="runs")
+    underlying_rel = relationship("BacktestUnderlying", back_populates="runs")
+    leg_rules = relationship("BacktestLegRule", back_populates="run", order_by="BacktestLegRule.sort_order", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint("entry_style IN ('simultaneous', 'staged')", name="chk_backtest_run_entry_style"),
+        CheckConstraint("status IN ('draft', 'complete')", name="chk_backtest_run_status"),
+    )
+
+
+class BacktestLegRule(Base):
+    """A single leg-management rule within a backtest run (e.g. close long legs at $0.05)."""
+
+    __tablename__ = "backtest_leg_rules"
+
+    rule_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    run_id = Column(BigInteger, ForeignKey("backtest_runs.run_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+    leg_target = Column(String(100), nullable=False)         # e.g. "long legs", "put spread"
+    trigger_condition = Column(String(200), nullable=False)  # e.g. "premium ≤ $0.05"
+    action = Column(String(100), nullable=False)             # e.g. "close", "roll"
+    sort_order = Column(Integer, nullable=False, default=0)
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    run = relationship("BacktestRun", back_populates="leg_rules")
+    user = relationship("User")

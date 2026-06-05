@@ -1,3 +1,10 @@
+## v1.30.0 - 2026-06-04
+
+### Features
+- **Backtest Results Tracker — DB schema (issue #13)** — adds four new tables: `backtest_strategy_types` (user-managed dropdown for spread strategy names), `backtest_underlyings` (user-managed dropdown for underlying instruments), `backtest_runs` (one row per backtest experiment with full parameter set + aggregate results, `entry_style` enum, and `status` draft/complete), and `backtest_leg_rules` (child table for structured per-leg early-exit rules such as "close long legs when premium ≤ $0.05"). Migration: `2026_06_04_backtest_runs`.
+
+---
+
 ## v1.29.0 - 2026-05-29
 
 ### Features
