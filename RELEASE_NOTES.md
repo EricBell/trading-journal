@@ -1,3 +1,10 @@
+## v1.31.0 - 2026-06-04
+
+### Features
+- **Backtest list page (issue #14)** — `/backtest` route with filter bar (strategy, underlying, entry time, spread width), sortable columns (strategy, underlying, entry time, width, DTE, trade count, win rate, profit factor, avg P&L, total P&L, date range), summary stat cards (best win rate, best profit factor, avg win rate across filtered runs), status badges (draft/complete), pagination with per-page persisted to session, and a "New Run" button. **Backtest** nav link added between Journal and Tools.
+
+---
+
 ## v1.30.0 - 2026-06-04
 
 ### Features
