@@ -1,6 +1,6 @@
 # Trading Journal — System Overview
 
-**Version:** 1.29.0
+**Version:** 1.33.0
 **Last Updated:** 2026-06-04
 **Status:** Production (Phase 4 complete)
 
@@ -143,6 +143,10 @@ restores them exactly.
 | `hg_analysis_results` | Versioned evaluation results per HG plan: entry touch type, TP1/TP2 reached, MFE/MAE, bars-to-entry, linked-trade comparison | (hg_market_data_request_id, analysis_version) UNIQUE |
 | `grail_plan_analyses` | Plan-centric zone-based analysis results from Grail Plan Browser: entry/stop/TP1 zone touch, outcome, fetch metadata, bars_expected | (grail_plan_id, analysis_version) effectively UNIQUE per user; user_id FK |
 | `journal_notes` | Free-form trader notes (not trade-linked): title, body (markdown), timestamps | note_id PK; user_id FK |
+| `backtest_strategy_types` | User-managed dropdown: spread strategy names for backtest runs | case-insensitive UNIQUE per user; is_active soft-delete |
+| `backtest_underlyings` | User-managed dropdown: underlying instruments for backtest runs | case-insensitive UNIQUE per user; is_active soft-delete |
+| `backtest_runs` | One row per backtest experiment: parameter set (strategy, underlying, entry time, entry style, width, DTE, strike selection, profit target, stop rule, date range, tool) + aggregate results (trade count, win rate, avg/total P&L, avg win/loss, profit factor, max win/loss/drawdown) + status (draft/complete) | run_id PK; user_id FK; entry_style CHECK (simultaneous\|staged) |
+| `backtest_leg_rules` | Structured per-leg early-exit rules within a backtest run (e.g. "close long legs when premium ≤ $0.05") | run_id FK ON DELETE CASCADE; (leg_target, trigger_condition, action, sort_order) |
 
 ### Why `trade_annotations` is a separate table
 
@@ -362,7 +366,9 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
 | Admin: export | `/admin/export` | Export all manually entered data as JSON (format v3.0): trade annotations (grouped by account) + journal notes. Per-user selection. Natural keys documented in `export_metadata.schema` for re-import. Admin-only. |
 | Journal | `/journal` | Timestamped free-form notes (EasyMDE markdown editor, title optional). List shows newest first with snippet. Not trade-linked. Included in export. |
 | About | `/about` | Release notes parsed from RELEASE_NOTES.md; Bootstrap accordion; current release badged |
-| Settings | `/settings` | User preferences; manages setup patterns, signal sources, and ATM Engaged options (create, edit, deactivate — each showing trade count) |
+| Backtest runs | `/backtest` | List with filter bar (strategy, underlying, entry time, spread width), sortable columns, summary stat cards (best win rate, best profit factor, avg win rate across filtered runs), status badges, pagination. |
+| Backtest detail | `/backtest/new`, `/backtest/<id>` | Create/edit form: Parameters section (strategy, underlying, entry style, entry time, width, DTE, strike selection, profit target, stop rule, date range, tool, status), Leg Management Rules inline CRUD (add/edit/delete per-leg early-exit rules), Results section (10 aggregate fields), EasyMDE notes. Inline "Add new…" for strategy type and underlying. Defaults seeded on first use. |
+| Settings | `/settings` | User preferences; manages setup patterns, signal sources, ATM Engaged options, backtest strategy types, and backtest underlyings (create, edit, deactivate — each showing use count) |
 | JSON API | `/api/dashboard`, `/api/trades` | For external tooling; dashboard endpoint accepts `?account=` filter |
 
 ### CLI
@@ -518,12 +524,13 @@ trading_journal/
         ├── admin.py        /admin/users, /admin/market-data, /admin/market-data/hg-analysis, /admin/market-data/hg-batch, /admin/grail-plans, /admin/export
         ├── journal.py      /journal — list, create, detail/edit, delete
         ├── about.py        /about (release notes)
-        ├── settings.py     /settings
+        ├── settings.py     /settings (patterns, sources, ATM options, backtest strategy types, backtest underlyings)
+        ├── backtest.py     /backtest — list, new, detail/edit, delete, leg-rules CRUD
         └── api.py          /api/*
 
 main.py                     Click CLI entry point
 wsgi.py                     gunicorn entry point; calls load_dotenv() so .env vars reach os.environ
-alembic/versions/           Migration history (latest: 2026_05_29_atm_options — adds atm_options table and atm_option_id FK on trade_annotations; migrates legacy atm_engaged strings)
+alembic/versions/           Migration history (latest: 2026_06_04_backtest_runs — adds backtest_strategy_types, backtest_underlyings, backtest_runs, backtest_leg_rules tables)
 docs/vertical-put-debit-spread.md  Spread support design doc and worked example
 docs/openobserve-upload-logging.md  Upload perf logging setup: env vars, event reference, query examples
 docker-compose.openobserve.yml  Dev-only OpenObserve container for upload performance diagnosis

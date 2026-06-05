@@ -1,3 +1,10 @@
+## v1.33.1 - 2026-06-04
+
+### Docs
+- **Backtest tracker docs + wiring complete (issue #17)** — `docs/OVERVIEW.md` updated: four new tables added to §4 schema table, backtest list and detail routes added to §7 feature inventory, `backtest.py` and updated `settings.py` added to §11 file map, migration pointer updated, version header bumped. Blueprint and nav link were wired in issues #14–#16.
+
+---
+
 ## v1.33.0 - 2026-06-04
 
 ### Features
