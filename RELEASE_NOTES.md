@@ -1,3 +1,10 @@
+## v1.32.0 - 2026-06-04
+
+### Features
+- **Backtest create/edit/delete (issue #15)** — `/backtest/new` and `/backtest/<id>` with full two-section form (Parameters + Results), EasyMDE notes editor, inline "Add new…" for strategy type and underlying (auto-seeds defaults on first use), entry style enum selector, status (draft/complete). Leg Management Rules section on the detail page: inline add form, per-row edit (expand-in-place) and delete. Delete run with modal confirmation. Dirty-state tracking disables Save until a field is changed.
+
+---
+
 ## v1.31.0 - 2026-06-04
 
 ### Features

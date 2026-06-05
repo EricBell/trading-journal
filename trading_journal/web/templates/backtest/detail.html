@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+{% block title %}{% if run %}Backtest #{{ run.run_id }}{% else %}New Backtest Run{% endif %} — Trading Journal{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+<style>
+  .section-header {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #6c757d;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: .25rem;
+    margin-bottom: 1rem;
+  }
+  .rule-row td { vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <a href="{{ url_for('backtest.index') }}" class="btn btn-sm btn-outline-secondary">&larr; Backtest Runs</a>
+  <div class="d-flex gap-2 align-items-center">
+    {% if run %}
+    <span class="text-muted small">
+      Created {{ run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else '' }}
+      {% if run.updated_at and run.updated_at != run.created_at %}
+      · Updated {{ run.updated_at.strftime('%Y-%m-%d %H:%M') }}
+      {% endif %}
+    </span>
+    <button type="button" class="btn btn-sm btn-outline-danger"
+            data-bs-toggle="modal" data-bs-target="#deleteModal">Delete</button>
+    {% endif %}
+  </div>
+</div>
+
+{% if run %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Backtest Run #{{ run.run_id }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Delete this backtest run and all its leg rules? This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="post" action="{{ url_for('backtest.delete', run_id=run.run_id) }}">
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<form method="post"
+      action="{{ url_for('backtest.detail', run_id=run.run_id) if run else url_for('backtest.new') }}">
+
+  {# ── Parameters ─────────────────────────────────────────────────────── #}
+  <div class="section-header mt-2">Parameters</div>
+  <div class="row g-3 mb-4">
+
+    {# Strategy type #}
+    <div class="col-md-4">
+      <label class="form-label small fw-semibold">Strategy</label>
+      <select id="strategySelect" name="strategy_type_id" class="form-select form-select-sm">
+        <option value="">— none —</option>
+        {% for s in strategy_types %}
+        <option value="{{ s.strategy_type_id }}"
+          {% if run and run.strategy_type_id == s.strategy_type_id %}selected{% endif %}>
+          {{ s.strategy_name }}
+        </option>
+        {% endfor %}
+        <option value="__new__">+ Add new…</option>
+      </select>
+      <input type="text" id="newStrategyInput" name="new_strategy_name"
+             class="form-control form-control-sm mt-1" placeholder="New strategy name"
+             style="display:none">
+    </div>
+
+    {# Underlying #}
+    <div class="col-md-3">
+      <label class="form-label small fw-semibold">Underlying</label>
+      <select id="underlyingSelect" name="underlying_id" class="form-select form-select-sm">
+        <option value="">— none —</option>
+        {% for u in underlyings %}
+        <option value="{{ u.underlying_id }}"
+          {% if run and run.underlying_id == u.underlying_id %}selected{% endif %}>
+          {{ u.underlying_name }}
+        </option>
+        {% endfor %}
+        <option value="__new__">+ Add new…</option>
+      </select>
+      <input type="text" id="newUnderlyingInput" name="new_underlying_name"
+             class="form-control form-control-sm mt-1" placeholder="New underlying name"
+             style="display:none">
+    </div>
+
+    {# Entry style #}
+    <div class="col-md-3">
+      <label class="form-label small fw-semibold">Entry Style</label>
+      <select name="entry_style" class="form-select form-select-sm">
+        <option value="simultaneous" {% if not run or run.entry_style == 'simultaneous' %}selected{% endif %}>Simultaneous</option>
+        <option value="staged" {% if run and run.entry_style == 'staged' %}selected{% endif %}>Staged</option>
+      </select>
+    </div>
+
+    {# Entry time #}
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Entry Time</label>
+      <input type="text" name="entry_time" class="form-control form-control-sm"
+             placeholder="e.g. 09:30"
+             value="{{ run.entry_time or '' if run else '' }}">
+    </div>
+
+    {# Spread width #}
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Spread Width (pts)</label>
+      <input type="number" name="spread_width_pts" class="form-control form-control-sm"
+             value="{{ run.spread_width_pts if run and run.spread_width_pts is not none else '' }}">
+    </div>
+
+    {# DTE #}
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">DTE at Entry</label>
+      <input type="number" name="dte_at_entry" class="form-control form-control-sm"
+             value="{{ run.dte_at_entry if run and run.dte_at_entry is not none else '' }}">
+    </div>
+
+    {# Strike selection #}
+    <div class="col-md-4">
+      <label class="form-label small fw-semibold">Strike Selection</label>
+      <input type="text" name="strike_selection" class="form-control form-control-sm"
+             placeholder="e.g. ATM, -0.20 delta"
+             value="{{ run.strike_selection or '' if run else '' }}">
+    </div>
+
+    {# Profit target % #}
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Profit Target %</label>
+      <input type="number" step="0.01" name="profit_target_pct" class="form-control form-control-sm"
+             value="{{ run.profit_target_pct if run and run.profit_target_pct is not none else '' }}">
+    </div>
+
+    {# Stop loss rule #}
+    <div class="col-md-4">
+      <label class="form-label small fw-semibold">Stop Loss Rule</label>
+      <input type="text" name="stop_loss_rule" class="form-control form-control-sm"
+             placeholder="e.g. 2× debit, 100% loss of premium"
+             value="{{ run.stop_loss_rule or '' if run else '' }}">
+    </div>
+
+    {# Date range #}
+    <div class="col-md-3">
+      <label class="form-label small fw-semibold">Date Range Start</label>
+      <input type="date" name="date_range_start" class="form-control form-control-sm"
+             value="{{ run.date_range_start.strftime('%Y-%m-%d') if run and run.date_range_start else '' }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small fw-semibold">Date Range End</label>
+      <input type="date" name="date_range_end" class="form-control form-control-sm"
+             value="{{ run.date_range_end.strftime('%Y-%m-%d') if run and run.date_range_end else '' }}">
+    </div>
+
+    {# Tool #}
+    <div class="col-md-4">
+      <label class="form-label small fw-semibold">Backtest Tool</label>
+      <input type="text" name="backtest_tool" class="form-control form-control-sm"
+             placeholder="e.g. ThinkorSwim OnDemand"
+             value="{{ run.backtest_tool or '' if run else '' }}">
+    </div>
+
+    {# Status #}
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Status</label>
+      <select name="status" class="form-select form-select-sm">
+        <option value="draft" {% if not run or run.status == 'draft' %}selected{% endif %}>Draft</option>
+        <option value="complete" {% if run and run.status == 'complete' %}selected{% endif %}>Complete</option>
+      </select>
+    </div>
+
+  </div>{# /Parameters row #}
+
+  {# ── Leg Management Rules ───────────────────────────────────────────── #}
+  <div class="section-header">Leg Management Rules</div>
+
+  {% if run %}
+  <div class="mb-3">
+    {% if leg_rules %}
+    <table class="table table-sm align-middle mb-2" id="leg-rules-table">
+      <thead class="table-light">
+        <tr>
+          <th>Leg Target</th>
+          <th>Trigger Condition</th>
+          <th>Action</th>
+          <th style="width:7rem"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rule in leg_rules %}
+        <tr class="rule-row" id="rule-row-{{ rule.rule_id }}">
+          <td id="leg-target-{{ rule.rule_id }}">{{ rule.leg_target }}</td>
+          <td id="trigger-{{ rule.rule_id }}">{{ rule.trigger_condition }}</td>
+          <td id="action-{{ rule.rule_id }}">{{ rule.action }}</td>
+          <td class="text-end">
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    onclick="toggleEditRule({{ rule.rule_id }})">Edit</button>
+            <form method="post" class="d-inline"
+                  action="{{ url_for('backtest.delete_leg_rule', run_id=run.run_id, rule_id=rule.rule_id) }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger"
+                      onclick="return confirm('Delete this rule?')">✕</button>
+            </form>
+          </td>
+        </tr>
+        <tr class="rule-edit-row d-none" id="rule-edit-{{ rule.rule_id }}">
+          <td colspan="4">
+            <form method="post"
+                  action="{{ url_for('backtest.edit_leg_rule', run_id=run.run_id, rule_id=rule.rule_id) }}"
+                  class="row g-2 align-items-end py-1">
+              <div class="col-md-3">
+                <input type="text" name="leg_target" class="form-control form-control-sm"
+                       value="{{ rule.leg_target }}" placeholder="Leg target" required>
+              </div>
+              <div class="col-md-4">
+                <input type="text" name="trigger_condition" class="form-control form-control-sm"
+                       value="{{ rule.trigger_condition }}" placeholder="Trigger condition" required>
+              </div>
+              <div class="col-md-3">
+                <input type="text" name="action" class="form-control form-control-sm"
+                       value="{{ rule.action }}" placeholder="Action" required>
+              </div>
+              <div class="col-auto d-flex gap-1">
+                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        onclick="toggleEditRule({{ rule.rule_id }})">Cancel</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted small mb-2">No leg rules yet.</p>
+    {% endif %}
+
+    {# Add rule form #}
+    <form method="post"
+          action="{{ url_for('backtest.add_leg_rule', run_id=run.run_id) }}"
+          class="row g-2 align-items-end border-top pt-2">
+      <div class="col-md-3">
+        <label class="form-label small mb-1">Leg Target</label>
+        <input type="text" name="leg_target" class="form-control form-control-sm"
+               placeholder="e.g. long legs, short legs" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small mb-1">Trigger Condition</label>
+        <input type="text" name="trigger_condition" class="form-control form-control-sm"
+               placeholder="e.g. premium ≤ $0.05" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-1">Action</label>
+        <input type="text" name="action" class="form-control form-control-sm"
+               placeholder="e.g. close, roll" required>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-outline-primary">Add Rule</button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <p class="text-muted small mb-3">Save the run first to add leg rules.</p>
+  {% endif %}
+
+  {# ── Results ────────────────────────────────────────────────────────── #}
+  <div class="section-header">Results</div>
+  <div class="row g-3 mb-4">
+
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold"># Trades</label>
+      <input type="number" name="trade_count" class="form-control form-control-sm"
+             value="{{ run.trade_count if run and run.trade_count is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Win Rate %</label>
+      <input type="number" step="0.01" name="win_rate_pct" class="form-control form-control-sm"
+             value="{{ run.win_rate_pct if run and run.win_rate_pct is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Avg P&L / Trade</label>
+      <input type="number" step="0.01" name="avg_pnl_per_trade" class="form-control form-control-sm"
+             value="{{ run.avg_pnl_per_trade if run and run.avg_pnl_per_trade is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Total P&L</label>
+      <input type="number" step="0.01" name="total_pnl" class="form-control form-control-sm"
+             value="{{ run.total_pnl if run and run.total_pnl is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Avg Win</label>
+      <input type="number" step="0.01" name="avg_win" class="form-control form-control-sm"
+             value="{{ run.avg_win if run and run.avg_win is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Avg Loss</label>
+      <input type="number" step="0.01" name="avg_loss" class="form-control form-control-sm"
+             value="{{ run.avg_loss if run and run.avg_loss is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Profit Factor</label>
+      <input type="number" step="0.0001" name="profit_factor" class="form-control form-control-sm"
+             value="{{ run.profit_factor if run and run.profit_factor is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Max Win</label>
+      <input type="number" step="0.01" name="max_win" class="form-control form-control-sm"
+             value="{{ run.max_win if run and run.max_win is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Max Loss</label>
+      <input type="number" step="0.01" name="max_loss" class="form-control form-control-sm"
+             value="{{ run.max_loss if run and run.max_loss is not none else '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Max Drawdown</label>
+      <input type="number" step="0.01" name="max_drawdown" class="form-control form-control-sm"
+             value="{{ run.max_drawdown if run and run.max_drawdown is not none else '' }}">
+    </div>
+
+  </div>{# /Results row #}
+
+  {# ── Notes ──────────────────────────────────────────────────────────── #}
+  <div class="section-header">Notes</div>
+  <div class="mb-3">
+    <textarea id="run_notes" name="notes"
+              placeholder="Observations, market conditions, lessons learned…">{{ run.notes or '' if run else '' }}</textarea>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" id="saveBtn" class="btn btn-primary"
+            {% if run %}disabled{% endif %}>Save</button>
+    <a href="{{ url_for('backtest.index') }}" class="btn btn-outline-secondary">Cancel</a>
+  </div>
+
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<script>
+const easyMDE = new EasyMDE({
+  element: document.getElementById('run_notes'),
+  spellChecker: false,
+  autosave: { enabled: false },
+  toolbar: ['bold','italic','heading','|','unordered-list','ordered-list','|','link','code','|','preview','side-by-side','fullscreen'],
+  minHeight: '150px',
+});
+
+// Enable Save on any change
+const saveBtn = document.getElementById('saveBtn');
+function enableSave() { if (saveBtn) saveBtn.disabled = false; }
+
+document.querySelectorAll('select[name], input[type="text"][name], input[type="number"][name], input[type="date"][name]')
+  .forEach(el => el.addEventListener('change', enableSave));
+document.querySelectorAll('input[type="text"][name]')
+  .forEach(el => el.addEventListener('input', enableSave));
+easyMDE.codemirror.on('change', enableSave);
+
+{% if not run %}enableSave();{% endif %}
+
+// Show/hide inline "add new" inputs
+const strategySelect = document.getElementById('strategySelect');
+const newStrategyInput = document.getElementById('newStrategyInput');
+if (strategySelect) {
+  strategySelect.addEventListener('change', function() {
+    newStrategyInput.style.display = this.value === '__new__' ? 'block' : 'none';
+    enableSave();
+  });
+}
+
+const underlyingSelect = document.getElementById('underlyingSelect');
+const newUnderlyingInput = document.getElementById('newUnderlyingInput');
+if (underlyingSelect) {
+  underlyingSelect.addEventListener('change', function() {
+    newUnderlyingInput.style.display = this.value === '__new__' ? 'block' : 'none';
+    enableSave();
+  });
+}
+
+// Inline edit toggle for leg rules
+function toggleEditRule(ruleId) {
+  const display = document.getElementById('rule-row-' + ruleId);
+  const edit    = document.getElementById('rule-edit-' + ruleId);
+  if (!display || !edit) return;
+  const isEditing = !edit.classList.contains('d-none');
+  display.classList.toggle('d-none', !isEditing);
+  edit.classList.toggle('d-none', isEditing);
+}
+</script>
+{% endblock %}
