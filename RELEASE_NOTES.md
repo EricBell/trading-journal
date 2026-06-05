@@ -1,3 +1,10 @@
+## v1.33.0 - 2026-06-04
+
+### Features
+- **Backtest settings integration (issue #16)** — `/settings` now has two new management cards: **Backtest Strategy Types** and **Backtest Underlyings**. Each card shows all entries with run count, inline rename (Save), active/inactive badge, and Deactivate button (disabled when runs reference the entry). Six new routes under `/settings/backtest-strategy-types/` and `/settings/backtest-underlyings/`.
+
+---
+
 ## v1.32.0 - 2026-06-04
 
 ### Features
