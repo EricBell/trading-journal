@@ -1,3 +1,38 @@
+## v1.33.1 - 2026-06-04
+
+### Docs
+- **Backtest tracker docs + wiring complete (issue #17)** — `docs/OVERVIEW.md` updated: four new tables added to §4 schema table, backtest list and detail routes added to §7 feature inventory, `backtest.py` and updated `settings.py` added to §11 file map, migration pointer updated, version header bumped. Blueprint and nav link were wired in issues #14–#16.
+
+---
+
+## v1.33.0 - 2026-06-04
+
+### Features
+- **Backtest settings integration (issue #16)** — `/settings` now has two new management cards: **Backtest Strategy Types** and **Backtest Underlyings**. Each card shows all entries with run count, inline rename (Save), active/inactive badge, and Deactivate button (disabled when runs reference the entry). Six new routes under `/settings/backtest-strategy-types/` and `/settings/backtest-underlyings/`.
+
+---
+
+## v1.32.0 - 2026-06-04
+
+### Features
+- **Backtest create/edit/delete (issue #15)** — `/backtest/new` and `/backtest/<id>` with full two-section form (Parameters + Results), EasyMDE notes editor, inline "Add new…" for strategy type and underlying (auto-seeds defaults on first use), entry style enum selector, status (draft/complete). Leg Management Rules section on the detail page: inline add form, per-row edit (expand-in-place) and delete. Delete run with modal confirmation. Dirty-state tracking disables Save until a field is changed.
+
+---
+
+## v1.31.0 - 2026-06-04
+
+### Features
+- **Backtest list page (issue #14)** — `/backtest` route with filter bar (strategy, underlying, entry time, spread width), sortable columns (strategy, underlying, entry time, width, DTE, trade count, win rate, profit factor, avg P&L, total P&L, date range), summary stat cards (best win rate, best profit factor, avg win rate across filtered runs), status badges (draft/complete), pagination with per-page persisted to session, and a "New Run" button. **Backtest** nav link added between Journal and Tools.
+
+---
+
+## v1.30.0 - 2026-06-04
+
+### Features
+- **Backtest Results Tracker — DB schema (issue #13)** — adds four new tables: `backtest_strategy_types` (user-managed dropdown for spread strategy names), `backtest_underlyings` (user-managed dropdown for underlying instruments), `backtest_runs` (one row per backtest experiment with full parameter set + aggregate results, `entry_style` enum, and `status` draft/complete), and `backtest_leg_rules` (child table for structured per-leg early-exit rules such as "close long legs when premium ≤ $0.05"). Migration: `2026_06_04_backtest_runs`.
+
+---
+
 ## v1.29.0 - 2026-05-29
 
 ### Features

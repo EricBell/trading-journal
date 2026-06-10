@@ -6,7 +6,7 @@ from sqlalchemy import func
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import AtmOption, TradeAnnotation, SetupPattern, SetupSource
+from ...models import AtmOption, BacktestRun, BacktestStrategyType, BacktestUnderlying, TradeAnnotation, SetupPattern, SetupSource
 
 bp = Blueprint('settings', __name__, url_prefix='/settings')
 
@@ -67,12 +67,48 @@ def index():
             .all()
         )
 
+        # Backtest strategy types with run counts
+        bt_strategy_rows = (
+            db_session.query(
+                BacktestStrategyType,
+                func.count(BacktestRun.run_id).label('run_count')
+            )
+            .outerjoin(
+                BacktestRun,
+                (BacktestRun.strategy_type_id == BacktestStrategyType.strategy_type_id) &
+                (BacktestRun.user_id == user.user_id)
+            )
+            .filter(BacktestStrategyType.user_id == user.user_id)
+            .group_by(BacktestStrategyType.strategy_type_id)
+            .order_by(BacktestStrategyType.strategy_name)
+            .all()
+        )
+
+        # Backtest underlyings with run counts
+        bt_underlying_rows = (
+            db_session.query(
+                BacktestUnderlying,
+                func.count(BacktestRun.run_id).label('run_count')
+            )
+            .outerjoin(
+                BacktestRun,
+                (BacktestRun.underlying_id == BacktestUnderlying.underlying_id) &
+                (BacktestRun.user_id == user.user_id)
+            )
+            .filter(BacktestUnderlying.user_id == user.user_id)
+            .group_by(BacktestUnderlying.underlying_id)
+            .order_by(BacktestUnderlying.underlying_name)
+            .all()
+        )
+
     return render_template(
         'settings/index.html',
         user=user,
         pattern_rows=pattern_rows,
         source_rows=source_rows,
         atm_rows=atm_rows,
+        bt_strategy_rows=bt_strategy_rows,
+        bt_underlying_rows=bt_underlying_rows,
     )
 
 
@@ -399,5 +435,209 @@ def deactivate_atm_option(option_id: int):
         option.is_active = False
         db_session.commit()
         flash(f'ATM option "{option.option_name}" deactivated.', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+# ── Backtest Strategy Types ────────────────────────────────────────────────
+
+@bp.route('/backtest-strategy-types', methods=['POST'])
+@login_required
+def create_bt_strategy():
+    user = AuthContext.require_user()
+    name = request.form.get('strategy_name', '').strip()
+    if not name:
+        flash('Strategy name cannot be empty.', 'danger')
+        return redirect(url_for('settings.index'))
+
+    with db_manager.get_session() as db_session:
+        existing = (
+            db_session.query(BacktestStrategyType)
+            .filter(
+                BacktestStrategyType.user_id == user.user_id,
+                func.lower(BacktestStrategyType.strategy_name) == name.lower(),
+            )
+            .first()
+        )
+        if existing:
+            flash(f'Strategy "{name}" already exists.', 'warning')
+            return redirect(url_for('settings.index'))
+        db_session.add(BacktestStrategyType(user_id=user.user_id, strategy_name=name))
+        db_session.commit()
+        flash(f'Strategy "{name}" created.', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/backtest-strategy-types/<int:strategy_type_id>/edit', methods=['POST'])
+@login_required
+def edit_bt_strategy(strategy_type_id: int):
+    user = AuthContext.require_user()
+    new_name = request.form.get('strategy_name', '').strip()
+    if not new_name:
+        flash('Strategy name cannot be empty.', 'danger')
+        return redirect(url_for('settings.index'))
+
+    with db_manager.get_session() as db_session:
+        row = (
+            db_session.query(BacktestStrategyType)
+            .filter_by(strategy_type_id=strategy_type_id, user_id=user.user_id)
+            .one_or_none()
+        )
+        if row is None:
+            flash('Strategy not found.', 'warning')
+            return redirect(url_for('settings.index'))
+        duplicate = (
+            db_session.query(BacktestStrategyType)
+            .filter(
+                BacktestStrategyType.user_id == user.user_id,
+                func.lower(BacktestStrategyType.strategy_name) == new_name.lower(),
+                BacktestStrategyType.strategy_type_id != strategy_type_id,
+            )
+            .first()
+        )
+        if duplicate:
+            flash(f'Strategy "{new_name}" already exists.', 'warning')
+            return redirect(url_for('settings.index'))
+        old_name = row.strategy_name
+        row.strategy_name = new_name
+        db_session.commit()
+        flash(f'Strategy "{old_name}" renamed to "{new_name}".', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/backtest-strategy-types/<int:strategy_type_id>/deactivate', methods=['POST'])
+@login_required
+def deactivate_bt_strategy(strategy_type_id: int):
+    user = AuthContext.require_user()
+    with db_manager.get_session() as db_session:
+        row = (
+            db_session.query(BacktestStrategyType)
+            .filter_by(strategy_type_id=strategy_type_id, user_id=user.user_id)
+            .one_or_none()
+        )
+        if row is None:
+            flash('Strategy not found.', 'warning')
+            return redirect(url_for('settings.index'))
+        run_count = (
+            db_session.query(func.count(BacktestRun.run_id))
+            .filter(
+                BacktestRun.user_id == user.user_id,
+                BacktestRun.strategy_type_id == strategy_type_id,
+            )
+            .scalar() or 0
+        )
+        if run_count > 0:
+            flash(
+                f'Cannot deactivate "{row.strategy_name}": {run_count} run(s) use this strategy.',
+                'warning',
+            )
+            return redirect(url_for('settings.index'))
+        row.is_active = False
+        db_session.commit()
+        flash(f'Strategy "{row.strategy_name}" deactivated.', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+# ── Backtest Underlyings ───────────────────────────────────────────────────
+
+@bp.route('/backtest-underlyings', methods=['POST'])
+@login_required
+def create_bt_underlying():
+    user = AuthContext.require_user()
+    name = request.form.get('underlying_name', '').strip()
+    if not name:
+        flash('Underlying name cannot be empty.', 'danger')
+        return redirect(url_for('settings.index'))
+
+    with db_manager.get_session() as db_session:
+        existing = (
+            db_session.query(BacktestUnderlying)
+            .filter(
+                BacktestUnderlying.user_id == user.user_id,
+                func.lower(BacktestUnderlying.underlying_name) == name.lower(),
+            )
+            .first()
+        )
+        if existing:
+            flash(f'Underlying "{name}" already exists.', 'warning')
+            return redirect(url_for('settings.index'))
+        db_session.add(BacktestUnderlying(user_id=user.user_id, underlying_name=name))
+        db_session.commit()
+        flash(f'Underlying "{name}" created.', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/backtest-underlyings/<int:underlying_id>/edit', methods=['POST'])
+@login_required
+def edit_bt_underlying(underlying_id: int):
+    user = AuthContext.require_user()
+    new_name = request.form.get('underlying_name', '').strip()
+    if not new_name:
+        flash('Underlying name cannot be empty.', 'danger')
+        return redirect(url_for('settings.index'))
+
+    with db_manager.get_session() as db_session:
+        row = (
+            db_session.query(BacktestUnderlying)
+            .filter_by(underlying_id=underlying_id, user_id=user.user_id)
+            .one_or_none()
+        )
+        if row is None:
+            flash('Underlying not found.', 'warning')
+            return redirect(url_for('settings.index'))
+        duplicate = (
+            db_session.query(BacktestUnderlying)
+            .filter(
+                BacktestUnderlying.user_id == user.user_id,
+                func.lower(BacktestUnderlying.underlying_name) == new_name.lower(),
+                BacktestUnderlying.underlying_id != underlying_id,
+            )
+            .first()
+        )
+        if duplicate:
+            flash(f'Underlying "{new_name}" already exists.', 'warning')
+            return redirect(url_for('settings.index'))
+        old_name = row.underlying_name
+        row.underlying_name = new_name
+        db_session.commit()
+        flash(f'Underlying "{old_name}" renamed to "{new_name}".', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/backtest-underlyings/<int:underlying_id>/deactivate', methods=['POST'])
+@login_required
+def deactivate_bt_underlying(underlying_id: int):
+    user = AuthContext.require_user()
+    with db_manager.get_session() as db_session:
+        row = (
+            db_session.query(BacktestUnderlying)
+            .filter_by(underlying_id=underlying_id, user_id=user.user_id)
+            .one_or_none()
+        )
+        if row is None:
+            flash('Underlying not found.', 'warning')
+            return redirect(url_for('settings.index'))
+        run_count = (
+            db_session.query(func.count(BacktestRun.run_id))
+            .filter(
+                BacktestRun.user_id == user.user_id,
+                BacktestRun.underlying_id == underlying_id,
+            )
+            .scalar() or 0
+        )
+        if run_count > 0:
+            flash(
+                f'Cannot deactivate "{row.underlying_name}": {run_count} run(s) use this underlying.',
+                'warning',
+            )
+            return redirect(url_for('settings.index'))
+        row.is_active = False
+        db_session.commit()
+        flash(f'Underlying "{row.underlying_name}" deactivated.', 'success')
 
     return redirect(url_for('settings.index'))

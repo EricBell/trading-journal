@@ -133,6 +133,132 @@
     </div>
   </div>
 
+  <!-- Backtest Strategy Types panel -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold">Backtest Strategy Types</div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>Name</th>
+              <th class="text-end">Runs</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for st, run_count in bt_strategy_rows %}
+            <tr>
+              <td>
+                <form method="post"
+                      action="{{ url_for('settings.edit_bt_strategy', strategy_type_id=st.strategy_type_id) }}"
+                      class="d-flex gap-1">
+                  <input type="text" name="strategy_name" value="{{ st.strategy_name }}"
+                         class="form-control form-control-sm" style="min-width:120px">
+                  <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                </form>
+              </td>
+              <td class="text-end">{{ run_count }}</td>
+              <td>
+                {% if st.is_active %}
+                  <span class="badge bg-success">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if st.is_active %}
+                <form method="post"
+                      action="{{ url_for('settings.deactivate_bt_strategy', strategy_type_id=st.strategy_type_id) }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger"
+                          {% if run_count > 0 %}disabled title="{{ run_count }} run(s) use this strategy"{% endif %}>
+                    Deactivate
+                  </button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted py-3">No strategy types yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer">
+        <form method="post" action="{{ url_for('settings.create_bt_strategy') }}"
+              class="d-flex gap-2">
+          <input type="text" name="strategy_name" class="form-control form-control-sm"
+                 placeholder="New strategy name" required>
+          <button type="submit" class="btn btn-sm btn-primary text-nowrap">Add Strategy</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backtest Underlyings panel -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold">Backtest Underlyings</div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>Name</th>
+              <th class="text-end">Runs</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ul, run_count in bt_underlying_rows %}
+            <tr>
+              <td>
+                <form method="post"
+                      action="{{ url_for('settings.edit_bt_underlying', underlying_id=ul.underlying_id) }}"
+                      class="d-flex gap-1">
+                  <input type="text" name="underlying_name" value="{{ ul.underlying_name }}"
+                         class="form-control form-control-sm" style="min-width:120px">
+                  <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                </form>
+              </td>
+              <td class="text-end">{{ run_count }}</td>
+              <td>
+                {% if ul.is_active %}
+                  <span class="badge bg-success">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ul.is_active %}
+                <form method="post"
+                      action="{{ url_for('settings.deactivate_bt_underlying', underlying_id=ul.underlying_id) }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger"
+                          {% if run_count > 0 %}disabled title="{{ run_count }} run(s) use this underlying"{% endif %}>
+                    Deactivate
+                  </button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted py-3">No underlyings yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer">
+        <form method="post" action="{{ url_for('settings.create_bt_underlying') }}"
+              class="d-flex gap-2">
+          <input type="text" name="underlying_name" class="form-control form-control-sm"
+                 placeholder="New underlying name" required>
+          <button type="submit" class="btn btn-sm btn-primary text-nowrap">Add Underlying</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Setup Sources panel -->
   <div class="col-md-6">
     <div class="card">

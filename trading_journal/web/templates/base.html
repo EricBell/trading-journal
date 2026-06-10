@@ -35,6 +35,10 @@
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('journal.') %}active{% endif %}"
              href="{{ url_for('journal.index') }}">Journal</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('backtest.') %}active{% endif %}"
+             href="{{ url_for('backtest.index') }}">Backtest</a>
+        </li>
         {# Tools dropdown: Upload CSV, Settings, Admin #}
         {% set tools_active = request.endpoint and (
             request.endpoint.startswith('ingest.')

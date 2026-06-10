@@ -38,6 +38,7 @@ def create_app() -> Flask:
     from .routes.settings import bp as settings_bp
     from .routes.about import bp as about_bp
     from .routes.journal import bp as journal_bp
+    from .routes.backtest import bp as backtest_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -49,5 +50,6 @@ def create_app() -> Flask:
     app.register_blueprint(settings_bp)
     app.register_blueprint(about_bp)
     app.register_blueprint(journal_bp)
+    app.register_blueprint(backtest_bp)
 
     return app

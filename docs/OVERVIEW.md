@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.27.2
-**Last Updated:** 2026-05-22
+**Version:** 1.33.0
+**Last Updated:** 2026-06-04
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -132,16 +132,21 @@ restores them exactly.
 | `accounts` | Brokerage accounts per user | (user_id, account_number) UNIQUE |
 | `trades` | Individual fills (Tier 1) | (user_id, unique_key) UNIQUE; `spread_order_tag` groups legs of a multi-leg order |
 | `completed_trades` | Round-trip trades (Tier 2) | user_id FK; `spread_group_id` links to source spread order tags |
-| `trade_annotations` | Manual annotations (pattern, notes, stop, atm_engaged, exit_reason, underlying_at_entry) | (user_id, symbol, opened_at) UNIQUE |
+| `trade_annotations` | Manual annotations (pattern, notes, stop, atm_option_id, exit_reason, underlying_at_entry) | (user_id, symbol, opened_at) UNIQUE |
 | `positions` | Running position aggregate (Tier 3) | (user_id, symbol, instrument_type, option_details, account_id) UNIQUE |
 | `setup_patterns` | User-managed dropdown: pattern names | case-insensitive UNIQUE per user |
 | `setup_sources` | User-managed dropdown: signal sources | case-insensitive UNIQUE per user |
+| `atm_options` | User-managed dropdown: ATM Engaged options (replaces legacy free-text `atm_engaged` string) | case-insensitive UNIQUE per user |
 | `processing_log` | Ingest audit trail | (user_id, file_path, processing_started_at) UNIQUE |
 | `ohlcv_price_series` | 1-min and daily OHLCV bars fetched from Polygon.io; cached to avoid redundant API calls; includes `vwap` column | (symbol, timestamp, timeframe) UNIQUE |
 | `hg_market_data_requests` | Audit trail of bar-fetch operations tied to a grail plan: symbol, timeframe, fetch window, status, bar counts, window rule | (user_id, grail_plan_id, timeframe, fetch_start_at, fetch_end_at) UNIQUE |
 | `hg_analysis_results` | Versioned evaluation results per HG plan: entry touch type, TP1/TP2 reached, MFE/MAE, bars-to-entry, linked-trade comparison | (hg_market_data_request_id, analysis_version) UNIQUE |
 | `grail_plan_analyses` | Plan-centric zone-based analysis results from Grail Plan Browser: entry/stop/TP1 zone touch, outcome, fetch metadata, bars_expected | (grail_plan_id, analysis_version) effectively UNIQUE per user; user_id FK |
 | `journal_notes` | Free-form trader notes (not trade-linked): title, body (markdown), timestamps | note_id PK; user_id FK |
+| `backtest_strategy_types` | User-managed dropdown: spread strategy names for backtest runs | case-insensitive UNIQUE per user; is_active soft-delete |
+| `backtest_underlyings` | User-managed dropdown: underlying instruments for backtest runs | case-insensitive UNIQUE per user; is_active soft-delete |
+| `backtest_runs` | One row per backtest experiment: parameter set (strategy, underlying, entry time, entry style, width, DTE, strike selection, profit target, stop rule, date range, tool) + aggregate results (trade count, win rate, avg/total P&L, avg win/loss, profit factor, max win/loss/drawdown) + status (draft/complete) | run_id PK; user_id FK; entry_style CHECK (simultaneous\|staged) |
+| `backtest_leg_rules` | Structured per-leg early-exit rules within a backtest run (e.g. "close long legs when premium ≤ $0.05") | run_id FK ON DELETE CASCADE; (leg_target, trigger_condition, action, sort_order) |
 
 ### Why `trade_annotations` is a separate table
 
@@ -351,7 +356,7 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
 | Dashboard | `/` | Total P&L, win rate, profit factor, avg win/loss, avg trade, largest win/loss, max win/loss streak, trade counts, equity curve. Defaults to "All time" on load. Account filter dropdown. Profit factor = total winning P&L ÷ \|total losing P&L\|; null when no losers. |
 | Trades list | `/trades` | Sort by any column, filter by symbol/date range/account, pagination (per_page persisted in session). Account filter preserved across sort and pagination links. Bulk delete: "Select to Delete" mode enables row checkboxes and a "Select All" toggle; confirms then permanently deletes selected trades, their executions, and their annotations, and reprocesses affected positions. |
 | Trade detail | `/trades/<id>` | Execution breakdown, annotation form, prev/next navigation, Grail plan link with copy-to-clipboard. When an `HgAnalysisResult` exists for the linked grail plan, an "HG Plan Analysis" card shows entry touch type, TP1/TP2 outcome, MFE/MAE, and actual vs plan comparison. "Analyze HG Plan" / "Re-analyze" button triggers hydration + evaluation inline. |
-| Trade annotation | `/trades/<id>/annotate` | Pattern (managed dropdown + inline create), source, stop price, notes |
+| Trade annotation | `/trades/<id>/annotate` | Pattern (managed dropdown + inline create), source, stop price, notes, ATM Engaged (managed dropdown + inline create via `atm_option_id` FK) |
 | Positions | `/positions` | All positions with open/closed status, filter by symbol/account |
 | CSV upload | `/ingest` | Drag-and-drop Schwab CSV, NinjaTrader `-exec.csv`, or NDJSON; file format auto-detected; shows insert/update counts; inline error display |
 | Admin: users | `/admin/users` | Create, deactivate, regenerate API key; pill sub-nav to export (admin-only) |
@@ -361,7 +366,9 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
 | Admin: export | `/admin/export` | Export all manually entered data as JSON (format v3.0): trade annotations (grouped by account) + journal notes. Per-user selection. Natural keys documented in `export_metadata.schema` for re-import. Admin-only. |
 | Journal | `/journal` | Timestamped free-form notes (EasyMDE markdown editor, title optional). List shows newest first with snippet. Not trade-linked. Included in export. |
 | About | `/about` | Release notes parsed from RELEASE_NOTES.md; Bootstrap accordion; current release badged |
-| Settings | `/settings` | User preferences |
+| Backtest runs | `/backtest` | List with filter bar (strategy, underlying, entry time, spread width), sortable columns, summary stat cards (best win rate, best profit factor, avg win rate across filtered runs), status badges, pagination. |
+| Backtest detail | `/backtest/new`, `/backtest/<id>` | Create/edit form: Parameters section (strategy, underlying, entry style, entry time, width, DTE, strike selection, profit target, stop rule, date range, tool, status), Leg Management Rules inline CRUD (add/edit/delete per-leg early-exit rules), Results section (10 aggregate fields), EasyMDE notes. Inline "Add new…" for strategy type and underlying. Defaults seeded on first use. |
+| Settings | `/settings` | User preferences; manages setup patterns, signal sources, ATM Engaged options, backtest strategy types, and backtest underlyings (create, edit, deactivate — each showing use count) |
 | JSON API | `/api/dashboard`, `/api/trades` | For external tooling; dashboard endpoint accepts `?account=` filter |
 
 ### CLI
@@ -486,7 +493,7 @@ the wrong trade.
 
 ```
 trading_journal/
-├── models.py               SQLAlchemy ORM — all 14 tables
+├── models.py               SQLAlchemy ORM — all 15 tables
 ├── ingestion.py            NdjsonIngester — ingest pipeline entry point
 ├── csv_parser.py           CsvParser — Schwab CSV → record dicts
 ├── ninjatrader_parser.py   NinjaTraderParser — NinjaTrader exec CSV → record dicts (FUTURES)
@@ -517,12 +524,13 @@ trading_journal/
         ├── admin.py        /admin/users, /admin/market-data, /admin/market-data/hg-analysis, /admin/market-data/hg-batch, /admin/grail-plans, /admin/export
         ├── journal.py      /journal — list, create, detail/edit, delete
         ├── about.py        /about (release notes)
-        ├── settings.py     /settings
+        ├── settings.py     /settings (patterns, sources, ATM options, backtest strategy types, backtest underlyings)
+        ├── backtest.py     /backtest — list, new, detail/edit, delete, leg-rules CRUD
         └── api.py          /api/*
 
 main.py                     Click CLI entry point
 wsgi.py                     gunicorn entry point; calls load_dotenv() so .env vars reach os.environ
-alembic/versions/           Migration history (latest: 2026_04_21_spread_support — adds spread_order_tag on trades, spread_group_id on completed_trades)
+alembic/versions/           Migration history (latest: 2026_06_04_backtest_runs — adds backtest_strategy_types, backtest_underlyings, backtest_runs, backtest_leg_rules tables)
 docs/vertical-put-debit-spread.md  Spread support design doc and worked example
 docs/openobserve-upload-logging.md  Upload perf logging setup: env vars, event reference, query examples
 docker-compose.openobserve.yml  Dev-only OpenObserve container for upload performance diagnosis
