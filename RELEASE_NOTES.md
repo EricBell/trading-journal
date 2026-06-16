@@ -1,3 +1,10 @@
+## v1.33.3 - 2026-06-16
+
+### Performance
+- **Symbol-scoped completed trade rebuild on upload (issue #18)** — CSV upload now calls `reprocess_completed_trades_for_symbols` instead of the full `reprocess_all_completed_trades`. Only completed trades for symbols present in the uploaded file are deleted and rebuilt, matching the pattern already used for position reprocessing (§5.3). Measured improvement: `completed_trade_rebuild` dropped from ~9.2 s to sub-second on a 307-trade history when uploading a 1-symbol file.
+
+---
+
 ## v1.33.2 - 2026-06-16
 
 ### Bug Fixes

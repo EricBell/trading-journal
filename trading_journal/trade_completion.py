@@ -96,6 +96,90 @@ class TradeCompletionEngine:
             "message": f"Reprocessed {completed_count} completed trades"
         }
 
+    def reprocess_completed_trades_for_symbols(
+        self, user_id: int, symbols: set
+    ) -> Dict[str, Any]:
+        """Rebuild completed trades only for the given symbols.
+
+        Called on CSV upload instead of the full rebuild so work is scoped to
+        only the symbols present in the uploaded file — same pattern as
+        reprocess_positions_for_symbols in positions.py.
+        """
+        if not symbols:
+            return {"completed_trades": 0, "message": "No symbols to reprocess"}
+
+        symbol_list = list(symbols)
+
+        with self.db_manager.get_session() as session:
+            # Unlink all executions for these symbols
+            session.query(Trade).filter(
+                Trade.user_id == user_id,
+                Trade.symbol.in_(symbol_list),
+            ).update({Trade.completed_trade_id: None}, synchronize_session=False)
+
+            # Delete completed trades for these symbols
+            session.query(CompletedTrade).filter(
+                CompletedTrade.user_id == user_id,
+                CompletedTrade.symbol.in_(symbol_list),
+            ).delete(synchronize_session=False)
+
+            session.commit()
+
+        with self.db_manager.get_session() as session:
+            unlinked_trades = session.query(Trade).filter(
+                and_(
+                    Trade.user_id == user_id,
+                    Trade.event_type == 'fill',
+                    Trade.completed_trade_id.is_(None),
+                    Trade.symbol.in_(symbol_list),
+                    Trade.symbol.isnot(None),
+                    Trade.qty.isnot(None),
+                    Trade.net_price.isnot(None),
+                )
+            ).order_by(Trade.exec_timestamp).all()
+
+            spread_trades = [t for t in unlinked_trades if t.spread_order_tag]
+            non_spread_trades = [t for t in unlinked_trades if not t.spread_order_tag]
+
+            trade_groups: Dict[Any, List[Trade]] = {}
+            for trade in non_spread_trades:
+                key = (trade.symbol, trade.instrument_type, trade.account_id)
+                if trade.instrument_type == 'OPTION' and trade.option_data:
+                    key = key + (trade.exp_date, trade.strike_price, trade.option_type)
+                elif trade.instrument_type == 'FUTURES':
+                    key = key + (trade.exp_date,)
+                trade_groups.setdefault(key, []).append(trade)
+
+            completed_count = 0
+            for trades in trade_groups.values():
+                completed_count += self._process_trade_group(session, trades)
+
+            completed_count += self._process_spread_trades(session, spread_trades)
+
+            session.commit()
+
+        with self.db_manager.get_session() as session:
+            session.execute(
+                text("""
+                    UPDATE trade_annotations ta
+                    SET completed_trade_id = ct.completed_trade_id
+                    FROM completed_trades ct
+                    WHERE ta.user_id   = :user_id
+                      AND ta.completed_trade_id IS NULL
+                      AND ct.user_id   = :user_id
+                      AND ta.symbol    = ct.symbol
+                      AND ta.opened_at = ct.opened_at
+                      AND ta.symbol    = ANY(:symbols)
+                """),
+                {"user_id": user_id, "symbols": symbol_list},
+            )
+            session.commit()
+
+        return {
+            "completed_trades": completed_count,
+            "message": f"Reprocessed {completed_count} completed trades for {len(symbols)} symbol(s)"
+        }
+
     def process_completed_trades(self, symbol: Optional[str] = None) -> Dict[str, Any]:
         """Identify and process completed trades from unlinked executions."""
         user_id = AuthContext.require_user().user_id

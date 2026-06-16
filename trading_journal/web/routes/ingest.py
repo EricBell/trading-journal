@@ -125,10 +125,14 @@ def upload():
                 include_rolling=include_rolling,
             )
 
-        # Reprocess all completed trades from scratch (idempotent on re-uploads)
+        # Reprocess completed trades only for symbols in the uploaded file
+        affected_symbols = {
+            r.get('symbol') for r in records
+            if r.get('symbol') and r.get('event_type') == 'fill'
+        }
         engine = TradeCompletionEngine()
         with ul.stage("completed_trade_rebuild", upload_session_id=session_id, user_id=user_id) as ctx:
-            proc = engine.reprocess_all_completed_trades(user_id)
+            proc = engine.reprocess_completed_trades_for_symbols(user_id, affected_symbols)
             ctx['completed_trades'] = proc.get('completed_trades', 0)
 
         # Auto-populate underlying_at_entry for option trades (background, fire-and-forget)
