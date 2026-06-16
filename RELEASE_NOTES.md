@@ -1,3 +1,10 @@
+## v1.33.2 - 2026-06-16
+
+### Bug Fixes
+- **CSV parser: handle new Schwab "Amount" column in Filled Orders header** — Schwab added an "Amount" column between "Net Price" and "Price Improvement" in the Filled Orders section header. The section-detection regex now accepts `Amount` as optional (`(?:Amount,)?`) so both old and new CSV formats are recognised. Previously, any CSV with the new header format produced 0 parsed fills.
+
+---
+
 ## v1.33.1 - 2026-06-04
 
 ### Docs
