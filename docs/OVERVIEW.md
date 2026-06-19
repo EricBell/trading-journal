@@ -333,11 +333,11 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
    ├── _get_or_create_account() per account_number → accounts.account_id
    ├── bulk UPSERT into trades (INSERT … ON CONFLICT DO UPDATE)
    ├── session.commit()
-   ├── TradeCompletionEngine.reprocess_all_completed_trades(user_id)
-   │   ├── unlinks all executions from completed_trades
-   │   ├── deletes all completed_trades for user
-   │   ├── re-groups executions → new CompletedTrade rows
-   │   └── re-links trade_annotations via natural key (user_id, symbol, opened_at)
+   ├── TradeCompletionEngine.reprocess_completed_trades_for_symbols(user_id, affected_symbols)
+   │   ├── unlinks executions for the uploaded symbols only
+   │   ├── deletes completed_trades for those symbols only
+   │   ├── re-groups executions → new CompletedTrade rows (scoped to those symbols)
+   │   └── re-links trade_annotations via natural key (user_id, symbol, opened_at), scoped to those symbols
    └── PositionTracker.reprocess_positions_for_symbols(user_id, affected_symbols)
        ├── deletes positions only for uploaded symbols
        ├── loads all historical fills for those symbols (ordered by timestamp)
@@ -428,10 +428,13 @@ for the same symbol produce separate `CompletedTrade` and `Position` rows.
 The `unique_position_per_user` constraint now includes `account_id`. Null-account positions
 (NDJSON uploads without account info) continue to group together correctly via code logic.
 
-### Trade completion is a full rebuild
-`TradeCompletionEngine.reprocess_all_completed_trades` always rebuilds all completed trades
-for the user, not just affected symbols. This is fast enough currently but will become a
-bottleneck at large trade volumes (same class of problem as positions had before §5.3).
+### Trade completion is symbol-scoped (fixed)
+`TradeCompletionEngine.reprocess_completed_trades_for_symbols(user_id, symbols)` rebuilds
+completed trades only for the symbols present in the uploaded file — the same pattern as
+`PositionTracker.reprocess_positions_for_symbols` (§5.3). The CSV upload route
+(`ingest.py`) now calls this scoped method instead of `reprocess_all_completed_trades`,
+which remains available for full rebuilds (e.g. admin/manual reprocessing) but is no
+longer on the upload hot path.
 
 ### No real-time data
 All data is file-import only. There is no connection to live broker APIs. Historical
@@ -534,6 +537,9 @@ alembic/versions/           Migration history (latest: 2026_06_04_backtest_runs 
 docs/vertical-put-debit-spread.md  Spread support design doc and worked example
 docs/openobserve-upload-logging.md  Upload perf logging setup: env vars, event reference, query examples
 docker-compose.openobserve.yml  Dev-only OpenObserve container for upload performance diagnosis
+openobserve-up.sh           Starts the OpenObserve container (docker compose -f docker-compose.openobserve.yml up -d)
+up.sh                        Starts the main app stack (docker compose up -d)
+tools/psql/psql.py          Standalone DB query CLI for diagnostics — uv-run script, no project venv changes; reads DB creds from .env; table/csv/json output
 RELEASE_NOTES.md            Release history; parsed by /about route
 ```
 
