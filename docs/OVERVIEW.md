@@ -1,6 +1,6 @@
 # Trading Journal — System Overview
 
-**Version:** 1.33.0
+**Version:** 1.33.3
 **Last Updated:** 2026-06-04
 **Status:** Production (Phase 4 complete)
 
