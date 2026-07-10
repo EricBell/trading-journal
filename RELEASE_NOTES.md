@@ -1,3 +1,10 @@
+## v1.33.4 - 2026-07-10
+
+### Bug Fixes
+- **Fix: duplicate fills on overlapping CSV uploads (issue #19)** — `unique_key` was built from the source filename and row index, so the same fill imported from two different CSV files (e.g. overlapping date-range exports) produced two different keys and both rows were inserted, doubling quantities and P&L. The key is now content-based: `exec_time + symbol + side + qty + net_price`, matching the documented design in OVERVIEW.md. **Recovery:** delete all existing imported data and re-import your CSV files with this version.
+
+---
+
 ## v1.33.3 - 2026-06-16
 
 ### Performance

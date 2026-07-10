@@ -136,19 +136,24 @@ class NdjsonRecord(BaseModel):
 
     @property
     def unique_key(self) -> str:
-        """Generate unique key for upsert logic."""
-        # Use source file, row index, and key trade details
-        base_key = f"{self.source_file}:{self.row_index}"
+        """Generate unique key for upsert dedup.
+
+        Content-based so that the same fill imported from different CSV files
+        (e.g. overlapping date ranges) always produces the same key and the
+        ON CONFLICT UPDATE fires instead of inserting a duplicate row.
+        """
+        parts = []
 
         if self.exec_time:
-            base_key += f":{self.exec_time.isoformat()}"
+            parts.append(self.exec_time.isoformat())
         elif self.time_canceled:
-            base_key += f":{self.time_canceled.isoformat()}"
+            parts.append(self.time_canceled.isoformat())
+        else:
+            parts.append("no_time")
 
-        if self.symbol:
-            base_key += f":{self.symbol}"
+        parts.append(self.symbol or "no_symbol")
+        parts.append(self.side or "no_side")
+        parts.append(str(self.qty) if self.qty is not None else "no_qty")
+        parts.append(str(self.net_price) if self.net_price is not None else "no_price")
 
-        if self.side and self.qty:
-            base_key += f":{self.side}:{self.qty}"
-
-        return base_key
+        return ":".join(parts)
