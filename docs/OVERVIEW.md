@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.33.3
-**Last Updated:** 2026-06-04
+**Version:** 1.33.4
+**Last Updated:** 2026-07-20
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -186,7 +186,12 @@ keyed on `(user_id, unique_key)`. Re-uploading the same file updates the existin
 (timestamps, prices) rather than creating duplicates. Position reprocessing after ingest
 rebuilds from scratch, so the final state is always correct regardless of upload history.
 
-`unique_key` is generated in `NdjsonRecord` from a hash of `(exec_time, symbol, side, qty, price)`.
+`unique_key` is generated in `NdjsonRecord` as a colon-joined string of
+`(exec_time or time_canceled, symbol, side, qty, net_price)`, with sentinel placeholders
+(`no_symbol`, `no_side`, etc.) for missing fields. It is purely content-based — no source
+filename or row index — so the same fill imported from two overlapping CSV exports always
+produces the same key and the second import updates rather than duplicates the row
+(issue #19).
 
 ### 5.3 Symbol-scoped position reprocessing
 
