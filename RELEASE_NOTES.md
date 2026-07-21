@@ -1,3 +1,12 @@
+## v1.33.7 - 2026-07-21
+
+### Bug Fixes
+- **Fix: stale spread tags from the issue #20 parser bug could survive re-ingestion and keep corrupting P&L (issue #23)** — trades ingested before the v1.33.5 parser fix carry a bad `spread_order_tag`/`spread_type` in the database. Re-uploading a corrected CSV under the fixed parser didn't clear it, because the ingester's `ON CONFLICT DO UPDATE` never refreshed those two columns on an existing row — only `exec_timestamp`, `net_price`, `realized_pnl`, `account_id`, and `processing_timestamp` were refreshed. Every reprocess kept routing the affected fills through the multi-leg spread-matching path using the old tag. `spread_order_tag` and `spread_type` are now included in the UPSERT's update set, so re-ingestion can correct previously-wrong classification.
+- **Fix: multi-leg spread matching could fabricate wrong P&L on a partial close** — `_process_spread_trades` paired open/close spread orders positionally via `zip()` without checking that quantities matched. When an order was only partially closed (e.g. 2 contracts opened, 1 closed), the mismatched pair was still completed using the open leg's quantity as the divisor, producing an inflated exit price and P&L instead of leaving the position open. Mismatched-quantity pairs are now skipped (logged, left unlinked) rather than fabricated; partial closes across multiple spread orders are not yet supported.
+- **Recovery:** one-time data cleanup was applied directly (clearing stale tags on affected trades and rebuilding `completed_trades`/`positions` for the affected symbol). No general re-import is needed, but any other trades still carrying a stale tag from before v1.33.5 will only self-heal on their next re-upload now that the UPSERT fix is in place.
+
+---
+
 ## v1.33.6 - 2026-07-20
 
 ### Testing

@@ -222,6 +222,10 @@ class NdjsonIngester:
                         qty=stmt.excluded.qty,  # Important: update qty to handle signed->unsigned conversion
                         net_price=stmt.excluded.net_price,
                         realized_pnl=stmt.excluded.realized_pnl,
+                        # Re-derive classification on every ingest so a parser fix (or a
+                        # corrected re-upload) can heal previously-wrong values (issue #23)
+                        spread_order_tag=stmt.excluded.spread_order_tag,
+                        spread_type=stmt.excluded.spread_type,
                         processing_timestamp=stmt.excluded.processing_timestamp
                     )
                 ).returning(Trade.trade_id)
@@ -315,6 +319,10 @@ class NdjsonIngester:
                         net_price=stmt.excluded.net_price,
                         realized_pnl=stmt.excluded.realized_pnl,
                         account_id=stmt.excluded.account_id,
+                        # Re-derive classification on every ingest so a parser fix (or a
+                        # corrected re-upload) can heal previously-wrong values (issue #23)
+                        spread_order_tag=stmt.excluded.spread_order_tag,
+                        spread_type=stmt.excluded.spread_type,
                         processing_timestamp=stmt.excluded.processing_timestamp
                     )
                 ).returning(Trade.trade_id)

@@ -276,6 +276,21 @@ class TradeCompletionEngine:
         completed_count = 0
         for key in set(opens_by_key) & set(closes_by_key):
             for open_legs, close_legs in zip(opens_by_key[key], closes_by_key[key]):
+                open_qty = sum(abs(l.qty) for l in open_legs)
+                close_qty = sum(abs(l.qty) for l in close_legs)
+                if open_qty != close_qty:
+                    # zip() pairs FIFO by order, not by matching size — a partial close
+                    # (close_qty != open_qty) would otherwise silently produce wrong
+                    # exit_avg_price/net_pnl (total_qty is taken from the open leg only).
+                    # Partial closes across multiple spread orders aren't supported yet,
+                    # so skip rather than fabricate incorrect P&L (issue #23).
+                    logger.warning(
+                        f"Skipping spread match for {open_legs[0].symbol}: open qty "
+                        f"{open_qty} (tag {open_legs[0].spread_order_tag}) != close qty "
+                        f"{close_qty} (tag {close_legs[0].spread_order_tag}); partial "
+                        f"spread closes are not supported."
+                    )
+                    continue
                 self._create_spread_completed_trade(session, open_legs, close_legs)
                 completed_count += 1
 
