@@ -2,11 +2,17 @@
 
 import pytest
 import os
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
 from trading_journal.models import Base
-from trading_journal.database import db_manager
+from trading_journal.database import get_db_manager
+
+
+class _TestDBConfig:
+    """Minimal config object satisfying DatabaseManager's `config.url` access."""
+
+    def __init__(self, url: str) -> None:
+        self.url = url
 
 
 @pytest.fixture(scope="session")
@@ -27,14 +33,14 @@ def db_engine():
 
         test_db_url = f"postgresql://{user}:{password}@{host}:{port}/{test_db_name}"
 
-    engine = create_engine(test_db_url)
+    # Reset the real DatabaseManager singleton (not just the `db_manager` proxy)
+    # so that db_manager.get_session(), which forwards to this singleton, actually
+    # uses the test database. See issue #21.
+    manager = get_db_manager(config=_TestDBConfig(test_db_url), reset=True)
+    engine = manager.engine
 
     # Create all tables
     Base.metadata.create_all(engine)
-
-    # Configure global db_manager to use test database
-    db_manager._engine = engine
-    db_manager._session_factory = sessionmaker(bind=engine)
 
     yield engine
 

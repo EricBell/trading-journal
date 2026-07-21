@@ -76,6 +76,10 @@ COL_ALIASES = {
 
 AMEND_REF_RE = re.compile(r'^RE\s*#\s*(\d+)', re.IGNORECASE)
 ACCOUNT_RE = re.compile(r'for\s+(\S+)\s+\(([^)]+)\)', re.IGNORECASE)
+
+# Values Schwab/ToS puts in the "Spread" column for orders that are NOT a real
+# multi-leg combo — i.e. every plain single-instrument order, not just options.
+_NON_SPREAD_VALUES = {'SINGLE', 'STOCK'}
 MONTH_MAP = {
     'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
     'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
@@ -584,7 +588,15 @@ def _parse_single_file(
 
             rec = build_order_record(section, current_header_map, cells, row_index)
             if rec is not None:
-                if rec['exec_time'] is not None and rec.get('spread') is not None:
+                # The broker's "Spread" column is populated for every order, not just
+                # real multi-leg combos: "SINGLE" (single-leg options) and "STOCK"
+                # (equities) are non-spread sentinels, not spread-strategy names.
+                spread_value = rec.get('spread')
+                is_real_spread = (
+                    isinstance(spread_value, str)
+                    and spread_value.strip().upper() not in _NON_SPREAD_VALUES
+                )
+                if rec['exec_time'] is not None and is_real_spread:
                     # Parent spread row: save trackers, use per-leg price
                     _spread_tag = str(row_index)
                     _spread_exec_time = rec['exec_time']

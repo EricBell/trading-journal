@@ -276,6 +276,63 @@ def test_multiple_option_contracts_different_prices(db_session, test_user):
     assert abs(float(completed_trade.exit_avg_price) - 425.00) < 0.01
 
 
+def test_scale_in_and_out_multiple_fills_both_sides(db_session, test_user):
+    """Regression test for issue #20: multiple opening AND multiple closing fills
+    on a single-leg option must merge into ONE CompletedTrade with correct P&L,
+    not be split/dropped as if each fill were its own spread order."""
+    # Buy 1 contract, then 2 more, both @ $0.53
+    buy1 = create_option_trade(
+        user_id=test_user.user_id, trade_id=101, side="BUY", qty=1,
+        pos_effect="TO OPEN", net_price=0.53,
+        timestamp=datetime(2026, 7, 20, 10, 22, 33), strike=747.0,
+    )
+    buy2 = create_option_trade(
+        user_id=test_user.user_id, trade_id=102, side="BUY", qty=2,
+        pos_effect="TO OPEN", net_price=0.53,
+        timestamp=datetime(2026, 7, 20, 10, 22, 33), strike=747.0,
+    )
+    # Sell across three separate fills: 0.63, 0.63, 0.67
+    sell1 = create_option_trade(
+        user_id=test_user.user_id, trade_id=103, side="SELL", qty=1,
+        pos_effect="TO CLOSE", net_price=0.63,
+        timestamp=datetime(2026, 7, 20, 10, 24, 6), strike=747.0,
+    )
+    sell2 = create_option_trade(
+        user_id=test_user.user_id, trade_id=104, side="SELL", qty=1,
+        pos_effect="TO CLOSE", net_price=0.63,
+        timestamp=datetime(2026, 7, 20, 10, 25, 23), strike=747.0,
+    )
+    sell3 = create_option_trade(
+        user_id=test_user.user_id, trade_id=105, side="SELL", qty=1,
+        pos_effect="TO CLOSE", net_price=0.67,
+        timestamp=datetime(2026, 7, 20, 10, 26, 57), strike=747.0,
+    )
+
+    db_session.add_all([buy1, buy2, sell1, sell2, sell3])
+    db_session.commit()
+
+    engine = TradeCompletionEngine()
+    result = engine.process_completed_trades()
+
+    assert result["completed_trades"] == 1
+
+    completed_trade = db_session.query(CompletedTrade).first()
+    assert completed_trade.total_qty == 3
+
+    # Cost: 3 * $0.53 * 100 = $159. Proceeds: (0.63+0.63+0.67) * 100 = $193.
+    assert completed_trade.gross_cost == 159.0
+    assert completed_trade.gross_proceeds == 193.0
+    assert completed_trade.net_pnl == 34.0
+    assert completed_trade.is_winning_trade is True
+
+    # Every fill should be linked to this single completed trade — none orphaned.
+    linked_ids = {
+        t.completed_trade_id
+        for t in db_session.query(Trade).filter(Trade.trade_id.in_([101, 102, 103, 104, 105]))
+    }
+    assert linked_ids == {completed_trade.completed_trade_id}
+
+
 def test_option_vs_equity_trade_completion_comparison(db_session, test_user):
     """Test that the same trade with equity vs option has different P&L due to multiplier."""
     # Create identical trades but with different instrument types

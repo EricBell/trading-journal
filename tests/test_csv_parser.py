@@ -462,6 +462,57 @@ class TestCsvParserParseFile:
         finally:
             os.unlink(path)
 
+    def test_single_leg_option_no_spread_tag(self):
+        """'SINGLE' in the Spread column is a non-spread sentinel, not a real combo."""
+        csv_content = """\
+            Filled Orders
+            ,,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Price Improvement,Order Type
+            ,,9/22/25 15:52:26,SINGLE,SELL,-3,TO CLOSE,SPY,22 SEP 25,667,CALL,.25,.25,-,STP
+        """
+        path = _write_temp_csv(csv_content)
+        try:
+            parser = CsvParser()
+            records = parser.parse_file(path)
+            fills = [r for r in records if r.get('event_type') == 'fill']
+            assert fills[0].get('spread_order_tag') is None
+        finally:
+            os.unlink(path)
+
+    def test_stock_no_spread_tag(self):
+        """'STOCK' in the Spread column is a non-spread sentinel, not a real combo."""
+        csv_content = """\
+            Filled Orders
+            ,,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Price Improvement,Order Type
+            ,,9/22/25 10:00:00,STOCK,BUY,+100,TO OPEN,AAPL,,,STOCK,150.00,150.00,-,MKT
+        """
+        path = _write_temp_csv(csv_content)
+        try:
+            parser = CsvParser()
+            records = parser.parse_file(path)
+            fills = [r for r in records if r.get('event_type') == 'fill']
+            assert fills[0].get('spread_order_tag') is None
+        finally:
+            os.unlink(path)
+
+    def test_real_spread_gets_shared_tag(self):
+        """A genuine multi-leg combo (e.g. VERTICAL) still shares a tag across legs."""
+        csv_content = """\
+            Filled Orders
+            ,,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Price Improvement,Order Type
+            ,,4/21/26 10:52:44,VERTICAL,BUY,+1,TO OPEN,SPX,21 APR 26,7110,PUT,9.88,1.85,-,LMT
+            ,,,,SELL,-1,TO OPEN,SPX,21 APR 26,7105,PUT,8.03,DEBIT,-,
+        """
+        path = _write_temp_csv(csv_content)
+        try:
+            parser = CsvParser()
+            records = parser.parse_file(path)
+            fills = [r for r in records if r.get('event_type') == 'fill']
+            assert len(fills) == 2
+            assert fills[0]['spread_order_tag'] is not None
+            assert fills[0]['spread_order_tag'] == fills[1]['spread_order_tag']
+        finally:
+            os.unlink(path)
+
     def test_triggered_filtered(self):
         """TRIGGERED status rows are filtered out."""
         csv_content = """\

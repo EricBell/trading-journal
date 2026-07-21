@@ -1,3 +1,17 @@
+## v1.33.6 - 2026-07-20
+
+### Testing
+- **Fix: test suite silently ran against the production database instead of the test database (issue #21)** — `tests/conftest.py`'s `db_engine` fixture reconfigured the `db_manager` module-level object directly (`db_manager._engine = ...`), but `db_manager` is a lazy-loading proxy whose attribute *reads* forward to the real `DatabaseManager` singleton while attribute *writes* only shadowed the proxy itself, never touching the singleton. Any test that exercised code going through `db_manager.get_session()` (e.g. `TradeCompletionEngine`) was therefore silently reading/writing the real production database rather than the test database, producing confusing "0 results" failures. The fixture now resets the real singleton via `get_db_manager(config=..., reset=True)` so `db_manager.get_session()` correctly resolves to the test database. Fixes 17 previously-failing tests in `test_options_trade_completion.py`, `test_trade_filtering.py`, and `test_signed_quantities.py`. No production code changed.
+
+---
+
+## v1.33.5 - 2026-07-20
+
+### Bug Fixes
+- **Fix: wrong P&L when scaling in/out of a single-leg option position (issue #20)** — the CSV parser treated any non-null value in the broker's `Spread` column as proof of a real multi-leg combo order, but Schwab/ToS also puts non-combo sentinel values there (`SINGLE` for single-leg options, `STOCK` for equities). Fills tagged this way were routed through the multi-leg spread-matching path instead of the correct per-cycle averaging path, which pairs open/close fills positionally via `zip()` — mismatching quantities and silently dropping any leftover fill when the number of opening and closing orders differed. This produced wrong, split completed trades (and sometimes fully orphaned fills with no P&L at all) whenever a position was opened and/or closed across more than one order. `SINGLE`/`STOCK` are now excluded from spread detection so these fills flow through the existing correct averaging path. **Recovery:** re-run a full trade-completion reprocess to rebuild `completed_trades` from your existing fills — no re-import needed.
+
+---
+
 ## v1.33.4 - 2026-07-10
 
 ### Bug Fixes
