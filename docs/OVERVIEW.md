@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.33.4
-**Last Updated:** 2026-07-20
+**Version:** 1.33.7
+**Last Updated:** 2026-07-21
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -193,6 +193,13 @@ filename or row index — so the same fill imported from two overlapping CSV exp
 produces the same key and the second import updates rather than duplicates the row
 (issue #19).
 
+The `ON CONFLICT DO UPDATE` set clause (both `_insert_records` and
+`_insert_records_with_tracking`) also refreshes `spread_order_tag` and `spread_type` on
+every re-ingest, not just price/timestamp fields. Without this, a trade misclassified by an
+older/buggy parser version would keep its bad classification forever even after the parser
+was fixed and the file re-uploaded, since only price/timestamp columns were being updated
+on conflict (issue #23).
+
 ### 5.3 Symbol-scoped position reprocessing
 
 **Before (broken):** every upload called `reprocess_all_positions(user_id)`, which deleted
@@ -235,13 +242,28 @@ the parent row (which carries `exec_time` and `spread` type) gets a tag equal to
 `{source_filename}:{row_index}`; continuation rows (same order, different leg) inherit
 the parent's `exec_time`, `spread_type`, and tag.
 
+The broker's `Spread` column is populated on *every* order, not just real combos — Schwab/ToS
+puts the sentinel values `SINGLE` (single-leg options) and `STOCK` (equities) there for
+plain, non-combo orders. `CsvParser` excludes these sentinels (`_NON_SPREAD_VALUES`) from
+spread detection, so single-leg fills flow through the standard per-cycle averaging path
+(§5.4) instead of being misrouted here. Before this fix (issue #20), a single-leg order
+opened and/or closed across more than one fill could be split into wrong, incorrectly-priced
+completed trades, or fully orphaned with no P&L at all.
+
 `_process_spread_trades(session, spread_trades)` in `TradeCompletionEngine`:
 
 1. Groups executions by `spread_order_tag` — all legs of one multi-leg order share a tag.
 2. Classifies each tag group as **open** (all `TO OPEN`) or **close** (all `TO CLOSE`).
    Mixed-effect groups are logged as warnings and skipped.
 3. Matches open and close groups by `(symbol, instrument_type, account_id, exp_date,
-   frozenset(strike_prices))` using FIFO ordering within each key.
+   frozenset(strike_prices))` using FIFO ordering within each key, pairing them positionally
+   via `zip()`. **Before creating a `CompletedTrade`, the total open quantity and total close
+   quantity of the paired groups must match exactly** — a mismatch (e.g. a partial close, 2
+   contracts opened but only 1 closed) is logged as a warning and skipped rather than
+   completed, since `zip()` pairs FIFO by order sequence, not by matching size, and would
+   otherwise fabricate an inflated exit price/P&L using the open leg's quantity as the
+   divisor (issue #23). Partial closes spread across multiple spread orders are not yet
+   supported — the legs are simply left unlinked until a fully-matching close arrives.
 4. For each matched open/close pair, `_create_spread_completed_trade()` computes:
    - **Net debit** (open cost): `Σ net_price × qty × sign(BUY=+1, SELL=-1)` across open legs
    - **Net credit** (close proceeds): `Σ net_price × qty × sign(SELL=+1, BUY=-1)` across close legs
@@ -257,6 +279,12 @@ the CSV row numbers that produced the trade.
 
 Web UI: the trades list shows `$high/$low` strike notation for spread trades; the trade
 detail page renders "Long Leg / Short Leg" rows instead of a single Strike/Type pair.
+
+**Recovery note:** trades ingested before the issue #20 parser fix may still carry a stale
+`spread_order_tag`/`spread_type` in the database, since re-ingestion didn't refresh those
+columns until issue #23 was fixed (see §5.2). Existing bad data needs a one-time cleanup
+(clear the stale tag, then rerun trade-completion reprocessing for the affected symbol) —
+new/future ingests self-heal automatically now.
 
 ### 5.5 Grail integration (read-only external DB)
 
