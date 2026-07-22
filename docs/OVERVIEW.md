@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.33.7
-**Last Updated:** 2026-07-21
+**Version:** 1.33.8
+**Last Updated:** 2026-07-22
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -199,6 +199,15 @@ every re-ingest, not just price/timestamp fields. Without this, a trade misclass
 older/buggy parser version would keep its bad classification forever even after the parser
 was fixed and the file re-uploaded, since only price/timestamp columns were being updated
 on conflict (issue #23).
+
+Because `unique_key` has no row/sequence component, two genuinely distinct fills that share
+identical `(exec_time, symbol, side, qty, net_price)` — e.g. a multi-lot order that fills as
+several same-second, same-price partial executions — would otherwise collide and the second
+fill's UPSERT would silently overwrite the first instead of inserting a new row (issue #25).
+`_insert_records_with_tracking` guards against this via `_disambiguate_unique_key`: within an
+ingest batch, the first occurrence of a given key keeps it unchanged, and later occurrences
+get a `:1`, `:2`, ... suffix. Occurrence order is stable across re-uploads of the same file,
+so idempotent re-ingestion (issue #19) still holds.
 
 ### 5.3 Symbol-scoped position reprocessing
 

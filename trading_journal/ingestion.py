@@ -271,6 +271,24 @@ class NdjsonIngester:
             """), {'user_id': user_id})
             session.commit()
 
+    @staticmethod
+    def _disambiguate_unique_key(base_key: str, key_occurrences: Dict[str, int]) -> str:
+        """Append an occurrence suffix so distinct fills sharing identical
+        (exec_time, symbol, side, qty, net_price) don't collide on the same
+        unique_key and get collapsed into one row by the UPSERT below.
+
+        This happens for real when a multi-lot order fills as several
+        same-second, same-price partial executions (issue #25). The first
+        occurrence keeps the bare base_key (so it still matches any row
+        already stored under it from before this fix), later occurrences of
+        the same key get ":1", ":2", etc. Occurrence counting is keyed off
+        row order within the batch, which is stable across re-uploads of the
+        same file, so idempotent re-ingestion (issue #19) still holds.
+        """
+        occurrence = key_occurrences.get(base_key, 0)
+        key_occurrences[base_key] = occurrence + 1
+        return base_key if occurrence == 0 else f"{base_key}:{occurrence}"
+
     def _insert_records_with_tracking(
         self,
         user_id: int,
@@ -286,6 +304,7 @@ class NdjsonIngester:
         insert_count = 0
         update_count = 0
         inserted_trade_ids = []
+        key_occurrences: Dict[str, int] = {}
 
         with self.db_manager.get_session() as session:
             account_cache: Dict[str, int] = {}
@@ -293,6 +312,9 @@ class NdjsonIngester:
             for record in records:
                 trade_data = self._convert_to_trade_data(record, source_file_path)
                 trade_data['user_id'] = user_id
+                trade_data['unique_key'] = self._disambiguate_unique_key(
+                    trade_data['unique_key'], key_occurrences
+                )
 
                 # Resolve account
                 if record.account_number:

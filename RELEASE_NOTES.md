@@ -1,3 +1,10 @@
+## v1.33.8 - 2026-07-22
+
+### Bug Fixes
+- **Fix: same-second, same-price partial fills collapsed into one row (issue #25)** — `unique_key` (`exec_time:symbol:side:qty:net_price`) has no row/sequence component, so when a multi-lot order fills as several separate partial executions sharing identical second-resolution timestamp, side, quantity, and price, they all produce the same key. The ingester's `ON CONFLICT DO UPDATE` UPSERT then silently overwrote the first fill with the second instead of inserting a new row, losing one of the real executions with no error. This under-counted closed quantity and left positions showing open when they were actually flat. `NdjsonIngester._insert_records_with_tracking` now disambiguates same-content fills within a batch by occurrence order — the first occurrence keeps the bare key, later ones get a `:1`, `:2`, ... suffix — which preserves idempotent re-upload behavior (issue #19) while no longer discarding legitimately distinct simultaneous fills. **Recovery:** re-upload the affected CSV; the previously-dropped fill will now insert instead of colliding, and a follow-up trade-completion/position reprocess for the affected symbol will pick it up.
+
+---
+
 ## v1.33.7 - 2026-07-21
 
 ### Bug Fixes
