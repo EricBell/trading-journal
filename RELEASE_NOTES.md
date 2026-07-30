@@ -1,3 +1,10 @@
+## v1.35.0 - 2026-07-30
+
+### New Features
+- **Notepad editor: insert-timestamp button (issue #35)** — a new toolbar button (clock icon) in the notepad entry editor (`/notepad/new`, `/notepad/<id>`) inserts a newline, the current time as 4-digit HHMM, and a single trailing space at the cursor position, then leaves the cursor ready to type immediately. Lets a trader add several timestamped updates to one entry (entry thesis, mid-trade adjustment, exit note) instead of creating a new entry each time. Time is computed client-side via `Intl.DateTimeFormat` using the user's configured timezone, consistent with how notepad timestamps are displayed elsewhere. Notepad-only for now — the Journal editor uses the same EasyMDE component but wasn't in scope for this issue.
+
+---
+
 ## v1.34.2 - 2026-07-29
 
 ### Bug Fixes
