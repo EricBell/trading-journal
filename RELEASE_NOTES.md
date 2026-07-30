@@ -1,3 +1,10 @@
+## v1.35.1 - 2026-07-30
+
+### Bug Fixes
+- **Fix: "Attach to Trade" candidate list showed wrong opened/closed times (issue #36)** — `opened_at`/`closed_at` on `completed_trades` come from the broker's `exec_time`, which is already recorded in exchange/local time, not naive UTC. Every other view (trades list, trade detail) renders these fields as-is. `match_picker()` in `routes/notepad.py` incorrectly ran them through `_to_user_tz()` — the helper meant only for naive-UTC server timestamps like `created_at` — shifting an already-local time by the UTC offset a second time. The candidates' `opened_at`/`closed_at` are now passed through unconverted, consistent with the rest of the app.
+
+---
+
 ## v1.35.0 - 2026-07-30
 
 ### New Features

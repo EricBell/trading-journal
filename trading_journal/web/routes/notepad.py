@@ -223,8 +223,8 @@ def match_picker(notepad_id):
                 'completed_trade_id': t.completed_trade_id,
                 'symbol': t.symbol,
                 'trade_type': t.trade_type,
-                'opened_at': _to_user_tz(t.opened_at, user),
-                'closed_at': _to_user_tz(t.closed_at, user),
+                'opened_at': t.opened_at,
+                'closed_at': t.closed_at,
                 'net_pnl': t.net_pnl,
             }
             for t in candidates
