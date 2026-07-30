@@ -1,3 +1,10 @@
+## v1.34.1 - 2026-07-29
+
+### Testing
+- **Fix: tests constructed `CompletedTrade` with columns that live on `TradeAnnotation` (issue #34)** — `test_completed_trade_model_creation` and 8 tests in `test_dashboard.py` passed `setup_pattern_id`/`trade_notes` directly to the `CompletedTrade` constructor. Those columns moved to `TradeAnnotation` when it was split out as a separate table (§4 of OVERVIEW.md); SQLAlchemy's declarative constructor rejects unknown kwargs, so these tests errored out before running anything, meaning the dashboard engine wasn't actually under test. Both fixtures now create a `TradeAnnotation` row (linked by `completed_trade_id`) instead, matching how `DashboardEngine._calculate_pattern_metrics` actually reads pattern data (`trade.trade_annotation.setup_pattern_rel`). No production code changed.
+
+---
+
 ## v1.34.0 - 2026-07-29
 
 ### New Features

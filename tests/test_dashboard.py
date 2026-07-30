@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, date
 from decimal import Decimal
 
-from trading_journal.models import CompletedTrade, Position, SetupPattern, User
+from trading_journal.models import CompletedTrade, Position, SetupPattern, TradeAnnotation, User
 from trading_journal.dashboard import DashboardEngine
 from trading_journal.authorization import AuthContext
 from trading_journal.database import db_manager
@@ -72,7 +72,6 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 10, 15, 0, 0),
             is_winning_trade=True,
             trade_type="LONG",
-            setup_pattern_id=macd_pattern.pattern_id,
         ),
         CompletedTrade(
             user_id=test_user.user_id,
@@ -88,7 +87,6 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 11, 15, 0, 0),
             is_winning_trade=False,
             trade_type="LONG",
-            setup_pattern_id=macd_pattern.pattern_id,
         ),
         CompletedTrade(
             user_id=test_user.user_id,
@@ -104,7 +102,6 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 12, 15, 0, 0),
             is_winning_trade=True,
             trade_type="LONG",
-            setup_pattern_id=orb_pattern.pattern_id,
         ),
         CompletedTrade(
             user_id=test_user.user_id,
@@ -120,7 +117,6 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 13, 15, 0, 0),
             is_winning_trade=False,
             trade_type="LONG",
-            setup_pattern_id=orb_pattern.pattern_id,
         ),
         CompletedTrade(
             user_id=test_user.user_id,
@@ -136,12 +132,31 @@ def sample_trades(db_session, test_user):
             closed_at=datetime(2025, 1, 14, 15, 0, 0),
             is_winning_trade=True,
             trade_type="LONG",
-            setup_pattern_id=macd_pattern.pattern_id,
         ),
     ]
 
     for trade in trades:
         db_session.add(trade)
+
+    db_session.flush()
+
+    # setup_pattern_id lives on TradeAnnotation, not CompletedTrade (issue #34) —
+    # DashboardEngine reads it via trade.trade_annotation.setup_pattern_rel.
+    trade_patterns = {
+        "AAPL": macd_pattern,
+        "TSLA": macd_pattern,
+        "GOOGL": orb_pattern,
+        "MSFT": orb_pattern,
+        "NVDA": macd_pattern,
+    }
+    for trade in trades:
+        db_session.add(TradeAnnotation(
+            completed_trade_id=trade.completed_trade_id,
+            user_id=test_user.user_id,
+            symbol=trade.symbol,
+            opened_at=trade.opened_at,
+            setup_pattern_id=trade_patterns[trade.symbol].pattern_id,
+        ))
 
     db_session.commit()
 

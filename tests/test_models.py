@@ -1,7 +1,9 @@
 """Test database models."""
 
+from datetime import datetime, timezone
+
 import pytest
-from trading_journal.models import Trade, CompletedTrade, NotepadEntry, Position, User
+from trading_journal.models import Trade, CompletedTrade, NotepadEntry, Position, TradeAnnotation, User
 
 
 def test_trade_model_creation(db_session):
@@ -58,6 +60,7 @@ def test_completed_trade_model_creation(db_session):
     db_session.add(pattern)
     db_session.flush()
 
+    opened_at = datetime(2025, 1, 10, 10, 0, 0, tzinfo=timezone.utc)
     completed_trade = CompletedTrade(
         user_id=user.user_id,
         symbol="AAPL",
@@ -66,16 +69,28 @@ def test_completed_trade_model_creation(db_session):
         entry_avg_price=150.00,
         exit_avg_price=155.00,
         net_pnl=500.00,
-        setup_pattern_id=pattern.pattern_id,
-        trade_notes="Good entry timing",
+        opened_at=opened_at,
         is_winning_trade=True
     )
-
     db_session.add(completed_trade)
+    db_session.flush()
+
+    # setup_pattern_id and trade_notes live on TradeAnnotation, not CompletedTrade —
+    # see OVERVIEW.md §4, "Why trade_annotations is a separate table" (issue #34).
+    annotation = TradeAnnotation(
+        completed_trade_id=completed_trade.completed_trade_id,
+        user_id=user.user_id,
+        symbol=completed_trade.symbol,
+        opened_at=opened_at,
+        setup_pattern_id=pattern.pattern_id,
+        trade_notes="Good entry timing",
+    )
+    db_session.add(annotation)
     db_session.commit()
 
     assert completed_trade.completed_trade_id is not None
-    assert completed_trade.setup_pattern_rel.pattern_name == "5min ORB"
+    assert completed_trade.trade_annotation.setup_pattern_rel.pattern_name == "5min ORB"
+    assert completed_trade.trade_annotation.trade_notes == "Good entry timing"
     assert completed_trade.is_winning_trade is True
 
 
