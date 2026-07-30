@@ -1,5 +1,8 @@
 """Trade routes: /trades, /trades/<id>, /trades/<id>/annotate."""
 
+import zoneinfo
+from datetime import timezone as dt_timezone
+
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from sqlalchemy import and_, asc, desc, or_
 from sqlalchemy.orm import joinedload
@@ -11,6 +14,14 @@ from ...authorization import AuthContext
 from ...database import db_manager
 from ...models import Account, AtmOption, CompletedTrade, HgAnalysisResult, NotepadEntry, SetupPattern, SetupSource, Trade, TradeAnnotation
 from ...positions import PositionTracker
+
+
+def _to_user_tz(dt, user):
+    """Convert a naive UTC datetime to the user's local timezone."""
+    if dt is None:
+        return None
+    user_tz = zoneinfo.ZoneInfo(user.timezone or 'US/Eastern')
+    return dt.replace(tzinfo=dt_timezone.utc).astimezone(user_tz)
 
 bp = Blueprint('trades', __name__)
 
@@ -263,6 +274,10 @@ def detail(trade_id: int):
             .order_by(NotepadEntry.matched_at.asc())
             .all()
         )
+        matched_notes = [
+            {'notepad_id': n.notepad_id, 'body': n.body, 'created_at': _to_user_tz(n.created_at, user)}
+            for n in matched_notes
+        ]
 
         # Unmatched entries eligible to attach here — no symbol set, or symbol matches this trade
         unmatched_notes = (
@@ -276,6 +291,10 @@ def detail(trade_id: int):
             .order_by(NotepadEntry.created_at.desc())
             .all()
         )
+        unmatched_notes = [
+            {'notepad_id': n.notepad_id, 'body': n.body, 'created_at': _to_user_tz(n.created_at, user)}
+            for n in unmatched_notes
+        ]
 
         patterns = (
             db_session.query(SetupPattern)

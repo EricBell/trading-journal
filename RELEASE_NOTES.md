@@ -1,3 +1,10 @@
+## v1.34.2 - 2026-07-29
+
+### Bug Fixes
+- **Fix: Notepad card on the trade detail page showed raw UTC timestamps instead of the user's local time (issue #33 follow-up)** — found via a browser-driven check of the notepad feature: the same notepad entry showed "21:36" on its own page and in the merged annotate notes, but "01:36" (raw UTC) in the trade detail page's Notepad card and "Attach existing note" dropdown, a 4-hour discrepancy. `routes/trades.py`'s `detail()` was passing raw `NotepadEntry` ORM objects straight to the template instead of converting `created_at` to the user's timezone the way `routes/notepad.py` and `routes/journal.py` already do. Both lists are now converted via the same `_to_user_tz` helper before rendering.
+
+---
+
 ## v1.34.1 - 2026-07-29
 
 ### Testing
