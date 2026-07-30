@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{% if entry %}Notepad Entry{% else %}New Notepad Entry{% endif %} — Trading Journal{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <a href="{{ url_for('notepad.index') }}" class="btn btn-sm btn-outline-secondary">&larr; Notepad</a>
+  {% if entry %}
+  <div class="text-muted small">
+    Created {{ entry.created_at.strftime('%Y-%m-%d %H:%M') if entry.created_at else '' }}
+    {% if entry.updated_at and entry.updated_at != entry.created_at %}
+    · Updated {{ entry.updated_at.strftime('%Y-%m-%d %H:%M') }}
+    {% endif %}
+  </div>
+  <button type="button" class="btn btn-sm btn-outline-danger"
+          data-bs-toggle="modal" data-bs-target="#deleteModal">Delete</button>
+  {% else %}
+  <div></div>
+  {% endif %}
+</div>
+
+{% if entry and entry.is_matched %}
+<div class="alert alert-success d-flex justify-content-between align-items-center">
+  <span>
+    Merged into trade <strong>{{ entry.matched_symbol }}</strong>
+    ({{ entry.matched_opened_at.strftime('%Y-%m-%d %H:%M') if entry.matched_opened_at else '' }})
+    on {{ entry.matched_at.strftime('%Y-%m-%d %H:%M') if entry.matched_at else '' }}.
+    Editing this entry below does not update the trade's notes.
+  </span>
+  {% if entry.matched_trade_id %}
+  <a href="{{ url_for('trades.detail', trade_id=entry.matched_trade_id) }}" class="btn btn-sm btn-success">View Trade</a>
+  {% endif %}
+</div>
+{% elif entry %}
+<div class="mb-3">
+  <a href="{{ url_for('notepad.match_picker', notepad_id=entry.notepad_id) }}" class="btn btn-sm btn-outline-primary">Attach to Trade&hellip;</a>
+</div>
+{% endif %}
+
+{% if entry %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Notepad Entry</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Delete this notepad entry? This cannot be undone.
+        {% if entry.is_matched %}(It has already been merged into a trade's notes — deleting it here does not remove that merged text.){% endif %}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="post" action="{{ url_for('notepad.delete', notepad_id=entry.notepad_id) }}">
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<form method="post"
+      action="{{ url_for('notepad.update', notepad_id=entry.notepad_id) if entry else url_for('notepad.create') }}">
+  <div class="row g-3 mb-3">
+    <div class="col-sm-4">
+      <label class="form-label small mb-1">Symbol (optional)</label>
+      <input type="text" name="symbol" class="form-control"
+             value="{{ entry.symbol or '' if entry else (prefill_symbol or '') }}" placeholder="e.g. AAPL">
+    </div>
+    <div class="col-sm-4">
+      <label class="form-label small mb-1">Account (optional)</label>
+      <select name="account_id" class="form-select">
+        <option value="">— none —</option>
+        {% for a in accounts %}
+        <option value="{{ a.account_id }}" {% if entry and entry.account_id == a.account_id %}selected{% endif %}>
+          {{ a.account_name or a.account_number }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="mb-3">
+    <textarea id="entry_body" name="body"
+              placeholder="Capture your thoughts here...">{{ entry.body or '' if entry else '' }}</textarea>
+  </div>
+  <button type="submit" id="saveBtn" class="btn btn-primary"
+          {% if entry %}disabled{% endif %}>Save</button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<script>
+const easyMDE = new EasyMDE({
+  element: document.getElementById('entry_body'),
+  spellChecker: false,
+  autosave: { enabled: false },
+  toolbar: ['bold','italic','heading','|','unordered-list','ordered-list','|','link','code','|','preview','side-by-side','fullscreen'],
+  minHeight: '200px',
+});
+
+function fitEditor() {
+  const cm = document.querySelector('.CodeMirror');
+  const saveBtn = document.getElementById('saveBtn');
+  if (!cm) return;
+  const top = cm.getBoundingClientRect().top;
+  const btnHeight = saveBtn ? saveBtn.offsetHeight + 16 : 0;
+  const h = Math.max(200, window.innerHeight - top - 60 - btnHeight);
+  cm.style.height = h + 'px';
+  easyMDE.codemirror.refresh();
+}
+fitEditor();
+window.addEventListener('resize', fitEditor);
+
+// Enable Save button when content changes
+const saveBtn = document.getElementById('saveBtn');
+const symbolInput = document.querySelector('input[name="symbol"]');
+const accountSelect = document.querySelector('select[name="account_id"]');
+
+function enableSave() { if (saveBtn) saveBtn.disabled = false; }
+if (symbolInput) symbolInput.addEventListener('input', enableSave);
+if (accountSelect) accountSelect.addEventListener('change', enableSave);
+easyMDE.codemirror.on('change', enableSave);
+
+// New entry: enable immediately since there's nothing to compare
+{% if not entry %}
+enableSave();
+{% endif %}
+</script>
+{% endblock %}

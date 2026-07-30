@@ -1,45 +1,18 @@
 """Trade routes: /trades, /trades/<id>, /trades/<id>/annotate."""
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
-from sqlalchemy import asc, desc
+from sqlalchemy import and_, asc, desc, or_
 from sqlalchemy.orm import joinedload
 
 from ..auth import login_required
+from ...annotation_service import get_or_create_annotation as _get_or_create_annotation
+from ...annotation_service import merge_notepad_entry
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Account, AtmOption, CompletedTrade, HgAnalysisResult, SetupPattern, SetupSource, Trade, TradeAnnotation
+from ...models import Account, AtmOption, CompletedTrade, HgAnalysisResult, NotepadEntry, SetupPattern, SetupSource, Trade, TradeAnnotation
 from ...positions import PositionTracker
 
 bp = Blueprint('trades', __name__)
-
-
-def _get_or_create_annotation(session, trade):
-    """Load the TradeAnnotation for a trade, creating one if it doesn't exist yet.
-
-    Looks up by completed_trade_id first, then falls back to the natural key
-    (user_id, symbol, opened_at) to handle the case where a completed_trades
-    rebuild has NULLed the FK but the annotation row still exists.
-    """
-    ann = session.query(TradeAnnotation).filter_by(
-        completed_trade_id=trade.completed_trade_id
-    ).one_or_none()
-    if ann is None:
-        ann = session.query(TradeAnnotation).filter_by(
-            user_id=trade.user_id,
-            symbol=trade.symbol,
-            opened_at=trade.opened_at,
-        ).one_or_none()
-        if ann is not None:
-            ann.completed_trade_id = trade.completed_trade_id
-    if ann is None:
-        ann = TradeAnnotation(
-            completed_trade_id=trade.completed_trade_id,
-            user_id=trade.user_id,
-            symbol=trade.symbol,
-            opened_at=trade.opened_at,
-        )
-        session.add(ann)
-    return ann
 
 def _resolve_grail_record(trade, annotation) -> dict | None:
     """Determine the grail plan for a trade, respecting manual overrides.
@@ -272,6 +245,38 @@ def detail(trade_id: int):
             completed_trade_id=trade_id
         ).one_or_none()
 
+        # Notepad entries already merged into this trade — matched by FK, falling back to
+        # the natural key in case a completed_trades rebuild nulled the FK (see NotepadEntry).
+        matched_notes = (
+            db_session.query(NotepadEntry)
+            .filter(
+                NotepadEntry.user_id == user.user_id,
+                or_(
+                    NotepadEntry.matched_trade_id == trade_id,
+                    and_(
+                        NotepadEntry.matched_trade_id.is_(None),
+                        NotepadEntry.matched_symbol == trade.symbol,
+                        NotepadEntry.matched_opened_at == trade.opened_at,
+                    ),
+                ),
+            )
+            .order_by(NotepadEntry.matched_at.asc())
+            .all()
+        )
+
+        # Unmatched entries eligible to attach here — no symbol set, or symbol matches this trade
+        unmatched_notes = (
+            db_session.query(NotepadEntry)
+            .filter(
+                NotepadEntry.user_id == user.user_id,
+                NotepadEntry.matched_trade_id.is_(None),
+                NotepadEntry.matched_at.is_(None),
+                or_(NotepadEntry.symbol.is_(None), NotepadEntry.symbol == trade.symbol),
+            )
+            .order_by(NotepadEntry.created_at.desc())
+            .all()
+        )
+
         patterns = (
             db_session.query(SetupPattern)
             .filter_by(user_id=user.user_id, is_active=True)
@@ -368,6 +373,8 @@ def detail(trade_id: int):
         nav=nav,
         back_url=back_url,
         annotate_url=annotate_url,
+        matched_notes=matched_notes,
+        unmatched_notes=unmatched_notes,
     )
 
 
@@ -615,6 +622,37 @@ def annotate(trade_id: int):
         if _v:
             detail_kwargs[_p] = _v
     return redirect(url_for('trades.detail', **detail_kwargs))
+
+
+@bp.route('/trades/<int:trade_id>/attach-note', methods=['POST'])
+@login_required
+def attach_note(trade_id: int):
+    """Attach an existing unmatched notepad entry to this trade (merges its body into trade_notes)."""
+    user = AuthContext.require_user()
+    notepad_id_raw = request.form.get('notepad_id', '').strip()
+
+    with db_manager.get_session() as session:
+        trade = session.query(CompletedTrade).filter_by(
+            completed_trade_id=trade_id, user_id=user.user_id
+        ).one_or_none()
+        if trade is None:
+            flash('Trade not found.', 'warning')
+            return redirect(url_for('trades.index'))
+
+        entry = None
+        if notepad_id_raw:
+            entry = session.query(NotepadEntry).filter_by(
+                notepad_id=int(notepad_id_raw), user_id=user.user_id
+            ).one_or_none()
+        if entry is None:
+            flash('Notepad entry not found.', 'warning')
+            return redirect(url_for('trades.detail', trade_id=trade_id))
+
+        merge_notepad_entry(session, entry, trade, user)
+        session.commit()
+
+    flash('Notepad entry attached to this trade.', 'success')
+    return redirect(url_for('trades.detail', trade_id=trade_id))
 
 
 @bp.route('/trades/<int:trade_id>/analyze-hg', methods=['POST'])

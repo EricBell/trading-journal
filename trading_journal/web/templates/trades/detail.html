@@ -304,6 +304,50 @@
   </div>
 </div>
 
+<div class="row g-3 mt-0">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">Notepad</div>
+      <div class="card-body">
+        {% if matched_notes %}
+        <ul class="list-unstyled mb-3">
+          {% for n in matched_notes %}
+          <li class="mb-2 pb-2 border-bottom">
+            <div class="text-muted small">
+              Captured {{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}
+              &middot; <a href="{{ url_for('notepad.detail', notepad_id=n.notepad_id) }}">view entry</a>
+            </div>
+            <div style="white-space:pre-wrap">{{ n.body[:200] }}{% if n.body|length > 200 %}…{% endif %}</div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="text-muted small mb-3">No notepad entries have been attached to this trade yet.</div>
+        {% endif %}
+
+        {% if unmatched_notes %}
+        <form method="post" action="{{ url_for('trades.attach_note', trade_id=trade.completed_trade_id) }}" class="d-flex gap-2 align-items-end flex-wrap">
+          <div>
+            <label class="form-label small mb-1">Attach existing note</label>
+            <select name="notepad_id" class="form-select form-select-sm">
+              {% for n in unmatched_notes %}
+              <option value="{{ n.notepad_id }}">
+                {{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }} —
+                {{ (n.body[:60] + '…') if n.body|length > 60 else n.body }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-sm btn-outline-primary">Attach</button>
+        </form>
+        {% endif %}
+
+        <a href="{{ url_for('notepad.new', symbol=trade.symbol) }}" class="btn btn-sm btn-link ps-0 mt-2">+ New notepad entry for {{ trade.symbol }}</a>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% if grail_record %}
 <div class="row g-3 mt-0">
   <div class="col-12">

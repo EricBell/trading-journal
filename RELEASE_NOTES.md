@@ -1,3 +1,10 @@
+## v1.34.0 - 2026-07-29
+
+### New Features
+- **Trade Notepad — pre- and post-trade note capture (issue #33)** — a new `/notepad` section lets you jot thoughts about a trade in real time, before the CSV import that materializes it into `completed_trades`. Entries are stored independently in a new `notepad_entries` table (optional symbol/account, markdown body) and can later be attached to a materialized trade — from either the notepad entry itself (`Attach to Trade…`) or from the trade's detail page (`Attach existing note`). Attaching is an append, not a link: the entry's text is merged into that trade's existing `trade_annotations.trade_notes` field (the same field the annotate form edits), with a timestamped separator, so multiple pre-trade entries and any post-hoc annotate-page notes accumulate into one place per trade. The existing "add notes after the fact" workflow on the annotate form is unchanged. `_get_or_create_annotation`'s natural-key resilience (symbol + opened_at) was factored out into a shared `annotation_service.py` module and reused by the new merge logic, so a `completed_trades` rebuild can't orphan a matched note.
+
+---
+
 ## v1.33.8 - 2026-07-22
 
 ### Bug Fixes

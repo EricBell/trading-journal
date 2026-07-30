@@ -36,6 +36,10 @@
              href="{{ url_for('journal.index') }}">Journal</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('notepad.') %}active{% endif %}"
+             href="{{ url_for('notepad.index') }}">Notepad</a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('backtest.') %}active{% endif %}"
              href="{{ url_for('backtest.index') }}">Backtest</a>
         </li>

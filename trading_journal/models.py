@@ -88,6 +88,7 @@ class User(Base):
     processing_logs = relationship("ProcessingLog", back_populates="user")
     trade_annotations = relationship("TradeAnnotation", back_populates="user")
     journal_notes = relationship("JournalNote", back_populates="user", order_by="JournalNote.created_at.desc()")
+    notepad_entries = relationship("NotepadEntry", back_populates="user", order_by="NotepadEntry.created_at.desc()")
     hg_market_data_requests = relationship("HgMarketDataRequest", back_populates="user")
     hg_analysis_results = relationship("HgAnalysisResult", back_populates="user")
     grail_plan_analyses = relationship("GrailPlanAnalysis", back_populates="user")
@@ -457,6 +458,45 @@ class JournalNote(Base):
     updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="journal_notes")
+
+
+class NotepadEntry(Base):
+    """Free-form pre-trade thought capture, independent of any materialized trade.
+
+    Entries are created before a CSV import brings the trade into `completed_trades`.
+    Once the trade exists, an entry can be matched to it — matching appends the entry's
+    body into that trade's `TradeAnnotation.trade_notes` (see annotation_service.py) rather
+    than creating a hard link, so multiple entries can pour into one trade's notes.
+    """
+
+    __tablename__ = "notepad_entries"
+
+    notepad_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
+
+    symbol = Column(String(50), nullable=True)
+    account_id = Column(BigInteger, ForeignKey("accounts.account_id"), nullable=True)
+    body = Column(Text, nullable=False)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
+
+    # Match state — matched_trade_id is a convenience FK only; completed_trades is a
+    # fully-derived table (OVERVIEW.md §3) that gets rebuilt on reprocess, so the natural
+    # key (matched_symbol, matched_opened_at) is the durable record of the match, same
+    # pattern as TradeAnnotation's re-linking.
+    matched_trade_id = Column(
+        BigInteger,
+        ForeignKey("completed_trades.completed_trade_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    matched_symbol = Column(String(50), nullable=True)
+    matched_opened_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    matched_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="notepad_entries")
+    account = relationship("Account")
+    matched_trade = relationship("CompletedTrade")
 
 
 class HgMarketDataRequest(Base):

@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.33.8
-**Last Updated:** 2026-07-22
+**Version:** 1.34.0
+**Last Updated:** 2026-07-29
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -75,6 +75,7 @@ The hard problems this application solves:
       ├── /admin/grail-plans            Grail Plan Browser: filter, analyze, batch-analyze (admin only)
       ├── /admin/export                 annotation export as JSON (admin only)
       ├── /journal             timestamped free-form notes (list + create + edit + delete)
+      ├── /notepad             pre-/post-trade notepad (list + create + edit + delete + match to trade)
       ├── /about               release notes accordion
       └── /api/*               JSON API (dashboard, trades)
 
@@ -143,6 +144,7 @@ restores them exactly.
 | `hg_analysis_results` | Versioned evaluation results per HG plan: entry touch type, TP1/TP2 reached, MFE/MAE, bars-to-entry, linked-trade comparison | (hg_market_data_request_id, analysis_version) UNIQUE |
 | `grail_plan_analyses` | Plan-centric zone-based analysis results from Grail Plan Browser: entry/stop/TP1 zone touch, outcome, fetch metadata, bars_expected | (grail_plan_id, analysis_version) effectively UNIQUE per user; user_id FK |
 | `journal_notes` | Free-form trader notes (not trade-linked): title, body (markdown), timestamps | note_id PK; user_id FK |
+| `notepad_entries` | Pre-/post-trade notepad captures: optional symbol/account, markdown body, match state (`matched_trade_id`, `matched_symbol`, `matched_opened_at`, `matched_at`) | notepad_id PK; user_id FK; `matched_trade_id` FK to `completed_trades` ON DELETE SET NULL |
 | `backtest_strategy_types` | User-managed dropdown: spread strategy names for backtest runs | case-insensitive UNIQUE per user; is_active soft-delete |
 | `backtest_underlyings` | User-managed dropdown: underlying instruments for backtest runs | case-insensitive UNIQUE per user; is_active soft-delete |
 | `backtest_runs` | One row per backtest experiment: parameter set (strategy, underlying, entry time, entry style, width, DTE, strike selection, profit target, stop rule, date range, tool) + aggregate results (trade count, win rate, avg/total P&L, avg win/loss, profit factor, max win/loss/drawdown) + status (draft/complete) | run_id PK; user_id FK; entry_style CHECK (simultaneous\|staged) |
@@ -407,6 +409,7 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
 | Admin: Grail Plan Browser | `/admin/grail-plans` | Browse and analyze grail plans directly from the `grail_files` DB. Filter by symbol, date range, asset type. Per-plan "Analyze" / "Re-analyze" buttons. Configurable batch analyzer: enter a count, click "Analyze Next N" — SSE streams per-plan results; client-side countdown handles the 60s inter-batch wait (no long-lived connection held open); rate-limited or `no_data` plans are retried on the next batch. Outcome badges: success, failure, inconclusive, no entry, no data, no subscription. Aggregate stats (entry reached %, success/failure/inconclusive %). Admin-only. |
 | Admin: export | `/admin/export` | Export all manually entered data as JSON (format v3.0): trade annotations (grouped by account) + journal notes. Per-user selection. Natural keys documented in `export_metadata.schema` for re-import. Admin-only. |
 | Journal | `/journal` | Timestamped free-form notes (EasyMDE markdown editor, title optional). List shows newest first with snippet. Not trade-linked. Included in export. |
+| Notepad | `/notepad` | Pre-/post-trade thought capture (EasyMDE), independent of any trade until matched. List with All/Unmatched/Matched filter + symbol search. Matching (from either the notepad entry's "Attach to Trade…" picker or the trade detail page's "Attach existing note" control) appends the entry's body into that trade's annotate `trade_notes` field rather than just linking it — see §5.9. Not included in export. |
 | About | `/about` | Release notes parsed from RELEASE_NOTES.md; Bootstrap accordion; current release badged |
 | Backtest runs | `/backtest` | List with filter bar (strategy, underlying, entry time, spread width), sortable columns, summary stat cards (best win rate, best profit factor, avg win rate across filtered runs), status badges, pagination. |
 | Backtest detail | `/backtest/new`, `/backtest/<id>` | Create/edit form: Parameters section (strategy, underlying, entry style, entry time, width, DTE, strike selection, profit target, stop rule, date range, tool, status), Leg Management Rules inline CRUD (add/edit/delete per-leg early-exit rules), Results section (10 aggregate fields), EasyMDE notes. Inline "Add new…" for strategy type and underlying. Defaults seeded on first use. |
@@ -487,6 +490,29 @@ be backfilled manually via Admin → Market Data. HG plan analysis (TP1/TP2 reac
 MFE/MAE, entry touch type) is implemented via the HG pipeline (§5.6). VIX context
 analysis is not yet implemented.
 
+### 5.9 Notepad entries — append-only merge into trade_annotations (issue #33)
+
+`notepad_entries` exists so a trader can capture thoughts in real time while in a trade,
+before that trade has been materialized by a CSV import. An entry is independent of any
+trade until explicitly matched.
+
+Matching is an **append, not a link**: `annotation_service.merge_notepad_entry()` calls
+`get_or_create_annotation()` (the same natural-key-resilient lookup trade annotations use,
+§5 above) and appends the entry's body onto that annotation's `trade_notes` field with a
+timestamped separator, rather than creating a hard foreign-key relationship that a trader
+would need to navigate to read the note. This lets multiple pre-trade entries — plus
+anything typed directly into the annotate form — accumulate into one place per trade.
+`notepad_entries.matched_trade_id` is a convenience FK (`ON DELETE SET NULL`) only; like
+`trade_annotations`, the durable record of a match is the natural key
+(`matched_symbol`, `matched_opened_at`), so a `completed_trades` rebuild can't silently
+orphan a matched entry. There is no "unmatch" — since the merge already happened as a text
+append (and the annotation may have been edited further since), there's nothing clean to
+reverse; deleting a notepad entry only removes the archival capture, never the merged text.
+
+`get_or_create_annotation()` itself was relocated from `trades.py` into a shared
+`annotation_service.py` module so both `routes/trades.py` (the existing annotate form) and
+`routes/notepad.py` (the new notepad blueprint) call the same lookup/creation logic.
+
 ### 5.7 Grail Plan Browser analysis pipeline
 
 `grail_analyzer.py: run_grail_plan_analysis()` is the plan-centric counterpart to the
@@ -538,7 +564,7 @@ the wrong trade.
 
 ```
 trading_journal/
-├── models.py               SQLAlchemy ORM — all 15 tables
+├── models.py               SQLAlchemy ORM — all 16 tables
 ├── ingestion.py            NdjsonIngester — ingest pipeline entry point
 ├── csv_parser.py           CsvParser — Schwab CSV → record dicts
 ├── ninjatrader_parser.py   NinjaTraderParser — NinjaTrader exec CSV → record dicts (FUTURES)
@@ -554,6 +580,7 @@ trading_journal/
 ├── config.py               Two-tier TOML config loader
 ├── database.py             db_manager singleton, session context manager
 ├── authorization.py        AuthContext — current-user thread-local
+├── annotation_service.py   get_or_create_annotation() (natural-key-resilient TradeAnnotation lookup, shared by trades.py and notepad.py); merge_notepad_entry() — appends a NotepadEntry's body into a trade's annotation notes
 ├── duplicate_detector.py   Cross-user duplicate detection before ingest
 ├── observability.py        UploadPerfLogger — sends per-stage timing events to OpenObserve over HTTP; disabled by default (UPLOAD_PERF_LOGGING_ENABLED); no-op when disabled or when OpenObserve is unreachable
 │
@@ -563,11 +590,12 @@ trading_journal/
     └── routes/
         ├── auth.py         /login, /logout
         ├── dashboard.py    /
-        ├── trades.py       /trades, /trades/<id>, annotate, delete, grail-plan, hg-analyze
+        ├── trades.py       /trades, /trades/<id>, annotate, delete, grail-plan, hg-analyze, attach-note (merge a notepad entry in)
         ├── positions.py    /positions
         ├── ingest.py       /ingest (CSV upload)
         ├── admin.py        /admin/users, /admin/market-data, /admin/market-data/hg-analysis, /admin/market-data/hg-batch, /admin/grail-plans, /admin/export
         ├── journal.py      /journal — list, create, detail/edit, delete
+        ├── notepad.py      /notepad — list, create, detail/edit, delete, match-picker, match (attach-and-merge)
         ├── about.py        /about (release notes)
         ├── settings.py     /settings (patterns, sources, ATM options, backtest strategy types, backtest underlyings)
         ├── backtest.py     /backtest — list, new, detail/edit, delete, leg-rules CRUD
@@ -575,7 +603,7 @@ trading_journal/
 
 main.py                     Click CLI entry point
 wsgi.py                     gunicorn entry point; calls load_dotenv() so .env vars reach os.environ
-alembic/versions/           Migration history (latest: 2026_06_04_backtest_runs — adds backtest_strategy_types, backtest_underlyings, backtest_runs, backtest_leg_rules tables)
+alembic/versions/           Migration history (latest: 2026_07_29_notepad_entries — adds notepad_entries table)
 docs/vertical-put-debit-spread.md  Spread support design doc and worked example
 docs/openobserve-upload-logging.md  Upload perf logging setup: env vars, event reference, query examples
 docker-compose.openobserve.yml  Dev-only OpenObserve container for upload performance diagnosis

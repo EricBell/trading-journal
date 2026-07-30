@@ -1,7 +1,7 @@
 """Test database models."""
 
 import pytest
-from trading_journal.models import Trade, CompletedTrade, Position, User
+from trading_journal.models import Trade, CompletedTrade, NotepadEntry, Position, User
 
 
 def test_trade_model_creation(db_session):
@@ -163,3 +163,76 @@ def test_trade_completed_trade_relationship(db_session):
     assert len(completed_trade.executions) == 2
     assert trade1.completed_trade == completed_trade
     assert trade2.completed_trade == completed_trade
+
+
+def test_notepad_entry_model_creation(db_session):
+    """Test creating an unmatched notepad entry."""
+    user = User(
+        username="testuser5",
+        email="test5@example.com",
+        auth_method="api_key",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    entry = NotepadEntry(
+        user_id=user.user_id,
+        symbol="AAPL",
+        body="Watching for a breakout above 150.",
+    )
+    db_session.add(entry)
+    db_session.commit()
+
+    assert entry.notepad_id is not None
+    assert entry.symbol == "AAPL"
+    assert entry.matched_trade_id is None
+    assert entry.matched_at is None
+
+
+def test_notepad_entry_natural_key_fallback_after_fk_nulled(db_session):
+    """A matched entry should still be findable by (matched_symbol, matched_opened_at)
+    even if matched_trade_id has been nulled out by a completed_trades rebuild."""
+    from datetime import datetime, timezone
+
+    user = User(
+        username="testuser6",
+        email="test6@example.com",
+        auth_method="api_key",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    opened_at = datetime(2026, 7, 1, 9, 30, tzinfo=timezone.utc)
+    completed_trade = CompletedTrade(
+        user_id=user.user_id,
+        symbol="AAPL",
+        instrument_type="EQUITY",
+        total_qty=100,
+        net_pnl=500.00,
+        opened_at=opened_at,
+    )
+    db_session.add(completed_trade)
+    db_session.flush()
+
+    entry = NotepadEntry(
+        user_id=user.user_id,
+        symbol="AAPL",
+        body="Entry thesis.",
+        matched_trade_id=completed_trade.completed_trade_id,
+        matched_symbol="AAPL",
+        matched_opened_at=opened_at,
+        matched_at=datetime.now(timezone.utc),
+    )
+    db_session.add(entry)
+    db_session.commit()
+
+    # Simulate a completed_trades rebuild nulling the FK (ON DELETE SET NULL)
+    db_session.delete(completed_trade)
+    db_session.commit()
+    db_session.refresh(entry)
+
+    assert entry.matched_trade_id is None
+    assert entry.matched_symbol == "AAPL"
+    assert entry.matched_opened_at == opened_at
