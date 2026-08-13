@@ -329,13 +329,16 @@ class TradeCompletionEngine:
         closed_at = max(l.exec_timestamp for l in close_legs if l.exec_timestamp)
         hold_duration = closed_at - opened_at if opened_at and closed_at else None
 
-        # Direction: the long (BUY) leg drives trade_type
-        long_legs = [l for l in open_legs if l.side == 'BUY']
-        if long_legs:
-            trade_type = 'SHORT' if long_legs[0].option_type == 'PUT' else 'LONG'
+        # Direction: mirrors the single-leg convention (BUY CALL/SELL PUT = LONG,
+        # SELL CALL/BUY PUT = SHORT) but applied to the spread's net debit/credit
+        # rather than a single leg — a leg-only heuristic can't distinguish a bull
+        # put credit spread from a bear put debit spread, since both have a BUY PUT
+        # leg (issue #37).
+        is_debit = net_debit > 0
+        if first_leg.option_type == 'PUT':
+            trade_type = 'SHORT' if is_debit else 'LONG'
         else:
-            short_leg = next((l for l in open_legs if l.side == 'SELL'), first_leg)
-            trade_type = 'LONG' if short_leg.option_type == 'PUT' else 'SHORT'
+            trade_type = 'LONG' if is_debit else 'SHORT'
 
         # Multi-leg option_details: legs sorted highest-strike first
         sorted_legs = sorted(open_legs, key=lambda l: float(l.strike_price or 0), reverse=True)

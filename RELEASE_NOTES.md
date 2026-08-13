@@ -1,3 +1,10 @@
+## v1.35.2 - 2026-08-13
+
+### Bug Fixes
+- **Fix: vertical spread trade_type (LONG/SHORT) inverted for credit spreads (issue #37)** — `_create_spread_completed_trade()` derived a spread's directional label from whichever leg happened to be `BUY`, applying the single-leg rule ("BUY PUT = SHORT") to that one leg regardless of which leg actually drove the position's net exposure. This produced the right answer for bull call and bear put (debit) spreads but inverted bull put and bear call (credit) spreads — e.g. a bull put credit spread (sell higher-strike put, buy lower-strike put as protection — bullish, profits as the underlying rises) was labeled `SHORT`. `trade_type` is now derived from the spread's net debit/credit sign combined with option right, mirroring the single-leg convention (`entry_avg_price`), so all four vertical spread combinations resolve correctly. This also fixes Grail plan matching for the affected trades — `find_grail_match()` filters candidate plans by `entry_direction = trade_type`, so a mislabeled trade silently failed to match an otherwise-correct plan. Existing spread trades were corrected via a full `completed_trades` rebuild (a fully-derived tier, no data migration needed).
+
+---
+
 ## v1.35.1 - 2026-07-30
 
 ### Bug Fixes

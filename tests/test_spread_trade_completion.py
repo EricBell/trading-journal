@@ -89,6 +89,70 @@ def test_matched_quantity_spread_completes_correctly(db_session, test_user, trad
     assert float(ct.net_pnl) == pytest.approx(-24.0)
 
 
+@pytest.mark.parametrize(
+    "name, option_type, open_legs, expected_trade_type",
+    [
+        (
+            "bull_put_credit",
+            "PUT",
+            [("SELL", 7785.0, 4.98), ("BUY", 7780.0, 3.43)],
+            "LONG",
+        ),
+        (
+            "bear_call_credit",
+            "CALL",
+            [("SELL", 7780.0, 4.98), ("BUY", 7785.0, 3.43)],
+            "SHORT",
+        ),
+        (
+            "bull_call_debit",
+            "CALL",
+            [("BUY", 7780.0, 4.98), ("SELL", 7785.0, 3.43)],
+            "LONG",
+        ),
+        (
+            "bear_put_debit",
+            "PUT",
+            [("BUY", 7785.0, 4.98), ("SELL", 7780.0, 3.43)],
+            "SHORT",
+        ),
+    ],
+)
+def test_vertical_spread_trade_type_reflects_directional_bias(
+    db_session, test_user, trade_engine, name, option_type, open_legs, expected_trade_type
+):
+    """Regression for issue #37: trade_type must reflect directional bias (bullish =
+    LONG, bearish = SHORT) for all four vertical spread combinations, not just whichever
+    leg happens to be BUY. Net credit put spreads (bull put) and net credit call spreads
+    (bear call) were previously inverted."""
+    open_tag = f"file.csv:{name}-open"
+    close_tag = f"file.csv:{name}-close"
+    open_ts = datetime(2026, 7, 21, 15, 28, 42)
+    close_ts = datetime(2026, 7, 21, 15, 40, 0)
+
+    trades = []
+    for i, (side, strike, net_price) in enumerate(open_legs):
+        trades.append(create_spread_leg(
+            test_user.user_id, i, side, 1, "TO OPEN", net_price, open_ts,
+            spread_order_tag=open_tag, strike=strike, option_type=option_type,
+        ))
+    # Reverse the sides to close the position at the same strikes.
+    for i, (side, strike, net_price) in enumerate(open_legs):
+        close_side = "SELL" if side == "BUY" else "BUY"
+        trades.append(create_spread_leg(
+            test_user.user_id, i + 100, close_side, 1, "TO CLOSE", net_price, close_ts,
+            spread_order_tag=close_tag, strike=strike, option_type=option_type,
+        ))
+    db_session.add_all(trades)
+    db_session.commit()
+
+    result = trade_engine.process_completed_trades()
+
+    assert result["completed_trades"] == 1
+    ct = db_session.query(CompletedTrade).first()
+    assert ct.trade_type == expected_trade_type
+
+
 def test_partial_close_quantity_mismatch_is_skipped_not_fabricated(db_session, test_user, trade_engine):
     """Regression for issue #23: when a 'spread' open (qty 2) is only partially closed
     (qty 1), zip()-based pairing must NOT fabricate a completed trade with wrong P&L —
