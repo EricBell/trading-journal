@@ -12,10 +12,13 @@ Provides CsvParser class with fixed policies:
 import csv
 import importlib.resources
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # Column alias mapping - maps normalized header names to canonical field names
 COL_ALIASES = {
@@ -320,6 +323,32 @@ def build_order_record(
         asset_type = 'STOCK'
     elif type_str == 'ETF':
         asset_type = 'ETF'
+
+    # Schwab's Account Statement export aggregates same-timestamp partial fills
+    # into one "Account Trade History" row and computes that row's price as
+    # total_cash_flow / signed_qty. Cash flow and signed qty use opposite sign
+    # conventions (BUY: cash negative, qty positive; SELL: cash positive, qty
+    # negative), so the quotient is always negative regardless of trade
+    # direction. A real per-share stock/ETF execution price is never negative,
+    # so this is always a sign-inversion bug in the source data, not a
+    # legitimate value — correct it here rather than ingest it silently
+    # (issue #38). Options are excluded: net debit/credit premiums can be
+    # legitimately negative.
+    if asset_type in {'STOCK', 'ETF'}:
+        if price is not None and price < 0:
+            logger.warning(
+                f"Row {row_index}: correcting sign-inverted {asset_type} price "
+                f"{price} -> {abs(price)} for {symbol!r} (issue #38)"
+            )
+            price = abs(price)
+            issues.append('price_sign_corrected')
+        if net_price is not None and net_price < 0:
+            logger.warning(
+                f"Row {row_index}: correcting sign-inverted {asset_type} net_price "
+                f"{net_price} -> {abs(net_price)} for {symbol!r} (issue #38)"
+            )
+            net_price = abs(net_price)
+            issues.append('net_price_sign_corrected')
 
     option = None
     if asset_type == 'OPTION':

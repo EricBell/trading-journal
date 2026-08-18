@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.34.0
-**Last Updated:** 2026-07-29
+**Version:** 1.35.4
+**Last Updated:** 2026-08-18
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -536,6 +536,42 @@ coverage) → upsert into `ohlcv_price_series` → run zone-based bar scan → w
 `bars_expected` is computed by counting 1-minute NYSE market-hours slots in the fetch
 window (`expected_market_bars()`) so partial-data fetches can be distinguished from
 complete ones (when `bars_fetched < bars_expected`).
+
+### 5.10 Account Statement price sign correction
+
+Schwab exports two CSV formats: the daily "Today's Trade Activity" report and the broader
+"Account Statement" (which `normalize_section_name()` maps onto the same section names via
+`SECTION_NAME_NORMALIZATION`, e.g. `Account Trade History` → `Filled Orders`). The Account
+Statement's `Account Trade History` section aggregates same-timestamp partial fills into a
+single summary row, and computes that row's price as `total cash flow / signed qty`. Cash
+flow and signed quantity use opposite sign conventions (BUY: cash negative, qty positive;
+SELL: cash positive, qty negative), so the quotient is always negative regardless of trade
+direction — a real per-share stock/ETF execution price is never negative. The daily
+TradeActivity export never aggregates fills this way, so this is specific to Account
+Statement imports.
+
+`build_order_record()` corrects this for `STOCK`/`ETF` fills: a negative `price`/`net_price`
+is replaced with its absolute value, a warning is logged, and `price_sign_corrected` /
+`net_price_sign_corrected` is appended to the record's `issues` list (issue #38). Option
+premiums are excluded from this correction — they can legitimately be negative (net debit
+conventions).
+
+**Recovery note (issue #39):** because `net_price` is part of `trades.unique_key` (§5.2), a
+row already ingested by pre-fix code has the *old* (wrong-sign) price baked into its key.
+Re-importing the same file after the fix computes a *different* key for that same physical
+fill, so `ON CONFLICT DO UPDATE` doesn't match the old row — it inserts a new, correctly-signed
+row alongside the stale one instead of replacing it. The stale row is left orphaned
+(`completed_trade_id` never resolves), and the extra phantom quantity it contributes can
+prevent `TradeCompletionEngine`'s running-quantity grouping (§5.4) from ever returning to
+exactly zero, silently dropping a `CompletedTrade` that should exist — with no warning logged.
+This is a one-time transition cost, not an ongoing bug: it happens only when re-importing data
+that predates a code change to a value feeding `unique_key` (`exec_time`, `symbol`, `side`,
+`qty`, or `net_price`). Recovery is manual — identify the stale row (opposite-signed
+counterpart of a newer row for the same `exec_time`/`symbol`/`side`/`qty`), delete it, then
+re-trigger scoped reprocessing (re-upload the file, or call
+`TradeCompletionEngine.reprocess_completed_trades_for_symbols` /
+`PositionTracker.reprocess_positions_for_symbols` directly for the affected symbols) — the same
+recovery shape as the issue #20/#23 `spread_order_tag` staleness note in §5.8.
 
 ---
 

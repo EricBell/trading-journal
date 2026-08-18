@@ -530,6 +530,61 @@ class TestCsvParserParseFile:
         result = build_order_record('Filled Orders', header_map, cells, 1)
         assert result is None
 
+    def test_negative_stock_price_corrected(self):
+        """Account Statement aggregated rows can carry a sign-inverted STOCK
+        price (total_cash_flow / signed_qty is always negative regardless of
+        trade direction). A real per-share stock price is never negative, so
+        it should be corrected rather than ingested as-is (issue #38)."""
+        from trading_journal.csv_parser import build_order_record
+        header_map = {
+            'exec_time': 0, 'side': 1, 'qty': 2, 'pos_effect': 3,
+            'symbol': 4, 'type': 5, 'price': 6, 'net_price': 7,
+        }
+        cells = ['8/17/26 09:56:13', 'SELL', '-10', 'TO CLOSE', 'WETO', 'STOCK', '-14.81', '-14.81']
+        result = build_order_record('Filled Orders', header_map, cells, 66)
+        assert result['price'] == pytest.approx(14.81)
+        assert result['net_price'] == pytest.approx(14.81)
+        assert 'price_sign_corrected' in result['issues']
+        assert 'net_price_sign_corrected' in result['issues']
+
+    def test_negative_option_price_not_corrected(self):
+        """Option premiums can legitimately be negative (net debit); only
+        STOCK/ETF rows get the sign correction."""
+        from trading_journal.csv_parser import build_order_record
+        header_map = {
+            'exec_time': 0, 'side': 1, 'qty': 2, 'pos_effect': 3,
+            'symbol': 4, 'exp': 5, 'strike': 6, 'type': 7,
+            'price': 8, 'net_price': 9,
+        }
+        cells = [
+            '4/21/26 10:52:44', 'BUY', '+1', 'TO OPEN', 'SPX',
+            '21 APR 26', '7110', 'PUT', '9.88', '-1.85',
+        ]
+        result = build_order_record('Filled Orders', header_map, cells, 1)
+        assert result['net_price'] == pytest.approx(-1.85)
+        assert 'net_price_sign_corrected' not in result['issues']
+
+    def test_account_statement_aggregated_row_price_corrected(self):
+        """End-to-end: an 'Account Trade History' section (Account Statement
+        export) with a sign-inverted aggregated SELL row parses to a fill
+        with a positive price, not the raw negative value (issue #38)."""
+        csv_content = """\
+            Account Trade History
+            ,,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Price Improvement,Order Type
+            ,,8/17/26 09:56:13,STOCK,SELL,-10,TO CLOSE,WETO,,,STOCK,-14.81,-14.81,-,STP
+        """
+        path = _write_temp_csv(csv_content)
+        try:
+            parser = CsvParser()
+            records = parser.parse_file(path)
+            fills = [r for r in records if r.get('event_type') == 'fill']
+            assert len(fills) == 1
+            assert fills[0]['section'] == 'Filled Orders'
+            assert fills[0]['price'] == pytest.approx(14.81)
+            assert fills[0]['net_price'] == pytest.approx(14.81)
+        finally:
+            os.unlink(path)
+
     def test_empty_sections_skipped(self):
         """A section with no data rows produces no records."""
         csv_content = """\

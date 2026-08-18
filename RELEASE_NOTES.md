@@ -1,3 +1,17 @@
+## v1.35.4 - 2026-08-18
+
+### Bug Fixes
+- **Fix: Account Statement re-import after the v1.35.3 price-sign fix orphaned a duplicate trade row and dropped a completed trade (issue #39)** — `trades.unique_key` includes `net_price`, so a row ingested by the pre-fix parser had the old (wrong-sign) price baked into its dedup key. Re-importing the same file after the fix computed a different key for that same physical fill, so the UPSERT inserted a new correctly-signed row instead of replacing the stale one — leaving both in the table. The extra phantom quantity from the stale row prevented `TradeCompletionEngine`'s running-quantity grouping from ever returning to exactly zero for that round trip, so no `CompletedTrade` was created for it and one of two WETO trades silently vanished from `/trades`, with no warning logged. Recovered by deleting the orphaned stale row and re-triggering the existing symbol-scoped reprocessing pipeline (re-upload) — no application code changed. Documented as a recovery note in `docs/OVERVIEW.md` §5.10 since any future fix to a value feeding `unique_key` will hit the same one-time transition cost on re-import of already-ingested data.
+
+---
+
+## v1.35.3 - 2026-08-18
+
+### Bug Fixes
+- **Fix: Account Statement import could ingest a sign-inverted STOCK/ETF price (issue #38)** — Schwab's Account Statement export aggregates same-timestamp partial fills into one "Account Trade History" summary row, computing that row's price as `total cash flow / signed qty`. Cash flow and signed quantity use opposite sign conventions (BUY: cash negative, qty positive; SELL: cash positive, qty negative), so the quotient is always negative regardless of trade direction — a real per-share stock/ETF execution price is never negative. `build_order_record()` now corrects this by taking the absolute value for `STOCK`/`ETF` fills and logging a warning (`price_sign_corrected`/`net_price_sign_corrected` added to the record's `issues` list), instead of silently ingesting the bad value into `trades` and corrupting the derived `completed_trades` P&L. Option premiums are unaffected — they can legitimately be negative (net debit). The daily "Today's Trade Activity" export never aggregates fills this way, so this only affects Account Statement imports.
+
+---
+
 ## v1.35.2 - 2026-08-13
 
 ### Bug Fixes
