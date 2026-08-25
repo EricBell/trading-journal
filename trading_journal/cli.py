@@ -456,6 +456,11 @@ def ingest_csv(
         if not dry_run:
             click.echo(f"➕ New records inserted: {result['inserts']}")
             click.echo(f"🔄 Existing records updated: {result['updates']}")
+            if result.get('cross_file_duplicates_skipped', 0) > 0:
+                click.echo(
+                    f"ℹ️  Cross-file duplicates skipped: {result['cross_file_duplicates_skipped']} "
+                    "(same fill content present in more than one file in this batch)"
+                )
 
         if result['validation_errors']:
             click.echo("\n⚠️  Validation errors:")

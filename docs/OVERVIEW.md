@@ -206,10 +206,25 @@ Because `unique_key` has no row/sequence component, two genuinely distinct fills
 identical `(exec_time, symbol, side, qty, net_price)` — e.g. a multi-lot order that fills as
 several same-second, same-price partial executions — would otherwise collide and the second
 fill's UPSERT would silently overwrite the first instead of inserting a new row (issue #25).
-`_insert_records_with_tracking` guards against this via `_disambiguate_unique_key`: within an
-ingest batch, the first occurrence of a given key keeps it unchanged, and later occurrences
-get a `:1`, `:2`, ... suffix. Occurrence order is stable across re-uploads of the same file,
-so idempotent re-ingestion (issue #19) still holds.
+`_insert_records_with_tracking` guards against this via `_disambiguate_unique_key`: the first
+occurrence of a given key keeps it unchanged, and later occurrences get a `:1`, `:2`, ...
+suffix. Occurrence order is stable across re-uploads of the same file, so idempotent
+re-ingestion (issue #19) still holds.
+
+Occurrence counting is scoped **per source file** (`NdjsonRecord.source_file`, populated by
+`CsvParser`/`NinjaTraderParser`), not per whole batch, but the occurrence *index* is shared
+across files: the first file to report occurrence N of some content-key claims the final
+`:N` suffix for that index, and any other file's own occurrence N of the same content-key
+reuses it instead of minting a new one. This closes a gap where uploading two overlapping
+export files together in one batch — e.g. Schwab's `TradeActivity.csv` and
+`TradeActivity-ind.csv` both containing the same real execution — would otherwise recreate
+duplicate rows even though single-file idempotency (issue #19) and same-file multi-lot
+preservation (issue #25) both held individually (issue #31). A batch with 2 files × 2
+identical fills each still collapses to exactly 2 rows (the genuine multi-lot pair), not 4.
+Records without a `source_file` (legacy NDJSON) are grouped under a single `None` bucket,
+degrading to the old whole-batch-scoped behavior. `ingest_records`'s return dict (and the
+web upload flash message / `ingest csv` CLI output) surface a `cross_file_duplicates_skipped`
+count when this collapsing occurs.
 
 ### 5.3 Symbol-scoped position reprocessing
 

@@ -134,4 +134,107 @@ def test_reupload_same_file_stays_idempotent(db_session, test_user):
     assert len(sells) == 2, "re-upload of the same file should update the two existing rows, not add more"
 
     file_path.unlink()
-    file_path_2.unlink()
+
+
+def with_ingest_fields(records: list) -> list:
+    """ingest_records() (the batch/web-upload path) validates raw dicts
+    directly, unlike process_file()'s create_ndjson_file() helper which
+    stamps in 'section'/'row_index' defaults before parsing. Fill in the
+    same defaults here so records built for process_file() tests can also
+    be run through ingest_records()."""
+    for i, record in enumerate(records, start=1):
+        record.setdefault("section", "Filled Orders")
+        record.setdefault("row_index", i)
+    return records
+
+
+def cross_file_dup_records():
+    """The same real execution reported by two different overlapping export
+    files — the historical TradeActivity.csv / TradeActivity-ind.csv pattern
+    behind issues #30/#31."""
+    base = {
+        "exec_time": "2026-07-22T10:01:09",
+        "side": "SELL",
+        "qty": -1,
+        "pos_effect": "TO CLOSE",
+        "symbol": "MMM",
+        "type": "CALL",
+        "spread": "SINGLE",
+        "net_price": 1.52,
+        "event_type": "fill",
+        "asset_type": "OPTION",
+        "option": {"exp_date": "2026-07-24", "strike": 175.0, "right": "CALL"},
+        "raw": "sell fill",
+    }
+    return [
+        {**base, "source_file": "TradeActivity.csv"},
+        {**base, "source_file": "TradeActivity-ind.csv"},
+    ]
+
+
+def test_cross_file_duplicate_content_collapses_to_one_row(db_session, test_user):
+    """The same real execution appearing in two different files within one
+    upload batch must collapse to a single Trade row (issue #31)."""
+    ingester = NdjsonIngester()
+    result = ingester.ingest_records(with_ingest_fields(cross_file_dup_records()))
+
+    assert result["success"]
+    assert result["cross_file_duplicates_skipped"] == 1
+
+    sells = db_session.query(Trade).filter_by(symbol="MMM", side="SELL").all()
+    assert len(sells) == 1, "identical fill content from two different files should collapse to one row"
+
+
+def spy_two_file_multi_lot_records():
+    """Two files, each independently containing the SAME 2 identical partial
+    fills — the SPY 2025-12-23 pattern from issue #30/#31. The multi-lot
+    fills within a file are real and distinct fills; file B is a duplicate
+    export of file A's content, not 2 additional fills."""
+    def fill(source_file, raw_tag):
+        return {
+            "exec_time": "2025-12-23T10:06:57",
+            "side": "SELL",
+            "qty": -1,
+            "pos_effect": "TO CLOSE",
+            "symbol": "SPY",
+            "type": "CALL",
+            "spread": "SINGLE",
+            "net_price": 2.50,
+            "event_type": "fill",
+            "asset_type": "OPTION",
+            "option": {"exp_date": "2025-12-26", "strike": 600.0, "right": "CALL"},
+            "source_file": source_file,
+            "raw": raw_tag,
+        }
+
+    file_a = [fill("TradeActivity.csv", "a1"), fill("TradeActivity.csv", "a2")]
+    file_b = [fill("TradeActivity-ind.csv", "b1"), fill("TradeActivity-ind.csv", "b2")]
+    return file_a + file_b
+
+
+def test_cross_file_duplicate_multi_lot_still_preserves_both(db_session, test_user):
+    """2 files x 2 identical fills each must collapse to exactly 2 rows, not
+    4 — the multi-lot pair is preserved, but the duplicate file's copy isn't
+    added on top (issue #31)."""
+    ingester = NdjsonIngester()
+    result = ingester.ingest_records(with_ingest_fields(spy_two_file_multi_lot_records()))
+
+    assert result["success"]
+    assert result["cross_file_duplicates_skipped"] == 2
+
+    sells = db_session.query(Trade).filter_by(symbol="SPY", side="SELL").all()
+    assert len(sells) == 2, "2 files x 2 identical fills should collapse to 2 rows, not 4"
+
+
+def test_same_file_duplicate_fills_still_disambiguated(db_session, test_user):
+    """Regression guard: same-file multi-lot fills (issue #25) must still be
+    preserved through ingest_records() (the batch/web-upload path), not just
+    process_file() (the single-NDJSON-file CLI path)."""
+    ingester = NdjsonIngester()
+    result = ingester.ingest_records(with_ingest_fields(mmm_records()))
+
+    assert result["success"]
+    assert result["cross_file_duplicates_skipped"] == 0
+
+    sells = db_session.query(Trade).filter_by(symbol="MMM", side="SELL").all()
+    assert len(sells) == 2, "same-file multi-lot fills should still both be preserved"

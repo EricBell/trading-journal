@@ -161,6 +161,13 @@ def upload():
             f"{proc.get('completed_trades', 0)} trades completed.{enrichment_msg}",
             'success',
         )
+        if result.get('cross_file_duplicates_skipped', 0) > 0:
+            flash(
+                f"Note: {result['cross_file_duplicates_skipped']} fill(s) in this upload matched "
+                "content already present in another file in the same batch and were treated as "
+                "the same fill (not duplicated).",
+                'info',
+            )
         if result['validation_errors']:
             for err in result['validation_errors'][:5]:
                 flash(f"Warning: {err}", 'warning')

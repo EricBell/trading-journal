@@ -1,3 +1,10 @@
+## v1.35.7 - 2026-08-24
+
+### Bug Fixes
+- **Fix: batch upload could recreate duplicate-fill corruption from overlapping export files (issue #31)** — `_disambiguate_unique_key`'s occurrence counter (added in issue #25 to keep genuinely-distinct same-second/same-price partial fills from colliding on `unique_key`) was scoped to the whole upload batch. If two different files in one batch both contained the same real execution — the exact `TradeActivity.csv` + `TradeActivity-ind.csv` overlapping-export pattern behind issue #30's historical corruption — the second file's copy looked like "one more genuinely distinct occurrence" instead of "a redundant copy of what file A already contributed," and got inserted as an extra row. Occurrence counting is now scoped per source file (`NdjsonRecord.source_file`), with the occurrence *index* shared across files: the first file to report occurrence N of some content-key claims the final key, and any other file's own occurrence N of the same content reuses it instead of minting a new row. A batch with 2 files × 2 identical fills each now collapses to exactly 2 rows instead of 4. `ingest_records`'s return dict, the web upload flash message, and the `ingest csv` CLI output all now surface a `cross_file_duplicates_skipped` count when this happens. 3 new tests added to `tests/test_duplicate_fills.py` covering the cross-file collapse, the multi-lot-preserved-across-files case, and a same-file regression guard. Note: this closes the code gap only — the 102 already-corrupted rows described in issue #30 are still present in production and need the separate cleanup pass described there.
+
+---
+
 ## v1.35.6 - 2026-08-21
 
 ### Bug Fixes

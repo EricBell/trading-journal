@@ -134,7 +134,7 @@ class NdjsonIngester:
             update_count = 0
 
             if not dry_run and successful_records:
-                insert_count, update_count = self._insert_records_with_tracking(
+                insert_count, update_count, _ = self._insert_records_with_tracking(
                     user_id,
                     successful_records,
                     str(file_path)
@@ -272,7 +272,12 @@ class NdjsonIngester:
             session.commit()
 
     @staticmethod
-    def _disambiguate_unique_key(base_key: str, key_occurrences: Dict[str, int]) -> str:
+    def _disambiguate_unique_key(
+        base_key: str,
+        source_file: Optional[str],
+        file_occurrences: Dict[Tuple[str, Optional[str]], int],
+        key_index_to_final: Dict[Tuple[str, int], str],
+    ) -> Tuple[str, bool]:
         """Append an occurrence suffix so distinct fills sharing identical
         (exec_time, symbol, side, qty, net_price) don't collide on the same
         unique_key and get collapsed into one row by the UPSERT below.
@@ -281,30 +286,61 @@ class NdjsonIngester:
         same-second, same-price partial executions (issue #25). The first
         occurrence keeps the bare base_key (so it still matches any row
         already stored under it from before this fix), later occurrences of
-        the same key get ":1", ":2", etc. Occurrence counting is keyed off
-        row order within the batch, which is stable across re-uploads of the
-        same file, so idempotent re-ingestion (issue #19) still holds.
+        the same key get ":1", ":2", etc.
+
+        Occurrence counting is scoped **per source file**, not per whole
+        batch: a file's Nth copy of some content is that file's own genuine
+        Nth occurrence, tracked independently of any other file. But the
+        occurrence *index* itself is shared across files — the first file to
+        report occurrence N of a given content-key claims the final key for
+        that index, and any other file's own occurrence N of the same
+        content-key reuses it instead of minting a new suffixed key. Two
+        different files both containing the same real execution (e.g.
+        Schwab's overlapping `TradeActivity.csv` / `TradeActivity-ind.csv`
+        exports, issue #30/#31) collapse onto one row; two files that
+        genuinely each contain their own distinct multi-lot fills still both
+        get preserved, because each file's own occurrence count is separate.
+
+        Row order within a file is stable across re-uploads of the same
+        file, so idempotent re-ingestion (issue #19) still holds. Records
+        without a `source_file` (legacy NDJSON) are grouped under a single
+        `None` bucket, which degrades to the old whole-batch-scoped
+        behavior — a documented trade-off, not a regression.
+
+        Returns (final_key, is_cross_file_duplicate) — the latter is True
+        when this record's key was resolved by reusing another file's
+        occurrence rather than minting a new one.
         """
-        occurrence = key_occurrences.get(base_key, 0)
-        key_occurrences[base_key] = occurrence + 1
-        return base_key if occurrence == 0 else f"{base_key}:{occurrence}"
+        file_key = (base_key, source_file)
+        occurrence = file_occurrences.get(file_key, 0)
+        file_occurrences[file_key] = occurrence + 1
+
+        index_key = (base_key, occurrence)
+        if index_key in key_index_to_final:
+            return key_index_to_final[index_key], True
+
+        final_key = base_key if occurrence == 0 else f"{base_key}:{occurrence}"
+        key_index_to_final[index_key] = final_key
+        return final_key, False
 
     def _insert_records_with_tracking(
         self,
         user_id: int,
         records: List[NdjsonRecord],
         source_file_path: str
-    ) -> Tuple[int, int]:
+    ) -> Tuple[int, int, int]:
         """
         Insert validated records into database using UPSERT, tracking inserts vs updates.
 
         Returns:
-            Tuple of (insert_count, update_count)
+            Tuple of (insert_count, update_count, cross_file_duplicates_skipped)
         """
         insert_count = 0
         update_count = 0
+        cross_file_duplicates_skipped = 0
         inserted_trade_ids = []
-        key_occurrences: Dict[str, int] = {}
+        file_occurrences: Dict[Tuple[str, Optional[str]], int] = {}
+        key_index_to_final: Dict[Tuple[str, int], str] = {}
 
         with self.db_manager.get_session() as session:
             account_cache: Dict[str, int] = {}
@@ -312,9 +348,11 @@ class NdjsonIngester:
             for record in records:
                 trade_data = self._convert_to_trade_data(record, source_file_path)
                 trade_data['user_id'] = user_id
-                trade_data['unique_key'] = self._disambiguate_unique_key(
-                    trade_data['unique_key'], key_occurrences
+                trade_data['unique_key'], is_cross_file_dupe = self._disambiguate_unique_key(
+                    trade_data['unique_key'], record.source_file, file_occurrences, key_index_to_final
                 )
+                if is_cross_file_dupe:
+                    cross_file_duplicates_skipped += 1
 
                 # Resolve account
                 if record.account_number:
@@ -362,7 +400,7 @@ class NdjsonIngester:
             # Commit the transaction
             session.commit()
 
-        return insert_count, update_count
+        return insert_count, update_count, cross_file_duplicates_skipped
 
     def _convert_to_trade_data(self, record: NdjsonRecord, source_file_path: str) -> Dict[str, Any]:
         """Convert NdjsonRecord to Trade table data."""
@@ -492,17 +530,19 @@ class NdjsonIngester:
 
         insert_count = 0
         update_count = 0
+        cross_file_duplicates_skipped = 0
 
         if not dry_run and successful_records:
             with ul.stage("bulk_upsert_trades", upload_session_id=upload_session_id, user_id=user_id,
                           records_in=records_processed) as ctx:
-                insert_count, update_count = self._insert_records_with_tracking(
+                insert_count, update_count, cross_file_duplicates_skipped = self._insert_records_with_tracking(
                     user_id,
                     successful_records,
                     'csv_upload',
                 )
                 ctx['records_inserted'] = insert_count
                 ctx['records_updated'] = update_count
+                ctx['cross_file_duplicates_skipped'] = cross_file_duplicates_skipped
 
             self._backfill_completed_trade_accounts(user_id)
 
@@ -527,6 +567,7 @@ class NdjsonIngester:
             'records_failed': records_failed,
             'inserts': insert_count,
             'updates': update_count,
+            'cross_file_duplicates_skipped': cross_file_duplicates_skipped,
             'validation_errors': validation_errors,
             'success': records_failed == 0,
             'dry_run': dry_run,
