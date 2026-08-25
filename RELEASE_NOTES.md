@@ -1,3 +1,10 @@
+## v1.35.8 - 2026-08-24
+
+### Non-Feature Changes
+- **Additional test coverage for issue #31's cross-file dedup fix** — a coverage review after v1.35.7 found two untested branches: (1) legacy NDJSON records with no `source_file` field, where the fix's per-file occurrence scoping needs to degrade safely to the old whole-batch-scoped counter rather than erroring or producing false cross-file-duplicate reports, and (2) re-uploading the same 2-file overlapping-export batch a second time — the actual real-world scenario the issue protects against — which needed to update the same 2 rows in place rather than drift or duplicate. Added `test_legacy_records_without_source_file_degrade_to_batch_scoped_dedup` and `test_cross_file_batch_reupload_stays_idempotent` to `tests/test_duplicate_fills.py`; both pass, full suite shows no new failures (242 passing, same 16 pre-existing unrelated failures as before).
+
+---
+
 ## v1.35.7 - 2026-08-24
 
 ### Bug Fixes

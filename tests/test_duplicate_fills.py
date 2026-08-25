@@ -238,3 +238,86 @@ def test_same_file_duplicate_fills_still_disambiguated(db_session, test_user):
 
     sells = db_session.query(Trade).filter_by(symbol="MMM", side="SELL").all()
     assert len(sells) == 2, "same-file multi-lot fills should still both be preserved"
+
+
+def legacy_no_source_file_records():
+    """Legacy NDJSON records predating the source_file field (source_file is
+    simply absent, so NdjsonRecord.source_file defaults to None). Two
+    identical-content fills with no source_file must still both be
+    preserved — the per-file scoping degrades to the old whole-batch-scoped
+    counter (issue #25 behavior) rather than erroring or silently
+    collapsing them as if they were a false cross-file match."""
+    base = {
+        "exec_time": "2026-07-22T10:01:09",
+        "side": "SELL",
+        "qty": -1,
+        "pos_effect": "TO CLOSE",
+        "symbol": "MMM",
+        "type": "CALL",
+        "spread": "SINGLE",
+        "net_price": 1.52,
+        "event_type": "fill",
+        "asset_type": "OPTION",
+        "option": {"exp_date": "2026-07-24", "strike": 175.0, "right": "CALL"},
+    }
+    return [
+        {**base, "raw": "sell fill 1"},
+        {**base, "raw": "sell fill 2"},
+    ]
+
+
+def test_legacy_records_without_source_file_degrade_to_batch_scoped_dedup(db_session, test_user):
+    """Records with no source_file (legacy NDJSON, predating issue #31) must
+    fall back to the pre-#31 whole-batch occurrence counter: both identical
+    fills preserved, and since they're grouped under a single None-file
+    bucket rather than genuinely distinct files, neither should be reported
+    as a cross-file duplicate (issue #31)."""
+    ingester = NdjsonIngester()
+    result = ingester.ingest_records(with_ingest_fields(legacy_no_source_file_records()))
+
+    assert result["success"]
+    assert result["cross_file_duplicates_skipped"] == 0, (
+        "records with no source_file share one None bucket, not distinct files, "
+        "so this must degrade to the old per-batch counter, not report false cross-file dupes"
+    )
+
+    sells = db_session.query(Trade).filter_by(symbol="MMM", side="SELL").all()
+    assert len(sells) == 2, "both fills should still be preserved under the legacy fallback behavior"
+
+
+def test_cross_file_batch_reupload_stays_idempotent(db_session, test_user):
+    """Re-uploading the exact same 2-file batch a second time — the actual
+    real-world scenario issue #31 protects against (a user re-runs the same
+    overlapping-export upload) — must update the same 2 rows in place, not
+    drift or create new ones."""
+    ingester = NdjsonIngester()
+
+    result_1 = ingester.ingest_records(with_ingest_fields(spy_two_file_multi_lot_records()))
+    assert result_1["success"]
+    # 4 records collapse onto 2 unique keys: each key's first-seen record (from
+    # file A) inserts a new row, and its cross-file duplicate (from file B)
+    # immediately updates the row file A's record just inserted, within the
+    # same batch/transaction.
+    assert result_1["inserts"] == 2
+    assert result_1["updates"] == 2
+    assert result_1["cross_file_duplicates_skipped"] == 2
+
+    db_session.expire_all()
+    sells = db_session.query(Trade).filter_by(symbol="SPY", side="SELL").all()
+    assert len(sells) == 2
+    first_upload_ids = sorted(t.trade_id for t in sells)
+
+    result_2 = ingester.ingest_records(with_ingest_fields(spy_two_file_multi_lot_records()))
+    assert result_2["success"]
+    # All 4 records now resolve to the 2 already-existing rows from the first
+    # upload, so every one of them is an update — no new rows.
+    assert result_2["inserts"] == 0, "re-upload of the same 2-file batch must not insert new rows"
+    assert result_2["updates"] == 4, "re-upload should update the same 2 existing rows for all 4 records"
+    assert result_2["cross_file_duplicates_skipped"] == 2
+
+    db_session.expire_all()
+    sells_after = db_session.query(Trade).filter_by(symbol="SPY", side="SELL").all()
+    assert len(sells_after) == 2, "re-upload must not create additional rows"
+    assert sorted(t.trade_id for t in sells_after) == first_upload_ids, (
+        "re-upload should resolve to the exact same rows, not new ones"
+    )
