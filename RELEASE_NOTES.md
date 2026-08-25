@@ -1,3 +1,10 @@
+## v1.35.10 - 2026-08-24
+
+### Non-Feature Changes
+- **Document the issue #30 cleanup and local backup workflow in `docs/OVERVIEW.md`** — added §5.11 as a recovery note (same style as §5.10) capturing the three classification pitfalls found during the historical duplicate-fill cleanup (scope duplicate detection per `user_id`; `qty` sign isn't a reliable grouping key on its own; which duplicate to keep must respect `account_id` continuity with the position's OPEN/CLOSE siblings, not just recency). Also documented `tools/psql/psql.py`'s backup usage and, in §9 Infrastructure, an explicit caution that `docker exec rm` on this project's app container deletes real host files (the container bind-mounts the project root with no isolation) — the mistake that deleted this cleanup's own backup snapshots mid-task.
+
+---
+
 ## v1.35.9 - 2026-08-24
 
 ### Non-Feature Changes

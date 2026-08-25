@@ -475,6 +475,9 @@ The legacy `.env` file still works but prints a deprecation warning. Run
 - **Migrations:** Alembic (`alembic/versions/`)
 - **Dependency management:** `uv` (`pyproject.toml` + `uv.lock`)
 - **Test suite:** pytest (`tests/`)
+- **DB query/backup tool:** `tools/psql/psql.py` — a self-contained `uv run` CLI (reads `.env` two directories up, so it works from anywhere) for running arbitrary SQL against the trading-journal database. `--format json` is the standard way to snapshot a table before a destructive operation, e.g. `uv run tools/psql/psql.py -f json -l <count+100> "SELECT * FROM trades" > backups/<name>/trades.json`. Local backup dumps go in `/backups/` (gitignored, not version-controlled).
+
+**Caution — the container bind-mount has no isolation.** `docker-compose.yml`'s `.:/app` mount means `/app` *inside* the app container **is** the project root on the host, not a copy. `docker exec <container> rm ...` (or any other destructive filesystem command) run against `/app` deletes real host files — including anything under `/backups/`. Treat any `docker exec rm` on this project exactly as you would the same command run directly on the host.
 
 ---
 
@@ -587,6 +590,38 @@ re-trigger scoped reprocessing (re-upload the file, or call
 `TradeCompletionEngine.reprocess_completed_trades_for_symbols` /
 `PositionTracker.reprocess_positions_for_symbols` directly for the affected symbols) — the same
 recovery shape as the issue #20/#23 `spread_order_tag` staleness note in §5.8.
+
+---
+
+### 5.11 Historical duplicate-fill cleanup (issue #30) — classification pitfalls
+
+A one-time data cleanup removed 118 duplicate `trades` rows left over from before the
+cross-file dedup fix (§5.2, issue #31) existed. Re-deriving the duplicate set surfaced three
+classification pitfalls worth knowing if a similar cleanup is ever needed again:
+
+1. **Scope duplicate detection per `user_id`.** Two different users' data can coincidentally
+   share identical `(symbol, exec_timestamp, side, qty, net_price)` — not a bug, just two
+   people trading the same thing at the same price. Grouping across users produces false
+   positives.
+2. **`qty` sign is not a reliable grouping key on its own.** Some legacy rows store `qty`
+   signed (negative for a SELL); current code always stores it as a positive absolute value
+   with direction carried by `side` (§ `_convert_to_trade_data`). The same physical fill can
+   exist twice with opposite-signed `qty` across two source files, invisible to an exact-tuple
+   duplicate query — grouping on `(symbol, exec_timestamp, side, ABS(qty), net_price)` is
+   needed to catch this class.
+3. **Which duplicate row to keep must respect `account_id` continuity, not just `qty` sign
+   or file recency.** `PositionTracker._get_or_create_position` matches a position by exact
+   `account_id`, so keeping a CLOSE-leg duplicate whose `account_id` doesn't match its
+   OPEN-leg sibling breaks open/close pairing — surfaces as "TO CLOSE trade appears before any
+   TO OPEN" / "Cannot close position" warnings during `reprocess_positions_for_symbols`. The
+   fix is to keep whichever duplicate's `account_id` matches the rest of that position's fill
+   history, not the newer or better-attributed-looking row.
+
+After cleanup, `TradeCompletionEngine.reprocess_completed_trades_for_symbols` and
+`PositionTracker.reprocess_positions_for_symbols` were re-run for the affected symbols per the
+standard reprocessing pattern (§5.3); `trade_annotations` re-linked correctly via the natural
+key `(user_id, symbol, opened_at)`, unaffected by `completed_trade_id` changing across the
+rebuild.
 
 ---
 
