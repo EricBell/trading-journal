@@ -1,3 +1,11 @@
+## v1.35.9 - 2026-08-24
+
+### Non-Feature Changes
+- **Historical duplicate-fill cleanup (issue #30)** — production data only, no code changes to the app itself. Re-derived the duplicate-row investigation from #30 (the original per-group output wasn't saved anywhere durable) and removed 118 duplicate `trades` rows total: 108 from the originally-scoped cross-file pattern (grown from the issue's original 102-row estimate since more trading activity accumulated in the interim; also caught `MES` NinjaTrader futures exports duplicating the same way Schwab CSVs did) plus 10 more from a second pattern the first pass missed — the same physical fill stored with opposite `qty` sign conventions across two files, which exact-tuple grouping didn't catch. `completed_trades`/`positions` reprocessed for all 20 affected symbols; the one annotation with real content (UCAR) reverified intact post-rebuild. Full details, including a keep/drop mistake caught via `account_id` continuity checks before it could cause harm, in the issue's closing comment.
+- **Add `/backups/` to `.gitignore`** — `tools/psql/psql.py`-generated local DB backup snapshots (used during the #30 cleanup above) aren't meant for version control; without this they'd show as untracked and risk being accidentally committed.
+
+---
+
 ## v1.35.8 - 2026-08-24
 
 ### Non-Feature Changes

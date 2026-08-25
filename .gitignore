@@ -215,3 +215,6 @@ __marimo__/
 
 
 output.*
+
+# Local DB backup dumps (tools/psql-generated JSON snapshots)
+/backups/
