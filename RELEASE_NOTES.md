@@ -1,3 +1,17 @@
+## v1.35.6 - 2026-08-21
+
+### Bug Fixes
+- **Fix: trade notes editor still clipped the last visible line after the v1.35.5 fix (issue #40)** — v1.35.5's `setSize()` change fixed CodeMirror's internal scroll state, but two more issues kept the clipping visible: (1) EasyMDE's `minHeight: '200px'` construction option applies a CSS `min-height` to `.CodeMirror-scroll` independent of `cm.setSize()`, so whenever the computed pane height came out below 200px, the scroll region was forced 20+px taller than the wrapper CodeMirror knew about internally, re-exposing a sliced extra line; removed the option now that `fitNotesEditor()` enforces its own minimum. (2) The pane height was never aligned to a whole number of text lines, so unless the computed height happened to divide evenly by the line height, the last visible line was always partially sliced at the boundary — indistinguishable from missing/broken text even though the rest was one scroll away. `fitNotesEditor()` now measures the actual rendered line height and the `.CodeMirror-lines` top inset, and rounds the pane height down to the nearest whole line before calling `setSize()`, so the pane only ever shows complete lines. Verified via a live Playwright repro against the running container (fresh page load with pre-existing overflowing notes, live typing, and window resize) — sizing remains load/resize-only with no content-driven auto-grow.
+
+---
+
+## v1.35.5 - 2026-08-21
+
+### Bug Fixes
+- **Fix: trade notes editor could clip text at the bottom before a scrollbar appeared (issue #40)** — `fitNotesEditor()` in `trades/detail.html` sized the EasyMDE (CodeMirror) pane by mutating `.CodeMirror`'s inline `style.height` directly on page load and window resize. That raw style mutation doesn't reliably force CodeMirror to recompute its internal scroll/viewport measurements, so the outer pane could be height-constrained while the internal scroller hadn't been told it needed to scroll — clipping newly typed text at the bottom until some later event happened to trigger a `refresh()`. Switched to CodeMirror's own `setSize()` API, which recalculates that internal state as part of the resize, so the scrollbar engages immediately as content overflows. Sizing is still driven only by page load and window `resize` — the pane does not auto-grow or auto-shrink as notes content changes.
+
+---
+
 ## v1.35.4 - 2026-08-18
 
 ### Bug Fixes

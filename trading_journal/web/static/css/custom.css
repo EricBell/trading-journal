@@ -40,3 +40,25 @@ thead th a:hover { opacity: 0.8; }
     padding: 0.75rem;
   }
 }
+
+/* Trade notes editor (EasyMDE/CodeMirror): force a persistently visible
+   scrollbar. Without this, browsers using OS-level overlay/auto-hide
+   scrollbars render CodeMirror's custom scrollbar invisibly until the user
+   actively drags/hovers it, so overflowing notes look clipped/dead-ended on
+   page load with no visible affordance that more content exists below. */
+.CodeMirror-vscrollbar {
+  scrollbar-width: thin;
+}
+
+.CodeMirror-vscrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.CodeMirror-vscrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+}
+
+.CodeMirror-vscrollbar::-webkit-scrollbar-track {
+  background-color: transparent;
+}

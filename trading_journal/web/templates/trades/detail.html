@@ -542,18 +542,34 @@ const easyMDE = new EasyMDE({
   spellChecker: false,
   autosave: { enabled: false },
   toolbar: ['bold','italic','heading','|','unordered-list','ordered-list','|','link','code','|','preview','side-by-side','fullscreen'],
-  minHeight: '200px',
 });
 
 function fitNotesEditor() {
-  const cm = document.querySelector('.CodeMirror');
+  const cm = easyMDE.codemirror;
+  const wrapper = cm.getWrapperElement();
   const saveBtn = document.querySelector('button[type="submit"].btn-primary');
-  if (!cm) return;
-  const top = cm.getBoundingClientRect().top;
+  const top = wrapper.getBoundingClientRect().top;
   const btnHeight = saveBtn ? saveBtn.offsetHeight + parseInt(getComputedStyle(saveBtn).marginTop || 0) : 0;
-  const h = Math.max(200, window.innerHeight - top - 60 - btnHeight);
-  cm.style.height = h + 'px';
-  easyMDE.codemirror.refresh();
+  const available = Math.max(200, window.innerHeight - top - 60 - btnHeight);
+
+  // Round the pane height down to a whole number of text lines. Whatever
+  // height we pick, if it doesn't land exactly on a line boundary the last
+  // visible line is sliced in half at the bottom edge — it reads as clipped
+  // or missing text even though the rest is one scroll away. Snapping to a
+  // full line means the pane only ever shows complete lines.
+  const lineHeight = cm.defaultTextHeight();
+  const paddingBottom = parseInt(getComputedStyle(wrapper).paddingBottom) || 0;
+  const linesEl = wrapper.querySelector('.CodeMirror-lines');
+  const topInset = linesEl ? linesEl.getBoundingClientRect().top - wrapper.getBoundingClientRect().top : 0;
+  const reserved = paddingBottom + topInset;
+  const usableLines = Math.max(1, Math.floor((available - reserved) / lineHeight));
+  const h = usableLines * lineHeight + reserved;
+
+  // Use CodeMirror's own resize API rather than mutating style.height directly —
+  // setSize() recalculates internal scroll/viewport state so the scrollbar
+  // engages immediately as content overflows, instead of clipping until some
+  // later refresh() happens to catch up.
+  cm.setSize(null, h);
 }
 fitNotesEditor();
 window.addEventListener('resize', fitNotesEditor);
