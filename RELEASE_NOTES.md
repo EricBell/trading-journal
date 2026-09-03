@@ -1,3 +1,10 @@
+## v1.37.0 - 2026-09-03
+
+### Features
+- **Position detail view: fill history for partial closes (issue #43)** — a SELL that reduces an open position without zeroing it out (a partial close) realizes real P&L but previously had zero visibility anywhere: it isn't part of any `completed_trades` round-trip (`completed_trade_id` stays `NULL` until the position returns to flat), so it never appeared on `/trades`, and `/positions` only showed one blended `Realized P&L` number with no way to see which fills produced it. Position rows on `/positions` are now clickable, linking to a new `/positions/<id>` detail page listing every fill for that position/account (from Tier 1 `trades`, chronological) with running quantity and per-fill realized P&L; fills that are part of a sealed round-trip link out to that `completed_trades` page, fills still awaiting a full close are labeled "still open." No changes to the Tier 2 completed-trades model — partial closes are shown as raw fill history rather than synthesized into fake completed trades, which would require guessing which entry lot pairs with which exit under average-cost accounting.
+
+---
+
 ## v1.36.1 - 2026-09-03
 
 ### Bug Fixes

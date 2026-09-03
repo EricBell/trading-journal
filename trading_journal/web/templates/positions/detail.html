@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ position.symbol }} Position — Trading Journal{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <a href="{{ url_for('positions.index') }}" class="btn btn-sm btn-outline-secondary">&larr; Back to Positions</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header fw-bold">{{ position.symbol }} <span class="badge bg-secondary">{{ position.instrument_type }}</span></div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tr><th>Current Qty</th><td>{{ position.current_qty }}</td></tr>
+          <tr><th>Avg Cost</th><td>${{ "%.4f"|format(position.avg_cost_basis|float) if position.avg_cost_basis else '—' }}</td></tr>
+          <tr>
+            <th>Realized P&L</th>
+            <td class="fw-bold {% if position.realized_pnl and position.realized_pnl > 0 %}text-success{% elif position.realized_pnl and position.realized_pnl < 0 %}text-danger{% endif %}">
+              ${{ "%.2f"|format(position.realized_pnl|float) if position.realized_pnl else '0.00' }}
+            </td>
+          </tr>
+          <tr><th>Opened</th><td>{{ position.opened_at.strftime('%Y-%m-%d %H:%M:%S') if position.opened_at else '—' }}</td></tr>
+          <tr><th>Status</th>
+            <td>
+              {% if position.closed_at %}
+                <span class="badge bg-secondary">Closed</span> {{ position.closed_at.strftime('%Y-%m-%d %H:%M:%S') }}
+              {% else %}
+                <span class="badge bg-success">Open</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% if position.account %}
+          <tr><th>Account</th><td>{{ position.account.account_name or position.account.account_number }}</td></tr>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header">Fill History ({{ rows|length }})</div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Time (UTC)</th>
+                <th>Side</th>
+                <th>Effect</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Running Qty</th>
+                <th>Realized P&L</th>
+                <th>Round-Trip</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              {% set t = r.trade %}
+              <tr>
+                <td>{{ t.exec_timestamp.strftime('%Y-%m-%d %H:%M:%S') if t.exec_timestamp else '—' }}</td>
+                <td><span class="badge {% if t.side == 'BUY' %}bg-success{% else %}bg-danger{% endif %}">{{ t.side }}</span></td>
+                <td class="text-muted small">{{ t.pos_effect or '—' }}</td>
+                <td>{{ t.qty }}</td>
+                <td>${{ "%.4f"|format(t.net_price|float) if t.net_price else '—' }}</td>
+                <td>{{ r.running_qty|int }}</td>
+                <td class="{% if t.realized_pnl and t.realized_pnl > 0 %}text-success{% elif t.realized_pnl and t.realized_pnl < 0 %}text-danger{% endif %}">
+                  {% if t.realized_pnl is not none %}${{ "%.2f"|format(t.realized_pnl|float) }}{% else %}—{% endif %}
+                </td>
+                <td>
+                  {% if t.completed_trade_id %}
+                    <a href="{{ url_for('trades.detail', trade_id=t.completed_trade_id) }}">#{{ t.completed_trade_id }}</a>
+                  {% else %}
+                    <span class="text-muted small">still open</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="8" class="text-center text-muted py-3">No fills found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <p class="text-muted small mt-2">
+      Fills without a Round-Trip link are closes on a position that is still open — the shares were sold at a profit/loss
+      already realized above, but haven't been paired into a full open&rarr;close trade yet.
+    </p>
+  </div>
+</div>
+{% endblock %}

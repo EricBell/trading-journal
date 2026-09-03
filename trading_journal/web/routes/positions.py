@@ -1,13 +1,15 @@
 """Positions route: /positions."""
 
-from flask import Blueprint, render_template, request, session
+from decimal import Decimal
+
+from flask import Blueprint, abort, render_template, request, session
 from sqlalchemy import asc, desc
 from sqlalchemy.orm import joinedload
 
 from ..auth import login_required
 from ...authorization import AuthContext
 from ...database import db_manager
-from ...models import Account, Position
+from ...models import Account, Position, Trade
 
 bp = Blueprint('positions', __name__)
 
@@ -99,4 +101,60 @@ def index():
         total=total,
         total_pages=total_pages,
         per_page_options=PER_PAGE_OPTIONS,
+    )
+
+
+@bp.route('/positions/<int:position_id>')
+@login_required
+def detail(position_id):
+    user = AuthContext.require_user()
+
+    with db_manager.get_session() as db_session:
+        position = (
+            db_session.query(Position)
+            .options(joinedload(Position.account))
+            .filter_by(position_id=position_id, user_id=user.user_id)
+            .first()
+        )
+        if not position:
+            abort(404)
+
+        account_filter = (
+            Trade.account_id == position.account_id
+            if position.account_id is not None
+            else Trade.account_id.is_(None)
+        )
+        fills = (
+            db_session.query(Trade)
+            .filter(
+                Trade.user_id == user.user_id,
+                Trade.symbol == position.symbol,
+                Trade.instrument_type == position.instrument_type,
+                Trade.option_data == position.option_details,
+                account_filter,
+                Trade.event_type == 'fill',
+            )
+            .order_by(Trade.exec_timestamp, Trade.trade_id)
+            .all()
+        )
+
+        # Running quantity alongside each fill, mirroring PositionTracker's own
+        # open/close state machine so the displayed history matches how the
+        # current position figures were actually derived.
+        running_qty = Decimal('0')
+        rows = []
+        for fill in fills:
+            qty = Decimal(str(fill.qty or 0))
+            signed_qty = qty if fill.side == 'BUY' else -qty
+            running_qty += signed_qty
+            rows.append({
+                'trade': fill,
+                'running_qty': running_qty,
+            })
+
+    return render_template(
+        'positions/detail.html',
+        position=position,
+        rows=rows,
+        user=user,
     )

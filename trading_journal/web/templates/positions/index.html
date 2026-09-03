@@ -64,8 +64,8 @@
     </thead>
     <tbody>
       {% for p in positions %}
-      <tr>
-        <td><strong>{{ p.symbol }}</strong></td>
+      <tr class="position-row" style="cursor: pointer;" onclick="window.location='{{ url_for('positions.detail', position_id=p.position_id) }}'">
+        <td><a href="{{ url_for('positions.detail', position_id=p.position_id) }}"><strong>{{ p.symbol }}</strong></a></td>
         <td><span class="badge bg-secondary">{{ p.instrument_type }}</span></td>
         <td>{{ p.current_qty }}</td>
         <td>${{ "%.4f"|format(p.avg_cost_basis|float) if p.avg_cost_basis else '—' }}</td>
