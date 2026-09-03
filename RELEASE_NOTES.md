@@ -1,3 +1,10 @@
+## v1.36.1 - 2026-09-03
+
+### Bug Fixes
+- **Position `closed_at` not reset on reopen, hiding open positions (issue #42)** — when a position fully closed to zero and later reopened (same day or later), `PositionTracker._handle_position_open` never cleared the stale `closed_at` timestamp from the prior close. The reopened position then matched neither the "open" filter (`current_qty != 0 AND closed_at IS NULL`, used by `/positions` and `get_open_positions`) nor the "closed" filter (`current_qty == 0`), so it disappeared from the Positions page entirely. Also fixed `opened_at`, which was similarly stuck at the *first* cycle's open time instead of the current cycle's. Both are now reset whenever a position reopens from flat. Existing affected positions were repaired by rescoping `PositionTracker.reprocess_positions_for_symbols` for the affected symbols (rebuilds from Tier 1 fills using the fixed logic — no hand-patched timestamps); one repaired position (GM) turned out to also be a since-expired option that the same bug had hidden from expiry processing, now correctly zeroed out with realized P&L booked.
+
+---
+
 ## v1.36.0 - 2026-09-03
 
 ### Features

@@ -129,6 +129,59 @@ def test_position_close_with_pnl():
     assert abs(position.avg_cost_basis - Decimal('153.333333')) < Decimal('0.001')
 
 
+def test_position_reopen_clears_stale_closed_at():
+    """Position fully closes then reopens same day: closed_at must clear, opened_at
+    must reflect the new cycle's start (issue #42)."""
+    position = Position(
+        symbol="CNH",
+        instrument_type="EQUITY",
+        current_qty=400,
+        avg_cost_basis=Decimal('13.6499'),
+        total_cost=Decimal('5459.96'),
+        realized_pnl=Decimal('0'),
+        opened_at=datetime(2026, 9, 3, 10, 33, 30),
+    )
+
+    tracker = PositionTracker()
+
+    close_trade = Trade(
+        trade_id=10,
+        unique_key="test_close_1",
+        exec_timestamp=datetime(2026, 9, 3, 11, 24, 27),
+        event_type="fill",
+        symbol="CNH",
+        instrument_type="EQUITY",
+        side="SELL",
+        qty=400,
+        pos_effect="TO CLOSE",
+        net_price=13.6886,
+        raw_data="test close",
+    )
+    tracker._handle_position_close(position, close_trade)
+
+    assert position.current_qty == 0
+    assert position.closed_at == close_trade.exec_timestamp
+
+    reopen_trade = Trade(
+        trade_id=11,
+        unique_key="test_reopen_1",
+        exec_timestamp=datetime(2026, 9, 3, 15, 47, 2),
+        event_type="fill",
+        symbol="CNH",
+        instrument_type="EQUITY",
+        side="BUY",
+        qty=500,
+        pos_effect="TO OPEN",
+        net_price=13.8121,
+        raw_data="test reopen",
+    )
+    tracker._handle_position_open(position, reopen_trade)
+
+    assert position.current_qty == 500
+    assert position.closed_at is None
+    assert position.opened_at == reopen_trade.exec_timestamp
+
+
 def test_short_position():
     """Test short position tracking."""
     position = Position(

@@ -165,12 +165,12 @@ class PositionTracker:
 
         # Calculate new average cost basis
         if position.current_qty == 0:
-            # New position
+            # New position (or reopening a previously fully-closed position)
             position.current_qty = trade_qty
             position.total_cost = trade_cost
             position.avg_cost_basis = Decimal(str(trade.net_price)) * multiplier
-            if not position.opened_at:
-                position.opened_at = trade.exec_timestamp
+            position.closed_at = None
+            position.opened_at = trade.exec_timestamp
         else:
             # Add to existing position
             old_total_cost = position.total_cost
