@@ -1,3 +1,10 @@
+## v1.36.0 - 2026-09-03
+
+### Features
+- **Trades page: single-date and date-range filters (issue #41)** — the `/trades` filter bar's relative-range dropdown (All time / 7d / 30d / 90d) now has two additional entries: "One date…", which reveals exactly one calendar-picker field so filtering to e.g. 5/29/26 doesn't require entering the same date twice, and "Date range…", which reveals start/end fields for an explicit span like 5/29/26–6/3/26. Reuses the date-range grammar already implemented (and unit-tested) for `/api/dashboard`/`/api/trades` — `DashboardEngine.parse_date_range()`'s bare-date and slash-range parsing — now extracted into a shared `trading_journal/date_range.py` module and wired into `/trades`'s `_build_trades_query()` in place of the old `Nd`-only inline check. The existing `range` query param and its threading through sort links, pagination, and trade-detail prev/next nav is unchanged; the dropdown's visible options are a UI mode selector, with a hidden field composing the actual submitted value via vanilla JS (no new date-picker library — matches the existing native `<input type="date">` pattern from the dashboard page). Reloading a filtered URL directly correctly restores the dropdown/date-field state instead of resetting to "All time."
+
+---
+
 ## v1.35.10 - 2026-08-24
 
 ### Non-Feature Changes

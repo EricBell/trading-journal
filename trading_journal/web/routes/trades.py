@@ -61,7 +61,9 @@ PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 def _build_trades_query(db_session, user_id, symbol, range_filter, account_filter, sort_col, sort_dir):
     """Return a filtered+sorted CompletedTrade query with no pagination applied."""
-    from datetime import date, timedelta
+    from datetime import datetime
+    from ...date_range import parse_date_range
+
     query = db_session.query(CompletedTrade).filter_by(user_id=user_id)
 
     if symbol:
@@ -73,14 +75,15 @@ def _build_trades_query(db_session, user_id, symbol, range_filter, account_filte
         except ValueError:
             pass
 
-    if range_filter and range_filter.endswith('d'):
-        today = date.today()
+    if range_filter:
         try:
-            days = int(range_filter[:-1])
-            cutoff = today - timedelta(days=days - 1)
-            query = query.filter(CompletedTrade.closed_at >= cutoff)
+            start_date, end_date = parse_date_range(range_filter)
         except ValueError:
-            pass
+            start_date = end_date = None
+        if start_date:
+            query = query.filter(CompletedTrade.closed_at >= start_date)
+        if end_date:
+            query = query.filter(CompletedTrade.closed_at < datetime.combine(end_date, datetime.max.time()))
 
     col = SORT_COLUMNS.get(sort_col, SORT_COLUMNS[DEFAULT_SORT])
     order_fn = asc if sort_dir == 'asc' else desc

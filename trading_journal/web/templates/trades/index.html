@@ -38,12 +38,23 @@
     <input type="text" name="symbol" class="form-control form-control-sm" placeholder="Symbol" value="{{ symbol }}">
   </div>
   <div class="col-auto">
-    <select name="range" class="form-select form-select-sm">
+    <select id="rangeMode" class="form-select form-select-sm">
       <option value="" {% if not range_filter %}selected{% endif %}>All time</option>
       <option value="7d" {% if range_filter=='7d' %}selected{% endif %}>Last 7 days</option>
       <option value="30d" {% if range_filter=='30d' %}selected{% endif %}>Last 30 days</option>
       <option value="90d" {% if range_filter=='90d' %}selected{% endif %}>Last 90 days</option>
+      <option value="single">One date&hellip;</option>
+      <option value="custom">Date range&hellip;</option>
     </select>
+    <input type="hidden" name="range" id="rangeHidden" value="{{ range_filter }}">
+  </div>
+  <div class="col-auto" id="singleDateWrap" style="display:none">
+    <input type="date" id="dateSingle" class="form-control form-control-sm">
+  </div>
+  <div class="col-auto d-flex gap-1 align-items-center" id="rangeDateWrap" style="display:none">
+    <input type="date" id="dateStart" class="form-control form-control-sm">
+    <span class="text-muted small">to</span>
+    <input type="date" id="dateEnd" class="form-control form-control-sm">
   </div>
   {% if accounts %}
   <div class="col-auto">
@@ -211,6 +222,67 @@
 {% endif %}
 
 <script>
+(function () {
+  const modeSelect = document.getElementById('rangeMode');
+  const rangeHidden = document.getElementById('rangeHidden');
+  const singleWrap = document.getElementById('singleDateWrap');
+  const rangeWrap = document.getElementById('rangeDateWrap');
+  const dateSingle = document.getElementById('dateSingle');
+  const dateStart = document.getElementById('dateStart');
+  const dateEnd = document.getElementById('dateEnd');
+  const filterForm = document.getElementById('filter-form');
+
+  function showMode(mode) {
+    singleWrap.style.display = (mode === 'single') ? '' : 'none';
+    rangeWrap.style.display = (mode === 'custom') ? '' : 'none';
+  }
+
+  function initFromCurrentRange() {
+    const current = rangeHidden.value || '';
+    if (['', '7d', '30d', '90d'].includes(current)) {
+      modeSelect.value = current;
+      showMode(current);
+      return;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(current)) {
+      modeSelect.value = 'single';
+      dateSingle.value = current;
+      showMode('single');
+      return;
+    }
+    if (current.includes('/')) {
+      const [start, end] = current.split('/', 2);
+      modeSelect.value = 'custom';
+      dateStart.value = start || '';
+      dateEnd.value = end || '';
+      showMode('custom');
+      return;
+    }
+    // Unrecognized value — fall back to All time rather than guess
+    modeSelect.value = '';
+    showMode('');
+  }
+
+  modeSelect.addEventListener('change', function () {
+    showMode(modeSelect.value);
+  });
+
+  filterForm.addEventListener('submit', function () {
+    const mode = modeSelect.value;
+    if (mode === 'single') {
+      rangeHidden.value = dateSingle.value || '';
+    } else if (mode === 'custom') {
+      const start = dateStart.value || '';
+      const end = dateEnd.value || '';
+      rangeHidden.value = (start || end) ? (start + '/' + end) : '';
+    } else {
+      rangeHidden.value = mode;
+    }
+  });
+
+  initFromCurrentRange();
+}());
+
 (function () {
   let selectMode = false;
 
