@@ -1,7 +1,7 @@
 # Trading Journal — System Overview
 
-**Version:** 1.35.4
-**Last Updated:** 2026-08-18
+**Version:** 1.37.1
+**Last Updated:** 2026-09-09
 **Status:** Production (Phase 4 complete)
 
 This document is the authoritative single-page description of what the system does, how it
@@ -69,6 +69,7 @@ The hard problems this application solves:
       ├── /trades              paginated completed trades list
       ├── /trades/<id>         trade detail + grail plan link
       ├── /positions           open and closed positions
+      ├── /positions/<id>      position detail: fill-by-fill history for partial closes
       ├── /admin/users                  user management (admin only)
       ├── /admin/market-data            Polygon.io enrichment + OHLCV explorer (admin only)
       ├── /admin/market-data/hg-analysis  HG plan analysis dashboard + batch trigger (admin only)
@@ -416,7 +417,8 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
 | Trades list | `/trades` | Sort by any column, filter by symbol/date range/account, pagination (per_page persisted in session). Account filter preserved across sort and pagination links. Bulk delete: "Select to Delete" mode enables row checkboxes and a "Select All" toggle; confirms then permanently deletes selected trades, their executions, and their annotations, and reprocesses affected positions. |
 | Trade detail | `/trades/<id>` | Execution breakdown, annotation form, prev/next navigation, Grail plan link with copy-to-clipboard. When an `HgAnalysisResult` exists for the linked grail plan, an "HG Plan Analysis" card shows entry touch type, TP1/TP2 outcome, MFE/MAE, and actual vs plan comparison. "Analyze HG Plan" / "Re-analyze" button triggers hydration + evaluation inline. |
 | Trade annotation | `/trades/<id>/annotate` | Pattern (managed dropdown + inline create), source, stop price, notes, ATM Engaged (managed dropdown + inline create via `atm_option_id` FK) |
-| Positions | `/positions` | All positions with open/closed status, filter by symbol/account |
+| Positions | `/positions` | All positions with open/closed status, filter by symbol/account. Rows link to a per-position detail page. |
+| Position detail | `/positions/<id>` | Fill-by-fill history for one position (Tier 1 `trades`, chronological) with running quantity and per-fill realized P&L; fills that are part of a sealed round-trip link out to `completed_trades`, fills still building toward a full close are labeled "still open." Surfaces partial-close P&L that has no `completed_trades` row of its own (issue #43). |
 | CSV upload | `/ingest` | Drag-and-drop Schwab CSV, NinjaTrader `-exec.csv`, or NDJSON; file format auto-detected; shows insert/update counts; inline error display |
 | Admin: users | `/admin/users` | Create, deactivate, regenerate API key; pill sub-nav to export (admin-only) |
 | Admin: market data | `/admin/market-data` | Three tabs: (1) list option trades missing `underlying_at_entry` with one-click Polygon.io enrichment; (2) fetch 1m/5m/15m OHLCV bars for any symbol and date range; (3) Explore OHLCV — summary stats, HG plan coverage table, schema reference, free-form SELECT query box (500-row cap). Admin-only. |
@@ -658,6 +660,7 @@ trading_journal/
 ├── trade_completion.py     TradeCompletionEngine — groups fills into completed trades
 ├── positions.py            PositionTracker — avg cost basis, bulk UPSERT, option expiry
 ├── dashboard.py            DashboardEngine — metrics aggregation
+├── date_range.py           parse_date_range() — shared date-range string grammar (today/Nd/single date/explicit or open-ended range), used by DashboardEngine and /trades filtering
 ├── market_data.py          MassiveClient (Polygon.io); enrich_missing_underlying_prices; enrich_trades_by_ids; fetch_window_bars; fetch_futures_window_bars
 ├── hg_hydration.py         hydrate_hg_plan() — fetch bars for a grail plan → ohlcv_price_series + HgMarketDataRequest
 ├── hg_evaluator.py         evaluate_hg_plan() — bar-scan evaluator → HgAnalysisResult
@@ -677,7 +680,7 @@ trading_journal/
         ├── auth.py         /login, /logout
         ├── dashboard.py    /
         ├── trades.py       /trades, /trades/<id>, annotate, delete, grail-plan, hg-analyze, attach-note (merge a notepad entry in)
-        ├── positions.py    /positions
+        ├── positions.py    /positions, /positions/<id> (fill history detail)
         ├── ingest.py       /ingest (CSV upload)
         ├── admin.py        /admin/users, /admin/market-data, /admin/market-data/hg-analysis, /admin/market-data/hg-batch, /admin/grail-plans, /admin/export
         ├── journal.py      /journal — list, create, detail/edit, delete
