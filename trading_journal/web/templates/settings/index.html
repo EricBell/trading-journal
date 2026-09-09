@@ -172,9 +172,14 @@
                 <form method="post"
                       action="{{ url_for('settings.deactivate_bt_strategy', strategy_type_id=st.strategy_type_id) }}">
                   <button type="submit" class="btn btn-sm btn-outline-danger"
-                          {% if run_count > 0 %}disabled title="{{ run_count }} run(s) use this strategy"{% endif %}>
+                          {% if run_count > 0 %}title="{{ run_count }} run(s) will keep referencing it"{% endif %}>
                     Deactivate
                   </button>
+                </form>
+                {% else %}
+                <form method="post"
+                      action="{{ url_for('settings.reactivate_bt_strategy', strategy_type_id=st.strategy_type_id) }}">
+                  <button type="submit" class="btn btn-sm btn-outline-success">Reactivate</button>
                 </form>
                 {% endif %}
               </td>
@@ -235,9 +240,14 @@
                 <form method="post"
                       action="{{ url_for('settings.deactivate_bt_underlying', underlying_id=ul.underlying_id) }}">
                   <button type="submit" class="btn btn-sm btn-outline-danger"
-                          {% if run_count > 0 %}disabled title="{{ run_count }} run(s) use this underlying"{% endif %}>
+                          {% if run_count > 0 %}title="{{ run_count }} run(s) will keep referencing it"{% endif %}>
                     Deactivate
                   </button>
+                </form>
+                {% else %}
+                <form method="post"
+                      action="{{ url_for('settings.reactivate_bt_underlying', underlying_id=ul.underlying_id) }}">
+                  <button type="submit" class="btn btn-sm btn-outline-success">Reactivate</button>
                 </form>
                 {% endif %}
               </td>

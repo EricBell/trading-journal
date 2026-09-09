@@ -72,7 +72,7 @@
         {% for s in strategy_types %}
         <option value="{{ s.strategy_type_id }}"
           {% if run and run.strategy_type_id == s.strategy_type_id %}selected{% endif %}>
-          {{ s.strategy_name }}
+          {{ s.strategy_name }}{% if not s.is_active %} (inactive){% endif %}
         </option>
         {% endfor %}
         <option value="__new__">+ Add new…</option>
@@ -90,7 +90,7 @@
         {% for u in underlyings %}
         <option value="{{ u.underlying_id }}"
           {% if run and run.underlying_id == u.underlying_id %}selected{% endif %}>
-          {{ u.underlying_name }}
+          {{ u.underlying_name }}{% if not u.is_active %} (inactive){% endif %}
         </option>
         {% endfor %}
         <option value="__new__">+ Add new…</option>

@@ -1,3 +1,10 @@
+## v1.38.0 - 2026-09-09
+
+### Features
+- **Backtest strategy types/underlyings: soft-deactivate + reactivate (issue #45)** — deactivating a `backtest_strategy_types`/`backtest_underlyings` entry from `/settings` was previously hard-blocked whenever any `backtest_runs` row referenced it, and there was no way to reactivate a deactivated entry at all. Deactivate now always succeeds (the flash message notes how many existing runs still reference it), and new `POST /settings/backtest-strategy-types/<id>/reactivate` / `.../backtest-underlyings/<id>/reactivate` routes restore an entry to active. This exposed two latent bugs in `routes/backtest.py`, both fixed as part of this work: the `/backtest` list built its strategy/underlying name lookup from active-only rows, so a run referencing a newly-deactivated entry would've displayed "—" instead of its real name; and the `/backtest/<id>` edit form's dropdown was built the same way, meaning a deactivated entry's `<option>` wouldn't exist at all — saving the form without touching that field would have silently reassigned the run to a different strategy type/underlying. Both dropdowns now include the run's current type/underlying even when inactive, marked "(inactive)". New test file `tests/test_backtest_deactivate_reactivate.py` covers both fixes plus the deactivate/reactivate round trip.
+
+---
+
 ## v1.37.1 - 2026-09-09
 
 ### Bug Fixes

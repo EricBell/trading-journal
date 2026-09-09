@@ -528,15 +528,30 @@ def deactivate_bt_strategy(strategy_type_id: int):
             )
             .scalar() or 0
         )
-        if run_count > 0:
-            flash(
-                f'Cannot deactivate "{row.strategy_name}": {run_count} run(s) use this strategy.',
-                'warning',
-            )
-            return redirect(url_for('settings.index'))
         row.is_active = False
         db_session.commit()
-        flash(f'Strategy "{row.strategy_name}" deactivated.', 'success')
+        suffix = f' ({run_count} existing run(s) keep referencing it)' if run_count else ''
+        flash(f'Strategy "{row.strategy_name}" deactivated.{suffix}', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/backtest-strategy-types/<int:strategy_type_id>/reactivate', methods=['POST'])
+@login_required
+def reactivate_bt_strategy(strategy_type_id: int):
+    user = AuthContext.require_user()
+    with db_manager.get_session() as db_session:
+        row = (
+            db_session.query(BacktestStrategyType)
+            .filter_by(strategy_type_id=strategy_type_id, user_id=user.user_id)
+            .one_or_none()
+        )
+        if row is None:
+            flash('Strategy not found.', 'warning')
+            return redirect(url_for('settings.index'))
+        row.is_active = True
+        db_session.commit()
+        flash(f'Strategy "{row.strategy_name}" reactivated.', 'success')
 
     return redirect(url_for('settings.index'))
 
@@ -630,14 +645,29 @@ def deactivate_bt_underlying(underlying_id: int):
             )
             .scalar() or 0
         )
-        if run_count > 0:
-            flash(
-                f'Cannot deactivate "{row.underlying_name}": {run_count} run(s) use this underlying.',
-                'warning',
-            )
-            return redirect(url_for('settings.index'))
         row.is_active = False
         db_session.commit()
-        flash(f'Underlying "{row.underlying_name}" deactivated.', 'success')
+        suffix = f' ({run_count} existing run(s) keep referencing it)' if run_count else ''
+        flash(f'Underlying "{row.underlying_name}" deactivated.{suffix}', 'success')
+
+    return redirect(url_for('settings.index'))
+
+
+@bp.route('/backtest-underlyings/<int:underlying_id>/reactivate', methods=['POST'])
+@login_required
+def reactivate_bt_underlying(underlying_id: int):
+    user = AuthContext.require_user()
+    with db_manager.get_session() as db_session:
+        row = (
+            db_session.query(BacktestUnderlying)
+            .filter_by(underlying_id=underlying_id, user_id=user.user_id)
+            .one_or_none()
+        )
+        if row is None:
+            flash('Underlying not found.', 'warning')
+            return redirect(url_for('settings.index'))
+        row.is_active = True
+        db_session.commit()
+        flash(f'Underlying "{row.underlying_name}" reactivated.', 'success')
 
     return redirect(url_for('settings.index'))

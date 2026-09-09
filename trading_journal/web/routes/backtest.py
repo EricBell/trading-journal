@@ -240,6 +240,22 @@ def index():
         strategy_map = {s.strategy_type_id: s.strategy_name for s in strategy_types}
         underlying_map = {u.underlying_id: u.underlying_name for u in underlyings}
 
+        # Runs can reference a strategy/underlying that's since been deactivated —
+        # look those up too so the list still shows the real name instead of "—".
+        missing_strategy_ids = {r.strategy_type_id for r in runs if r.strategy_type_id and r.strategy_type_id not in strategy_map}
+        if missing_strategy_ids:
+            extra = db_session.query(BacktestStrategyType).filter(
+                BacktestStrategyType.strategy_type_id.in_(missing_strategy_ids)
+            ).all()
+            strategy_map.update({s.strategy_type_id: s.strategy_name for s in extra})
+
+        missing_underlying_ids = {r.underlying_id for r in runs if r.underlying_id and r.underlying_id not in underlying_map}
+        if missing_underlying_ids:
+            extra = db_session.query(BacktestUnderlying).filter(
+                BacktestUnderlying.underlying_id.in_(missing_underlying_ids)
+            ).all()
+            underlying_map.update({u.underlying_id: u.underlying_name for u in extra})
+
     return render_template(
         'backtest/index.html',
         user=user,
@@ -345,6 +361,26 @@ def detail(run_id):
         _seed_defaults_if_empty(db_session, user.user_id)
         db_session.commit()
         strategy_types, underlyings = _load_dropdowns(db_session, user.user_id)
+
+        # If this run's current strategy/underlying has since been deactivated, its
+        # option won't be in the active-only dropdown list above — add it back so the
+        # form preselects it correctly instead of silently defaulting to another value.
+        if run.strategy_type_id and run.strategy_type_id not in {s.strategy_type_id for s in strategy_types}:
+            current_strategy = (
+                db_session.query(BacktestStrategyType)
+                .filter_by(strategy_type_id=run.strategy_type_id, user_id=user.user_id)
+                .first()
+            )
+            if current_strategy:
+                strategy_types = list(strategy_types) + [current_strategy]
+        if run.underlying_id and run.underlying_id not in {u.underlying_id for u in underlyings}:
+            current_underlying = (
+                db_session.query(BacktestUnderlying)
+                .filter_by(underlying_id=run.underlying_id, user_id=user.user_id)
+                .first()
+            )
+            if current_underlying:
+                underlyings = list(underlyings) + [current_underlying]
 
     # Reconstruct lightweight objects the template can use
     class _Row:
