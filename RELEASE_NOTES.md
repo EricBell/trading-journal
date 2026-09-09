@@ -1,3 +1,10 @@
+## v1.37.1 - 2026-09-09
+
+### Bug Fixes
+- **Backtest pages missing navbar/header (issue #44)** — `base.html`'s nav is gated on `{% if user %}`, and every other route passes `user=user` into `render_template()`, but `routes/backtest.py`'s three call sites (`index`, `new`, `detail`) never did despite already fetching `user = AuthContext.require_user()` in each view function. The Backtest Runs list, New Run, and Run Detail pages rendered with no site header/menu. All three `render_template()` calls now pass `user=user`.
+
+---
+
 ## v1.37.0 - 2026-09-03
 
 ### Features

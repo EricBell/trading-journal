@@ -242,6 +242,7 @@ def index():
 
     return render_template(
         'backtest/index.html',
+        user=user,
         runs=runs,
         total=total,
         page=page,
@@ -287,6 +288,7 @@ def new():
 
     return render_template(
         'backtest/detail.html',
+        user=user,
         run=None,
         leg_rules=[],
         strategy_types=strategy_types,
@@ -354,6 +356,7 @@ def detail(run_id):
 
     return render_template(
         'backtest/detail.html',
+        user=user,
         run=run_obj,
         leg_rules=leg_rule_objs,
         strategy_types=strategy_types,
