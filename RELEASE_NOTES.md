@@ -1,3 +1,10 @@
+## v1.39.0 - 2026-09-11
+
+### Features
+- **Favicon for browser tab (issue #46)** — the app had no favicon at all (no `<link rel="icon">`, no icon assets), so browser tabs showed a generic default icon. Added a light-themed "T" monogram (dark slate letter in a white circle with a light gray border) as `trading_journal/web/static/img/favicon.svg`, with `favicon.ico` (16/32/48px) and `apple-touch-icon.png` (180px) fallbacks generated from the same SVG source. `base.html` now links all three so the icon applies across every page.
+
+---
+
 ## v1.38.0 - 2026-09-09
 
 ### Features
