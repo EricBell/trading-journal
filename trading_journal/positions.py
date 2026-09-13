@@ -7,7 +7,7 @@ from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, text
+from sqlalchemy import and_, func, text
 from sqlalchemy.dialects.postgresql import insert
 
 from .database import db_manager
@@ -421,6 +421,71 @@ class PositionTracker:
             "message": f"Reprocessed {processed_count} trades, expired {expired_count} worthless options"
         }
 
+    def _insert_synthetic_expiration_trade(
+        self,
+        session: Session,
+        user_id: int,
+        account_id: Optional[int],
+        symbol: str,
+        exp_date: date,
+        strike: Any,
+        option_type: str,
+        option_data: Dict[str, Any],
+        side: str,
+        qty: int,
+        exec_timestamp: datetime,
+        unique_key: str,
+        realized_pnl: Optional[Decimal] = None,
+    ) -> None:
+        """Insert a Tier-1 Trade row representing an expired option leg's close.
+
+        `_expire_worthless_options` used to only flip the Position row to flat —
+        leaving no execution record for TradeCompletionEngine to pair against the
+        opening leg(s), so any spread with an expired leg silently never produced
+        a CompletedTrade (issue #47). The synthetic row only gets a spread_order_tag
+        when the leg being closed was itself opened as part of a multi-leg spread;
+        otherwise it's left None so it flows through the standard single-instrument
+        cycle matching instead.
+        """
+        open_leg = session.query(Trade).filter(
+            Trade.user_id == user_id,
+            Trade.symbol == symbol,
+            Trade.instrument_type == 'OPTION',
+            Trade.account_id == account_id,
+            Trade.exp_date == exp_date,
+            Trade.strike_price == strike,
+            Trade.option_type == option_type,
+            Trade.pos_effect == 'TO OPEN',
+        ).order_by(Trade.exec_timestamp.desc()).first()
+
+        spread_order_tag = f"EXPIRE:{unique_key}" if open_leg and open_leg.spread_order_tag else None
+
+        session.add(Trade(
+            user_id=user_id,
+            account_id=account_id,
+            unique_key=unique_key,
+            exec_timestamp=exec_timestamp,
+            event_type='fill',
+            symbol=symbol,
+            instrument_type='OPTION',
+            side=side,
+            qty=qty,
+            pos_effect='TO CLOSE',
+            price=Decimal('0'),
+            net_price=Decimal('0'),
+            exp_date=exp_date,
+            strike_price=strike,
+            option_type=option_type,
+            spread_type=open_leg.spread_type if open_leg else None,
+            spread_order_tag=spread_order_tag,
+            option_data=option_data,
+            platform_source='SYSTEM',
+            order_type='EXPIRE',
+            raw_data=json.dumps({'synthetic': 'expiration_close', 'unique_key': unique_key}),
+            processing_timestamp=datetime.now(),
+            realized_pnl=realized_pnl,
+        ))
+
     def _expire_worthless_options(self, user_id: int) -> int:
         """Close out option positions whose expiration date is in the past (expired worthless)."""
         today = date.today()
@@ -502,6 +567,22 @@ class PositionTracker:
                     }
                 )
 
+                self._insert_synthetic_expiration_trade(
+                    session,
+                    user_id=user_id,
+                    account_id=position.account_id,
+                    symbol=position.symbol,
+                    exp_date=exp_date,
+                    strike=details.get('strike'),
+                    option_type=details.get('right'),
+                    option_data=details,
+                    side='SELL' if qty > 0 else 'BUY',
+                    qty=abs(qty),
+                    exec_timestamp=closed_at_dt,
+                    unique_key=f"expire:{position.position_id}:{exp_date.isoformat()}",
+                    realized_pnl=realized_pnl,
+                )
+
                 logger.info(
                     f"  Expired option {position.symbol} {exp_date}: "
                     f"qty={qty} avg_cost={float(avg_cost):.4f} P&L=${float(realized_pnl):.2f}"
@@ -511,3 +592,98 @@ class PositionTracker:
             session.commit()
 
         return expired_count
+
+    def backfill_expired_option_closes(self, user_id: int) -> int:
+        """Synthesize missing closing Trade rows for legs expired before this fix existed.
+
+        Before `_insert_synthetic_expiration_trade` existed, `_expire_worthless_options`
+        only flipped the Position row to flat and never left a Trade record — so
+        current_qty/avg_cost_basis on those positions are already zeroed and can't be
+        used to reconstruct the missing leg. Instead this walks every already-closed
+        OPTION position's remaining raw Trade history and computes the signed exposure
+        still unaccounted for; if it's non-zero, a single TO CLOSE row is synthesized
+        to zero it out (issue #47). Positions with no shortfall (already fully closed
+        by real fills) are left untouched.
+        """
+        backfilled = 0
+
+        with self.db_manager.get_session() as session:
+            closed_positions = session.query(Position).filter(
+                Position.user_id == user_id,
+                Position.instrument_type == 'OPTION',
+                Position.closed_at.isnot(None),
+            ).all()
+
+            for position in closed_positions:
+                details = position.option_details
+                if isinstance(details, str):
+                    try:
+                        details = json.loads(details)
+                    except (ValueError, TypeError):
+                        continue
+                if not details:
+                    continue
+
+                exp_date_str = details.get('exp_date')
+                strike = details.get('strike')
+                option_type = details.get('right')
+                if not exp_date_str or strike is None or not option_type:
+                    continue
+
+                try:
+                    exp_date = date.fromisoformat(str(exp_date_str))
+                except (ValueError, TypeError):
+                    continue
+
+                if exp_date >= date.today():
+                    continue
+
+                leg_rows = session.query(Trade).filter(
+                    Trade.user_id == user_id,
+                    Trade.symbol == position.symbol,
+                    Trade.instrument_type == 'OPTION',
+                    Trade.account_id == position.account_id,
+                    Trade.exp_date == exp_date,
+                    Trade.strike_price == strike,
+                    Trade.option_type == option_type,
+                    Trade.pos_effect.in_(['TO OPEN', 'TO CLOSE']),
+                ).all()
+                if not leg_rows:
+                    continue
+
+                total_signed = 0
+                for row in leg_rows:
+                    if row.pos_effect == 'TO OPEN':
+                        total_signed += row.qty if row.side == 'BUY' else -row.qty
+                    else:
+                        total_signed += -row.qty if row.side == 'SELL' else row.qty
+
+                if total_signed == 0:
+                    continue  # already fully represented at Tier 1
+
+                shortfall_signed = -total_signed
+                side = 'BUY' if shortfall_signed > 0 else 'SELL'
+                qty = abs(shortfall_signed)
+
+                unique_key = f"expire-backfill:{position.position_id}:{exp_date.isoformat()}"
+                closed_at_dt = datetime.combine(exp_date, datetime.min.time().replace(hour=16))
+
+                self._insert_synthetic_expiration_trade(
+                    session,
+                    user_id=user_id,
+                    account_id=position.account_id,
+                    symbol=position.symbol,
+                    exp_date=exp_date,
+                    strike=strike,
+                    option_type=option_type,
+                    option_data=details,
+                    side=side,
+                    qty=qty,
+                    exec_timestamp=closed_at_dt,
+                    unique_key=unique_key,
+                )
+                backfilled += 1
+
+            session.commit()
+
+        return backfilled

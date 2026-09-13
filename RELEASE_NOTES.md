@@ -1,3 +1,10 @@
+## v1.39.1 - 2026-09-13
+
+### Bug Fixes
+- **Multi-leg spreads with an expired leg never appeared in Trades (issue #47)** — `_expire_worthless_options` (`trading_journal/positions.py`) closed out expired option positions by updating only the `positions` row, with no corresponding `trades` execution row, and `_process_spread_trades` (`trading_journal/trade_completion.py`) required a close order's strike set to exactly equal the open order's before pairing them into a `CompletedTrade`. A spread where some legs closed manually and others expired worthless (e.g. an iron condor with the tested side bought back and the untested side expiring OTM) had no execution record for the expired legs and no matching close group for the rest, so it silently vanished from Trades entirely even though Positions correctly went flat. Expiration now inserts a synthetic `TO CLOSE` trade row for the expired leg, and spread matching accumulates close-side legs across tags/orders (manual + synthetic) until every open leg's quantity is accounted for, rather than requiring one close order to cover the whole spread at once. A one-time backfill was run to synthesize the missing closes for positions that expired before this fix existed, surfacing 31 previously-invisible legs across SPX, SPY, GM, NVDA, and PLTR and completing 168 trades that had never appeared in Trades.
+
+---
+
 ## v1.39.0 - 2026-09-11
 
 ### Features

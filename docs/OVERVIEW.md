@@ -31,7 +31,10 @@ The hard problems this application solves:
   rows at slightly different prices. Average cost basis must be maintained correctly across
   partial opens and closes.
 - **Option expiry.** Open option positions that pass their expiration date must be closed
-  automatically (long = full loss of premium, short = full retention of premium).
+  automatically (long = full loss of premium, short = full retention of premium), and that
+  closure must also produce a Tier 1 execution record so `TradeCompletionEngine` can pair it
+  against the opening leg(s) — otherwise a spread with an expired leg never produces a
+  `CompletedTrade` at all, even though the position correctly shows flat (§5.12, issue #47).
 - **Performance at upload time.** With a remote PostgreSQL server and a gunicorn worker timeout
   of 30 seconds, rebuilding all positions after every upload was fatal. Position reprocessing
   is now scoped to only the symbols present in the uploaded file.
@@ -280,25 +283,30 @@ completed trades, or fully orphaned with no P&L at all.
 `_process_spread_trades(session, spread_trades)` in `TradeCompletionEngine`:
 
 1. Groups executions by `spread_order_tag` — all legs of one multi-leg order share a tag.
-2. Classifies each tag group as **open** (all `TO OPEN`) or **close** (all `TO CLOSE`).
-   Mixed-effect groups are logged as warnings and skipped.
-3. Matches open and close groups by `(symbol, instrument_type, account_id, exp_date,
-   frozenset(strike_prices))` using FIFO ordering within each key, pairing them positionally
-   via `zip()`. **Before creating a `CompletedTrade`, the total open quantity and total close
-   quantity of the paired groups must match exactly** — a mismatch (e.g. a partial close, 2
-   contracts opened but only 1 closed) is logged as a warning and skipped rather than
-   completed, since `zip()` pairs FIFO by order sequence, not by matching size, and would
-   otherwise fabricate an inflated exit price/P&L using the open leg's quantity as the
-   divisor (issue #23). Partial closes spread across multiple spread orders are not yet
-   supported — the legs are simply left unlinked until a fully-matching close arrives.
-4. For each matched open/close pair, `_create_spread_completed_trade()` computes:
+2. Classifies each tag group as **open** (all `TO OPEN`) or a pool of **close legs** (all
+   `TO CLOSE`, pooled together across every close-side tag rather than kept as separate
+   groups — see point 3). Mixed-effect groups are logged as warnings and skipped.
+3. For each open group (processed oldest-first), candidate close legs are drawn from the
+   pooled close legs sharing `(symbol, instrument_type, account_id, exp_date)` with an
+   `exec_timestamp` at or after the open group's, and matched to the open group **leg-by-leg**
+   by `(strike_price, option_type)` rather than requiring one close tag's full strike set to
+   equal the open group's. This lets a spread's legs close across more than one order — some
+   bought/sold back manually, others closed by a different order, others expired worthless
+   (each expiration is synthesized as its own single-leg close, §5.12) — and still be
+   recognized as one spread. A spread is only sealed once **every** leg's matched close
+   quantity exactly equals its opened quantity; a leg left partially or entirely unmatched
+   is logged as a warning and skipped rather than completed, so a genuine partial close never
+   fabricates an inflated exit price/P&L (issue #23). Consumed close legs are tracked across
+   open groups so the same close execution is never applied to two different spreads.
+4. For each fully-matched open group, `_create_spread_completed_trade()` computes:
    - **Net debit** (open cost): `Σ net_price × qty × sign(BUY=+1, SELL=-1)` across open legs
    - **Net credit** (close proceeds): `Σ net_price × qty × sign(SELL=+1, BUY=-1)` across close legs
    - **net_pnl** = `gross_proceeds − gross_cost` (both multiplied by options multiplier 100×)
    - **option_details** JSONB: `{spread_type, exp_date, legs:[{strike, right, side}, …]}`
      (legs sorted highest-strike first)
-5. One `CompletedTrade` row is created per matched pair (not one per leg). All leg
-   executions are linked to that single `CompletedTrade` via `completed_trade_id`.
+5. One `CompletedTrade` row is created per fully-closed open group (not one per leg or per
+   close order). All open legs plus every close leg consumed to close them are linked to
+   that single `CompletedTrade` via `completed_trade_id`.
 
 The `spread_group_id` column on `completed_trades` stores the sorted, comma-joined
 `spread_order_tag` values from the cycle executions, providing a traceable link back to
@@ -393,17 +401,21 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
    ├── _get_or_create_account() per account_number → accounts.account_id
    ├── bulk UPSERT into trades (INSERT … ON CONFLICT DO UPDATE)
    ├── session.commit()
-   ├── TradeCompletionEngine.reprocess_completed_trades_for_symbols(user_id, affected_symbols)
-   │   ├── unlinks executions for the uploaded symbols only
-   │   ├── deletes completed_trades for those symbols only
-   │   ├── re-groups executions → new CompletedTrade rows (scoped to those symbols)
-   │   └── re-links trade_annotations via natural key (user_id, symbol, opened_at), scoped to those symbols
    └── PositionTracker.reprocess_positions_for_symbols(user_id, affected_symbols)
        ├── deletes positions only for uploaded symbols
        ├── loads all historical fills for those symbols (ordered by timestamp)
        ├── rebuilds positions in memory (single-pass, no DB reads)
        ├── bulk UPSERT positions
-       └── _expire_worthless_options() — zero-out expired option positions
+       └── _expire_worthless_options() — zeroes out expired option positions AND inserts a
+           synthetic TO CLOSE trades row for each expired leg (§5.12), so step 3 below has
+           something to pair it against
+
+3. (back in ingest.py route, after ingest_records returns)
+   TradeCompletionEngine.reprocess_completed_trades_for_symbols(user_id, affected_symbols)
+   ├── unlinks executions for the uploaded symbols only
+   ├── deletes completed_trades for those symbols only
+   ├── re-groups executions → new CompletedTrade rows (scoped to those symbols)
+   └── re-links trade_annotations via natural key (user_id, symbol, opened_at), scoped to those symbols
 ```
 
 ---
@@ -430,7 +442,7 @@ analyses and provides a "Run Batch" button that processes up to 20 unanalyzed tr
 | About | `/about` | Release notes parsed from RELEASE_NOTES.md; Bootstrap accordion; current release badged |
 | Backtest runs | `/backtest` | List with filter bar (strategy, underlying, entry time, spread width), sortable columns, summary stat cards (best win rate, best profit factor, avg win rate across filtered runs), status badges, pagination. |
 | Backtest detail | `/backtest/new`, `/backtest/<id>` | Create/edit form: Parameters section (strategy, underlying, entry style, entry time, width, DTE, strike selection, profit target, stop rule, date range, tool, status), Leg Management Rules inline CRUD (add/edit/delete per-leg early-exit rules), Results section (10 aggregate fields), EasyMDE notes. Inline "Add new…" for strategy type and underlying. Defaults seeded on first use. |
-| Settings | `/settings` | User preferences; manages setup patterns, signal sources, ATM Engaged options, backtest strategy types, and backtest underlyings (create, edit, deactivate — each showing use count) |
+| Settings | `/settings` | User preferences; manages setup patterns, signal sources, ATM Engaged options, backtest strategy types, and backtest underlyings (create, edit, deactivate, reactivate — each showing use count). Deactivate always succeeds even when `backtest_runs` reference the entry (flash message notes the reference count) rather than being hard-blocked; reactivate restores an inactive entry. `/backtest` and its edit form's dropdowns include the run's current type/underlying even when inactive, marked "(inactive)" (issue #45). |
 | JSON API | `/api/dashboard`, `/api/trades` | For external tooling; dashboard endpoint accepts `?account=` filter |
 
 ### CLI
@@ -627,6 +639,42 @@ rebuild.
 
 ---
 
+### 5.12 Expired option legs synthesize a closing Trade row (issue #47)
+
+`_expire_worthless_options` (§5, §6) used to close out an expired option purely by updating
+the `positions` row (Tier 3) — zeroing `current_qty`, setting `closed_at`. It never inserted
+a corresponding `trades` (Tier 1) execution row. Combined with §5.8's old requirement that a
+close group's strike set exactly equal the open group's, a multi-leg spread where some legs
+closed manually and others expired worthless had no execution record for the expired legs and
+no matching close group for the rest — it silently vanished from `/trades` entirely even
+though `/positions` correctly showed flat, since Position tracking nets each leg independently
+rather than per-spread.
+
+`_insert_synthetic_expiration_trade()` in `positions.py` now inserts a `TO CLOSE` Trade row
+(price 0, `event_type='fill'`, `platform_source='SYSTEM'`, `order_type='EXPIRE'`) whenever an
+option position is expired, so `TradeCompletionEngine` has something to pair against the
+opening leg(s). The synthetic row only gets a `spread_order_tag` when the leg being closed was
+itself opened as part of a multi-leg spread (looked up from the matching `TO OPEN` row); a
+plain single-leg expiration is left with no tag so it flows through the standard per-instrument
+cycle matching (§5.4) instead of the spread path (§5.8). §5.8's matching algorithm was
+generalized at the same time to pool close-side legs across tags/orders and match them to an
+open group leg-by-leg, rather than requiring one close group to cover the whole spread — see
+§5.8 point 3 for the current algorithm.
+
+**Backfill for pre-existing gaps:** `PositionTracker.backfill_expired_option_closes(user_id)`
+retroactively synthesizes the missing closing row for option positions that were already
+expired (and therefore already zeroed — `current_qty`/`avg_cost_basis` on the `positions` row
+can no longer be used to reconstruct the leg) before this fix existed. For each already-closed
+OPTION position whose `exp_date` has passed, it walks that leg's full raw Trade history and
+computes the signed exposure still unaccounted for (same signed-quantity convention as §5.4's
+cycle matching); a non-zero remainder means a closing execution is missing, and a single
+`TO CLOSE` row sized to exactly flatten it is synthesized. Positions already fully represented
+at Tier 1 (shortfall of zero) are left untouched. Running this once for the affected user
+surfaced 31 previously-invisible expired legs and completed 168 trades across SPX, SPY, GM,
+NVDA, and PLTR that had never appeared in `/trades`.
+
+---
+
 ### Grail Plan Browser batch: client-side wait architecture
 The batch analyzer avoids long-lived SSE connections (which nginx would drop at
 `proxy_read_timeout`, default 60s) by keeping each HTTP request short: the server
@@ -657,8 +705,8 @@ trading_journal/
 ├── csv_parser.py           CsvParser — Schwab CSV → record dicts
 ├── ninjatrader_parser.py   NinjaTraderParser — NinjaTrader exec CSV → record dicts (FUTURES)
 ├── schemas.py              NdjsonRecord pydantic schema + unique_key generation
-├── trade_completion.py     TradeCompletionEngine — groups fills into completed trades
-├── positions.py            PositionTracker — avg cost basis, bulk UPSERT, option expiry
+├── trade_completion.py     TradeCompletionEngine — groups fills into completed trades, incl. multi-leg spread matching (§5.8)
+├── positions.py            PositionTracker — avg cost basis, bulk UPSERT, option expiry (incl. synthetic closing trade + backfill, §5.12)
 ├── dashboard.py            DashboardEngine — metrics aggregation
 ├── date_range.py           parse_date_range() — shared date-range string grammar (today/Nd/single date/explicit or open-ended range), used by DashboardEngine and /trades filtering
 ├── market_data.py          MassiveClient (Polygon.io); enrich_missing_underlying_prices; enrich_trades_by_ids; fetch_window_bars; fetch_futures_window_bars

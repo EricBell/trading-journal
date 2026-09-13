@@ -231,7 +231,17 @@ class TradeCompletionEngine:
             }
 
     def _process_spread_trades(self, session: Session, spread_trades: List[Trade]) -> int:
-        """Process multi-leg spread executions into single CompletedTrades (one per spread)."""
+        """Process multi-leg spread executions into single CompletedTrades (one per spread).
+
+        A spread's legs don't always close together in one order: some legs may be
+        bought/sold back manually while others expire worthless (each expiration is
+        its own single-leg synthetic close — see positions.py `_insert_synthetic_expiration_trade`),
+        or legs may be closed across more than one manual order. So closing trades are
+        pooled across *all* close-side tags and matched to an open group leg-by-leg
+        (by strike + option_type) rather than requiring one close group's tag to cover
+        every leg at once. A spread is only sealed once every leg's closed quantity
+        exactly equals its opened quantity (issue #47).
+        """
         if not spread_trades:
             return 0
 
@@ -240,59 +250,73 @@ class TradeCompletionEngine:
         for t in spread_trades:
             by_tag[t.spread_order_tag].append(t)
 
-        # Classify each tag group: all TO OPEN → open order; all TO CLOSE → close order
+        # Classify each tag group: all TO OPEN → open order; all TO CLOSE → pooled close legs
         open_groups: List[List[Trade]] = []
-        close_groups: List[List[Trade]] = []
+        close_leg_pool: List[Trade] = []
         for tag, legs in by_tag.items():
             effects = {l.pos_effect for l in legs}
             if effects == {'TO OPEN'}:
                 open_groups.append(legs)
             elif effects == {'TO CLOSE'}:
-                close_groups.append(legs)
+                close_leg_pool.extend(legs)
             else:
                 logger.warning(f"Skipping spread order {tag}: mixed pos_effect {effects}")
-
-        def _identity(legs: List[Trade]) -> Tuple:
-            """Key that identifies which open order matches which close order."""
-            l = legs[0]
-            return (l.symbol, l.instrument_type, l.account_id, l.exp_date,
-                    frozenset(l.strike_price for l in legs))
 
         def _min_ts(legs: List[Trade]) -> datetime:
             return min((l.exec_timestamp for l in legs if l.exec_timestamp), default=datetime.min)
 
-        # Group and sort by identity key so FIFO matching works correctly
-        opens_by_key: Dict[Tuple, List[List[Trade]]] = defaultdict(list)
-        closes_by_key: Dict[Tuple, List[List[Trade]]] = defaultdict(list)
-        for legs in open_groups:
-            opens_by_key[_identity(legs)].append(legs)
-        for legs in close_groups:
-            closes_by_key[_identity(legs)].append(legs)
-        for v in opens_by_key.values():
-            v.sort(key=_min_ts)
-        for v in closes_by_key.values():
-            v.sort(key=_min_ts)
+        def _leg_key(leg: Trade) -> Tuple:
+            return (leg.strike_price, leg.option_type)
+
+        # Process open groups oldest-first so earlier spreads get first claim on
+        # eligible close legs when identical strikes were opened more than once.
+        open_groups.sort(key=_min_ts)
 
         completed_count = 0
-        for key in set(opens_by_key) & set(closes_by_key):
-            for open_legs, close_legs in zip(opens_by_key[key], closes_by_key[key]):
-                open_qty = sum(abs(l.qty) for l in open_legs)
-                close_qty = sum(abs(l.qty) for l in close_legs)
-                if open_qty != close_qty:
-                    # zip() pairs FIFO by order, not by matching size — a partial close
-                    # (close_qty != open_qty) would otherwise silently produce wrong
-                    # exit_avg_price/net_pnl (total_qty is taken from the open leg only).
-                    # Partial closes across multiple spread orders aren't supported yet,
-                    # so skip rather than fabricate incorrect P&L (issue #23).
+        consumed_close_ids: set = set()
+
+        for open_legs in open_groups:
+            first = open_legs[0]
+            open_start = _min_ts(open_legs)
+
+            candidates = sorted(
+                (
+                    c for c in close_leg_pool
+                    if c.trade_id not in consumed_close_ids
+                    and c.symbol == first.symbol
+                    and c.instrument_type == first.instrument_type
+                    and c.account_id == first.account_id
+                    and c.exp_date == first.exp_date
+                    and (c.exec_timestamp or datetime.min) >= open_start
+                ),
+                key=lambda c: c.exec_timestamp or datetime.min,
+            )
+
+            open_qty_by_leg: Dict[Tuple, int] = defaultdict(int)
+            for l in open_legs:
+                open_qty_by_leg[_leg_key(l)] += abs(l.qty)
+
+            matched_closes: List[Trade] = []
+            close_qty_by_leg: Dict[Tuple, int] = defaultdict(int)
+            for c in candidates:
+                key = _leg_key(c)
+                if key in open_qty_by_leg and close_qty_by_leg[key] < open_qty_by_leg[key]:
+                    matched_closes.append(c)
+                    close_qty_by_leg[key] += abs(c.qty)
+
+            if not matched_closes or dict(close_qty_by_leg) != dict(open_qty_by_leg):
+                if matched_closes:
                     logger.warning(
-                        f"Skipping spread match for {open_legs[0].symbol}: open qty "
-                        f"{open_qty} (tag {open_legs[0].spread_order_tag}) != close qty "
-                        f"{close_qty} (tag {close_legs[0].spread_order_tag}); partial "
-                        f"spread closes are not supported."
+                        f"Skipping spread match for {first.symbol} (tag {first.spread_order_tag}): "
+                        f"leg quantities don't fully reconcile — open {dict(open_qty_by_leg)}, "
+                        f"matched close {dict(close_qty_by_leg)}; partial spread closes across "
+                        f"legs are not fully supported yet (see issue #23)."
                     )
-                    continue
-                self._create_spread_completed_trade(session, open_legs, close_legs)
-                completed_count += 1
+                continue
+
+            self._create_spread_completed_trade(session, open_legs, matched_closes)
+            consumed_close_ids.update(c.trade_id for c in matched_closes)
+            completed_count += 1
 
         return completed_count
 
