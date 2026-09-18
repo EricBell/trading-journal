@@ -18,12 +18,13 @@ Claude must update `pyproject.toml` at the end of every turn where code changes 
 
 ## Issue Tracking
 
-When the user reports a problem or bug and a diagnosis is reached, ask: **"Would you like me to create a GitHub issue for this before we fix it?"**
+**Every change — new feature, enhancement, or bug fix, no matter how small — requires a GitHub issue created first, before any implementation.**
 
-- If yes: create the issue, then wait for explicit approval ("go ahead", "fix it", etc.) before implementing anything.
-- If no: proceed directly to the fix.
+- As soon as the work is understood well enough to describe (a bug is diagnosed, or a feature/change request is clear), create the GitHub issue documenting it.
+- Then stop and wait for explicit approval ("go ahead", "fix it", etc.) before writing any code.
+- Do not implement first and file the issue retroactively.
 
-This ensures every diagnosed problem has a record — both the issue and its resolution — regardless of whether planning mode was used.
+This ensures every change has a record — both the issue and its resolution — regardless of whether planning mode was used.
 
 ## Planning Mode
 
