@@ -1,3 +1,8 @@
+## v1.40.0 - 2026-09-18
+
+### Features
+- **Notepad nav: split "New Entry" menu** — the navbar's Notepad item was a single link to `/notepad/`, so reaching the new-entry editor meant landing on the Notepad list first and then hunting for the "New Entry" button. It's now a split control: the "Notepad" label still links straight to the list, and a caret beside it opens a dropdown with "New Entry" linking directly to `/notepad/new`.
+
 ## v1.39.1 - 2026-09-13
 
 ### Bug Fixes

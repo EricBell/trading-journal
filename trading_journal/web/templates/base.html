@@ -38,9 +38,18 @@
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('journal.') %}active{% endif %}"
              href="{{ url_for('journal.index') }}">Journal</a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('notepad.') %}active{% endif %}"
-             href="{{ url_for('notepad.index') }}">Notepad</a>
+        <li class="nav-item dropdown">
+          <div class="nav-item-split {% if request.endpoint and request.endpoint.startswith('notepad.') %}active{% endif %}">
+            <a class="nav-link" href="{{ url_for('notepad.index') }}">Notepad</a>
+            <a class="nav-link dropdown-toggle dropdown-toggle-split-caret" href="#" role="button"
+               data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notepad menu"></a>
+            <ul class="dropdown-menu dropdown-menu-dark">
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'notepad.new' %}active{% endif %}"
+                   href="{{ url_for('notepad.new') }}">New Entry</a>
+              </li>
+            </ul>
+          </div>
         </li>
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('backtest.') %}active{% endif %}"

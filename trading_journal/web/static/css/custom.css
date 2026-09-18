@@ -41,6 +41,30 @@ thead th a:hover { opacity: 0.8; }
   }
 }
 
+/* Notepad nav item: "Notepad" link + separate caret that opens a dropdown
+   (New Entry), so New Entry is reachable directly from the navbar instead
+   of requiring a visit to the Notepad page first. */
+.nav-item-split {
+  display: flex;
+  align-items: center;
+}
+
+.nav-item-split .nav-link {
+  padding-right: 0.35rem;
+}
+
+.nav-item-split.active .nav-link {
+  color: #fff;
+}
+
+.dropdown-toggle-split-caret {
+  padding-left: 0.35rem;
+}
+
+.dropdown-toggle-split-caret::after {
+  margin-left: 0;
+}
+
 /* Trade notes editor (EasyMDE/CodeMirror): force a persistently visible
    scrollbar. Without this, browsers using OS-level overlay/auto-hide
    scrollbars render CodeMirror's custom scrollbar invisibly until the user
