@@ -565,6 +565,18 @@ function fitNotesEditor() {
   const usableLines = Math.max(1, Math.floor((available - reserved) / lineHeight));
   const h = usableLines * lineHeight + reserved;
 
+  // Room to write below the text (issue #53). Blank space of about a third of
+  // the pane can be scrolled into view past the last line, and the content is
+  // always at least one pixel taller than the pane so CodeMirror always shows
+  // the vertical scrollbar. The cursor keeps a few lines of margin while
+  // typing so new text never sits on the bottom edge.
+  const spareLines = Math.max(1, Math.floor(usableLines / 3));
+  if (linesEl) {
+    linesEl.style.paddingBottom = (spareLines * lineHeight) + 'px';
+    linesEl.style.minHeight = (h + 1) + 'px';
+  }
+  cm.setOption('cursorScrollMargin', Math.min(3, spareLines) * lineHeight);
+
   // Use CodeMirror's own resize API rather than mutating style.height directly —
   // setSize() recalculates internal scroll/viewport state so the scrollbar
   // engages immediately as content overflows, instead of clipping until some
@@ -573,6 +585,40 @@ function fitNotesEditor() {
 }
 fitNotesEditor();
 window.addEventListener('resize', fitNotesEditor);
+
+// Put the cursor on an empty line at the end of the notes, adding a newline
+// first if the last line has text. Used by clicking below the text and by ↓
+// on the last line, so writing below the existing notes is one gesture (issue #53).
+function moveToNewLastLine(cm) {
+  const last = cm.lastLine();
+  const end = { line: last, ch: cm.getLine(last).length };
+  if (end.ch > 0) cm.replaceRange('\n', end);
+  cm.setCursor({ line: cm.lastLine(), ch: 0 });
+  cm.focus();
+}
+
+function textBottom(cm) {
+  const last = cm.lastLine();
+  return cm.charCoords({ line: last, ch: cm.getLine(last).length }, 'window').bottom;
+}
+
+easyMDE.codemirror.on('mousedown', (cm, e) => {
+  if (e.button !== 0 || e.shiftKey || e.clientY <= textBottom(cm)) return;
+  e.preventDefault();
+  moveToNewLastLine(cm);
+});
+
+easyMDE.codemirror.addKeyMap({
+  Down: (cm) => {
+    const cur = cm.getCursor();
+    // Only on the last visual row of the last line; otherwise ↓ behaves normally.
+    if (cm.somethingSelected() || cur.line !== cm.lastLine() ||
+        cm.cursorCoords(cur, 'window').bottom < textBottom(cm)) {
+      return cm.constructor.Pass;
+    }
+    moveToNewLastLine(cm);
+  },
+});
 
 // Dirty-state tracking: enable Save only when something has changed
 const saveBtn = document.getElementById('saveBtn');

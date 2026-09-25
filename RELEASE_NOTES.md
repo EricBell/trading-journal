@@ -1,3 +1,10 @@
+## v1.40.1 - 2026-09-24
+
+### Bug Fixes
+- **Trade notes editor: easy to write below the existing text (issue #53)** — the Notes editor on `/trades/<id>` is sized to an exact whole number of lines (issue #40), so text that filled the pane had no room below it: no scrollbar appeared yet, and a new line typed on the bottom row landed at or past the bottom edge with the cursor out of view. The editor now (1) always shows its vertical scrollbar, (2) lets you scroll about a third of the pane of blank space into view below the last line and keeps three lines of margin under the cursor while typing, (3) puts the cursor on a new empty line at the end when you click anywhere in the blank space below the text, and (4) moves to a new empty line when you press ↓ on the last line (in both cases a newline is only added if the last line has text).
+
+---
+
 ## v1.40.0 - 2026-09-18
 
 ### Features
