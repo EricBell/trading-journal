@@ -175,7 +175,7 @@
           ${{ "%.2f"|format(t.net_pnl|float) if t.net_pnl else '0.00' }}
         </td>
         <td>{{ _ann.setup_pattern_rel.pattern_name if (_ann and _ann.setup_pattern_rel) else '' }}{% if _ann and _ann.trade_notes %} <span title="Has notes" style="color:#6ea8fe;font-size:.85em">✎</span>{% endif %}</td>
-        {% if accounts %}<td class="text-muted small">{{ t.account.account_name if t.account else '—' }}</td>{% endif %}
+        {% if accounts %}<td class="text-muted small">{{ (t.account.account_name or t.account.account_number) if t.account else '—' }}</td>{% endif %}
       </tr>
       {% endfor %}
     </tbody>

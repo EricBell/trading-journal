@@ -8,7 +8,7 @@ Only the executions file is used for ingestion. Detect with is_ninjatrader_exec_
 
 Execution CSV column format:
   Instrument, Action, Quantity, Price, Time, ID, E/X, Position,
-  Order ID, Name, Commission, Rate, Account display name, Connection
+  Order ID, Name, Commission, Rate, Account (or 'Account display name'), Connection
 
 Instrument format: '{ROOT} {MMMYY}' e.g. 'MES JUN26'
   ROOT     = base symbol (MES, ES, NQ, ...)
@@ -129,7 +129,7 @@ class NinjaTraderParser:
         price_str = row.get('Price', '').strip()
         time_str = row.get('Time', '').strip()
         ex_str = row.get('E/X', '').strip()
-        account = (row.get('Account display name') or '').strip()
+        account = (row.get('Account display name') or row.get('Account') or '').strip()
 
         if not (instrument and action and qty_str and price_str and time_str):
             return None

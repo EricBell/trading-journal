@@ -1,3 +1,10 @@
+## v1.40.2 - 2026-10-17
+
+### Bug Fixes
+- **NinjaTrader import: Account column blank on Trades (issue #54)** — `NinjaTraderParser` only read the account from a column named `Account display name`, but some NinjaTrader exports label it `Account`, so no account was created or linked to the fills and the Trades tab showed `—`. The parser now accepts either header, and the Trades list falls back to the account number when the account has no name (as the filter dropdown and trade detail page already did). Re-upload an affected file to link its existing trades.
+
+---
+
 ## v1.40.1 - 2026-09-24
 
 ### Bug Fixes
